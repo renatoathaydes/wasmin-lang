@@ -60,4 +60,15 @@ mod tests {
         let mut chars = "( 100)".chars();
         assert_eq!(parse(&mut chars), Expression::Const(String::from("100"), I32));
     }
+    #[test]
+    fn test_f32() {
+        let mut chars = "(0.0)".chars();
+        assert_eq!(parse(&mut chars), Expression::Const(String::from("0.0"), F32));
+
+        let mut chars = "( 1.0 )".chars();
+        assert_eq!(parse(&mut chars), Expression::Const(String::from("1.0"), F32));
+
+        let mut chars = "( 1.00)".chars();
+        assert_eq!(parse(&mut chars), Expression::Const(String::from("1.00"), F32));
+    }
 }
