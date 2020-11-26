@@ -1,4 +1,4 @@
-use parse::parse;
+use parse::parse_expr;
 
 mod ast;
 mod types;
@@ -9,6 +9,6 @@ fn main() {
 
     println!("Wasmin compiler version 0.0");
 
-    println!("{:?}", parse(&mut program.chars()));
+    println!("{:?}", parse_expr(&mut program.chars()));
 }
 
