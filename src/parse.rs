@@ -5,19 +5,14 @@ use crate::types::{Type::*};
 use crate::types::type_of;
 
 pub fn parse(chars: &mut Chars) -> Expression {
-    loop {
-        if let Some(c) = chars.next() {
-            let x = match c {
-                '(' => parse_parens(chars),
-                _ => Expression::Empty,
-            };
-            return x;
-        } else {
-            break;
+    if let Some(c) = chars.next() {
+        match c {
+            '(' => parse_parens(chars),
+            _ => Expression::Empty,
         }
+    } else {
+        Expression::Empty
     }
-
-    Expression::Empty
 }
 
 fn parse_parens(chars: &mut Chars) -> Expression {
@@ -60,6 +55,7 @@ mod tests {
         let mut chars = "( 100)".chars();
         assert_eq!(parse(&mut chars), Expression::Const(String::from("100"), I32));
     }
+
     #[test]
     fn test_f32() {
         let mut chars = "(0.0)".chars();
