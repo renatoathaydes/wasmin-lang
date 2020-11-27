@@ -17,6 +17,28 @@ macro_rules! space_or {
     };
 }
 
+/// sep_or takes a char and two expressions.
+/// The first expression is evaluated if the char is a separator (other than spaces).
+/// The second expression is evaluated otherwise.
+macro_rules! sep_or {
+    ( $c:expr, $sep:expr, $other:expr ) => {
+        match $c {
+            '[' | ']' | '(' | ')' | '{' | '}' | '=' | '"' |
+            ',' | ';' | '.' | '<' | '>' => $sep,
+            _ => $other
+        }
+    };
+}
+
+/// space_sep_or takes a char and two expressions.
+/// The first expression is evaluated if the char is a space or separator.
+/// The second expression is evaluated otherwise.
+macro_rules! space_sep_or {
+    ( $c:expr, $yes:expr, $no:expr ) => {
+        space_or!($c, $yes, sep_or!($c, $yes, $no))
+    };
+}
+
 pub struct Parser<'s> {
     line: usize,
     col: usize,
@@ -44,32 +66,21 @@ impl Parser<'_> {
         next
     }
 
-    // fn parse_expr(&mut self) -> Expression {
-    //     if let Some(c) = self.next() {
-    //         match c {
-    //             '(' => parse_parens(chars),
-    //             _ => {
-    //                 self.parse_word()
-    //             }
-    //         }
-    //     } else {
-    //         Expression::Empty
-    //     }
-    // }
-
     fn pos(&mut self) -> (usize, usize) {
         (self.line, self.col)
     }
 
     fn parse_word(&mut self) -> Option<String> {
         self.skip_spaces();
-        let c = self.curr_char;
-        if c.is_none() { return None; }
+        let c_opt = self.curr_char;
+        if c_opt.is_none() { return None; }
+        let c = c_opt.unwrap();
+        space_sep_or!(c, { return None }, {});
         let mut word = String::with_capacity(8);
-        word.push(c.unwrap());
+        word.push(c);
         loop {
             if let Some(c) = self.next() {
-                space_or!(c, { break; }, { word.push(c) });
+                space_sep_or!(c, { break; }, { word.push(c) });
             } else { break; }
         }
         Some(word)
@@ -192,5 +203,41 @@ mod tests {
         assert_eq!(parser.pos(), (2, 9));
         parser.parse_word();
         assert_eq!(parser.pos(), (3, 5));
+    }
+
+    #[test]
+    fn test_separators() {
+        let mut chars = "a{b}  (cde)   [ fgh]\n\"foo\"  last'''".chars();
+        let mut parser = new_parser(&mut chars);
+        assert_eq!(parser.parse_word(), Some("a".to_string()));
+        assert_eq!(parser.curr_char, Some('{'));
+        parser.next();
+        assert_eq!(parser.parse_word(), Some("b".to_string()));
+        assert_eq!(parser.curr_char, Some('}'));
+        parser.next();
+        // next char after spaces is a '(', so there's no word
+        assert_eq!(parser.parse_word(), None);
+        assert_eq!(parser.curr_char, Some('('));
+        parser.next();
+        assert_eq!(parser.parse_word(), Some("cde".to_string()));
+        assert_eq!(parser.curr_char, Some(')'));
+        parser.next();
+        parser.skip_spaces();
+        assert_eq!(parser.curr_char, Some('['));
+        parser.next();
+        assert_eq!(parser.parse_word(), Some("fgh".to_string()));
+        assert_eq!(parser.curr_char, Some(']'));
+        parser.next();
+        parser.skip_spaces();
+        // next char is a '"', so there's no word
+        assert_eq!(parser.parse_word(), None);
+        assert_eq!(parser.curr_char, Some('"'));
+        parser.next();
+        assert_eq!(parser.parse_word(), Some("foo".to_string()));
+        assert_eq!(parser.curr_char, Some('"'));
+        parser.next();
+        assert_eq!(parser.parse_word(), Some("last'''".to_string()));
+        assert_eq!(parser.parse_word(), None);
+        assert_eq!(parser.parse_word(), None);
     }
 }
