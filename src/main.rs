@@ -1,8 +1,8 @@
 use parse::parse_expr;
 
-mod ast;
-mod types;
-mod parse;
+pub mod ast;
+pub mod types;
+pub mod parse;
 
 fn main() {
     let program = "(256)";
