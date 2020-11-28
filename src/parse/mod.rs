@@ -69,6 +69,20 @@ impl Parser<'_> {
             } else { break; }
         }
     }
+
+    fn parse_type(&mut self) -> Type {
+        if let Some(word) = self.parse_word() {
+            match word.as_ref() {
+                "i32" => Type::I32,
+                "f32" => Type::F32,
+                "i64" => Type::I64,
+                "f64" => Type::F64,
+                _ => Type::error(word.as_ref(), "cannot recognize type")
+            }
+        } else {
+            Type::error("", "EOF where type was expected")
+        }
+    }
 }
 
 pub fn parse_expr(chars: &mut Chars) -> Expression {

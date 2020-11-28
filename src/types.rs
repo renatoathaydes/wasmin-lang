@@ -10,6 +10,12 @@ pub enum Type {
     Error { text: String, reason: String },
 }
 
+impl Type {
+    pub fn error(text: &str, reason: &str) -> Type {
+        Type::Error { text: text.to_string(), reason: reason.to_string() }
+    }
+}
+
 pub fn type_of(str: &String) -> Type {
     let mut chars = str.chars();
     let c = chars.next();

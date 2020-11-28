@@ -108,3 +108,16 @@ fn test_separators() {
     assert_eq!(parser.parse_word(), None);
     assert_eq!(parser.parse_word(), None);
 }
+
+#[test]
+fn test_type() {
+    let mut chars = "i32 i64 f32 f64 err".chars();
+    let mut parser = new_parser(&mut chars);
+
+    assert_eq!(parser.parse_type(), Type::I32);
+    assert_eq!(parser.parse_type(), Type::I64);
+    assert_eq!(parser.parse_type(), Type::F32);
+    assert_eq!(parser.parse_type(), Type::F64);
+    assert_eq!(parser.parse_type(), Type::error("err", "cannot recognize type"));
+    assert_eq!(parser.parse_type(), Type::error("", "EOF where type was expected"));
+}
