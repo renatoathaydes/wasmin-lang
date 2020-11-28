@@ -118,6 +118,26 @@ fn test_type() {
     assert_eq!(parser.parse_type(), Type::I64);
     assert_eq!(parser.parse_type(), Type::F32);
     assert_eq!(parser.parse_type(), Type::F64);
-    assert_eq!(parser.parse_type(), Type::error("err", "cannot recognize type"));
-    assert_eq!(parser.parse_type(), Type::error("", "EOF where type was expected"));
+    assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
+    assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+}
+
+#[test]
+fn test_def() -> Result<(), ParserError> {
+    let mut chars = "foo i32 blah f64 wrong: ending".chars();
+    let mut parser = new_parser(&mut chars);
+
+    assert_eq!(parser.parse_def()?, Expression::Const("foo".to_string(), Type::I32));
+    assert_eq!(parser.parse_def()?, Expression::Const("blah".to_string(), Type::F64));
+    assert_eq!(parser.parse_def(), Result::Err(ParserError {
+        pos: (0, 23),
+        msg: "Bad type in 'wrong' def: ':' --> unexpected character".to_string(),
+    }));
+    parser.next();
+    assert_eq!(parser.parse_def(), Result::Err(ParserError {
+        pos: (0, 30),
+        msg: "Bad type in 'ending' def: '' --> EOF reached".to_string(),
+    }));
+
+    Result::Ok(())
 }

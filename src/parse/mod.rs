@@ -11,6 +11,12 @@ mod macros;
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct ParserError {
+    pos: (usize, usize),
+    msg: String,
+}
+
 /// Parser of Wasmin programs.
 pub struct Parser<'s> {
     line: usize,
@@ -41,6 +47,11 @@ impl Parser<'_> {
 
     fn pos(&mut self) -> (usize, usize) {
         (self.line, self.col)
+    }
+
+    fn parser_err<T>(&mut self, msg: String) -> Result<T, ParserError> {
+        let pos = self.pos();
+        Result::Err(ParserError { pos, msg })
     }
 
     fn parse_word(&mut self) -> Option<String> {
@@ -77,10 +88,27 @@ impl Parser<'_> {
                 "f32" => Type::F32,
                 "i64" => Type::I64,
                 "f64" => Type::F64,
-                _ => Type::error(word.as_ref(), "cannot recognize type")
+                _ => Type::error(word.as_ref(), "type does not exist")
+            }
+        } else if let Some(c) = self.curr_char {
+            Type::error(c.to_string().as_ref(), "unexpected character")
+        } else {
+            Type::error("", "EOF reached")
+        }
+    }
+
+    fn parse_def(&mut self) -> Result<Expression, ParserError> {
+        if let Some(id) = self.parse_word() {
+            let typ = self.parse_type();
+            match typ {
+                Type::Error { text, reason } => {
+                    self.parser_err(format!("Bad type in '{}' def: '{}' --> {}", id, text, reason))
+                }
+                _ => Result::Ok(Expression::Const(id, typ))
             }
         } else {
-            Type::error("", "EOF where type was expected")
+            let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("{}", c) });
+            self.parser_err(format!("Expected identifier after def, but got {}", curr))
         }
     }
 }
