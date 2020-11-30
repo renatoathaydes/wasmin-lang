@@ -122,13 +122,26 @@ fn test_type() {
     assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
 }
 
+macro_rules! assert_symbols_contains {
+    ($parser:ident, $key:expr => $value:expr) => {{
+        if let Some(v) = $parser.stack.get($key.to_string()) {
+            assert_eq!(v, &$value);
+        } else {
+            panic!("Stack does not contain key {}", &$key);
+        }
+    }};
+}
+
 #[test]
 fn test_def() -> Result<(), ParserError> {
     let mut chars = "foo i32 blah f64 wrong: ending".chars();
     let mut parser = new_parser(&mut chars);
 
-    assert_eq!(parser.parse_def()?, Expression::Const("foo".to_string(), Type::I32));
-    assert_eq!(parser.parse_def()?, Expression::Const("blah".to_string(), Type::F64));
+    assert_eq!(parser.parse_def()?, ());
+    assert_symbols_contains!(parser, "foo" => Type::I32);
+    assert_eq!(parser.parse_def()?, ());
+    assert_symbols_contains!(parser, "blah" => Type::F64);
+    assert_symbols_contains!(parser, "foo" => Type::I32);
     assert_eq!(parser.parse_def(), Result::Err(ParserError {
         pos: (0, 23),
         msg: "Bad type in 'wrong' def: ':' --> unexpected character".to_string(),
@@ -138,6 +151,7 @@ fn test_def() -> Result<(), ParserError> {
         pos: (0, 30),
         msg: "Bad type in 'ending' def: '' --> EOF reached".to_string(),
     }));
-
+    assert_symbols_contains!(parser, "blah" => Type::F64);
+    assert_symbols_contains!(parser, "foo" => Type::I32);
     Result::Ok(())
 }

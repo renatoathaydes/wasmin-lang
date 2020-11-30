@@ -17,17 +17,67 @@ pub struct ParserError {
     msg: String,
 }
 
+struct Stack {
+    items: Vec<HashMap<String, Type>>
+}
+
+impl Stack {
+    fn new() -> Stack {
+        let mut s = Stack { items: Vec::with_capacity(4) };
+        s.new_level();
+        s
+    }
+
+    /// push_item onto stack, returning None if the item is accepted, or its ID otherwise.
+    fn push_item(&mut self, id: String, typ: Type) -> Option<String> {
+        let mut symbols = self.items.remove(self.items.len() - 1);
+        if !symbols.contains_key(&id) {
+            symbols.insert(id, typ);
+            self.items.push(symbols);
+            None
+        } else {
+            self.items.push(symbols);
+            Some(id)
+        }
+    }
+
+    fn get(&self, id: String) -> Option<&Type> {
+        let i = self.items.len() - 1;
+        while i >= 0 as usize {
+            let symbols = self.items.get(i).unwrap();
+            if let Some(val) = symbols.get(&id) {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    fn new_level(&mut self) {
+        self.items.push(HashMap::new());
+    }
+
+    fn drop_level(&mut self) {
+        let len = self.items.len();
+        if len > 1 {
+            self.items.remove(len - 1);
+        } else {
+            panic!("attempt to drop single stack level");
+        }
+    }
+}
+
 /// Parser of Wasmin programs.
 pub struct Parser<'s> {
     line: usize,
     col: usize,
-    symbols: HashMap<String, Type>,
+    stack: Stack,
     chars: &'s mut Chars<'s>,
     curr_char: Option<char>,
 }
 
 pub fn new_parser<'s>(chars: &'s mut Chars<'s>) -> Parser<'s> {
-    Parser { line: 0, col: 0, symbols: HashMap::new(), curr_char: Option::None, chars }
+    let stack = Stack::new();
+    Parser { line: 0, col: 0, stack, curr_char: Option::None, chars }
 }
 
 impl Parser<'_> {
@@ -97,14 +147,21 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_def(&mut self) -> Result<Expression, ParserError> {
+    fn parse_def(&mut self) -> Result<(), ParserError> {
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
             match typ {
                 Type::Error { text, reason } => {
                     self.parser_err(format!("Bad type in '{}' def: '{}' --> {}", id, text, reason))
                 }
-                _ => Result::Ok(Expression::Const(id, typ))
+                _ => {
+                    if let Some(id_back) = self.stack.push_item(id, typ) {
+                        self.parser_err(format!("Attempting to re-define {}, which \
+                            is not allowed", &id_back))
+                    } else {
+                        Result::Ok(())
+                    }
+                }
             }
         } else {
             let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("{}", c) });
