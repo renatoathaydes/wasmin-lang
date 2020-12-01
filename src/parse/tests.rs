@@ -78,31 +78,31 @@ fn test_separators() {
     let mut chars = "a{b}  (cde)   [ fgh]\n\"foo\"  last'''".chars();
     let mut parser = new_parser(&mut chars);
     assert_eq!(parser.parse_word(), Some("a".to_string()));
-    assert_eq!(parser.curr_char, Some('{'));
+    assert_eq!(parser.curr_char(), Some('{'));
     parser.next();
     assert_eq!(parser.parse_word(), Some("b".to_string()));
-    assert_eq!(parser.curr_char, Some('}'));
+    assert_eq!(parser.curr_char(), Some('}'));
     parser.next();
     // next char after spaces is a '(', so there's no word
     assert_eq!(parser.parse_word(), None);
-    assert_eq!(parser.curr_char, Some('('));
+    assert_eq!(parser.curr_char(), Some('('));
     parser.next();
     assert_eq!(parser.parse_word(), Some("cde".to_string()));
-    assert_eq!(parser.curr_char, Some(')'));
+    assert_eq!(parser.curr_char(), Some(')'));
     parser.next();
     parser.skip_spaces();
-    assert_eq!(parser.curr_char, Some('['));
+    assert_eq!(parser.curr_char(), Some('['));
     parser.next();
     assert_eq!(parser.parse_word(), Some("fgh".to_string()));
-    assert_eq!(parser.curr_char, Some(']'));
+    assert_eq!(parser.curr_char(), Some(']'));
     parser.next();
     parser.skip_spaces();
     // next char is a '"', so there's no word
     assert_eq!(parser.parse_word(), None);
-    assert_eq!(parser.curr_char, Some('"'));
+    assert_eq!(parser.curr_char(), Some('"'));
     parser.next();
     assert_eq!(parser.parse_word(), Some("foo".to_string()));
-    assert_eq!(parser.curr_char, Some('"'));
+    assert_eq!(parser.curr_char(), Some('"'));
     parser.next();
     assert_eq!(parser.parse_word(), Some("last'''".to_string()));
     assert_eq!(parser.parse_word(), None);
@@ -110,7 +110,7 @@ fn test_separators() {
 }
 
 #[test]
-fn test_type() {
+fn test_type_values() {
     let mut chars = "i32 i64 f32 f64 err".chars();
     let mut parser = new_parser(&mut chars);
 
@@ -122,9 +122,59 @@ fn test_type() {
     assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
 }
 
+#[test]
+fn test_type_functions() {
+    let mut chars = "[]; [](); []i32; [ ] (i64 ) ; [f32]f32 ; [i32 i64 ] f64 i32;
+        [i32] ([i64] f32) [i64] ([i32](f32) [i64] i32 ) err".chars();
+    let mut parser = new_parser(&mut chars);
+
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
+
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
+
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I32] });
+
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I64] });
+
+    assert_eq!(parser.curr_char(), Some(' '));
+    parser.next();
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![Type::F32], outs: vec![Type::F32] });
+
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+    assert_eq!(parser.parse_type(),
+               Type::Fn { ins: vec![Type::I32, Type::I64], outs: vec![Type::F64, Type::I32] });
+
+    assert_eq!(parser.curr_char(), Some(';'));
+    parser.next();
+
+    // [i32] ([i64] f32) [i64] ([i32](f32) [i64] i32 ) err
+    // println!("Starting last type here");
+    // assert_eq!(parser.parse_type(),
+    //            Type::Fn {
+    //                ins: vec![Type::I32],
+    //                outs: vec![
+    //                    Type::Fn { ins: vec![Type::I64], outs: vec![Type::F32] }
+    //                ],
+    //            });
+    //
+    //
+    // assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
+    // assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+}
+
 macro_rules! assert_symbols_contains {
     ($parser:ident, $key:expr => $value:expr) => {{
-        if let Some(v) = $parser.stack.get($key.to_string()) {
+        if let Some(v) = $parser.stack().get($key.to_string()) {
             assert_eq!(v, &$value);
         } else {
             panic!("Stack does not contain key {}", &$key);

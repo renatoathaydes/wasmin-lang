@@ -7,6 +7,7 @@ pub enum Type {
     F64,
     F32,
     Empty,
+    Fn { ins: Vec<Type>, outs: Vec<Type> },
     Error { text: String, reason: String },
 }
 
