@@ -1,4 +1,5 @@
 use crate::parse::structs::{*};
+use crate::parse::structs::GroupingSymbol::{Parens, SquareBracket};
 use crate::types::{*, Type::*};
 
 pub fn parse_type_internal(parser: &mut Parser) -> Type {
@@ -12,6 +13,7 @@ pub fn parse_type_internal(parser: &mut Parser) -> Type {
 }
 
 fn parse_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
+    println!("Parsing type at {:?}", parser.pos());
     if let Some(word) = parser.parse_word() {
         match word.as_ref() {
             "i32" => Type::I32,
@@ -21,6 +23,7 @@ fn parse_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
             _ => Type::error(word.as_ref(), "type does not exist")
         }
     } else if let Some('[') = parser.curr_char() {
+        println!("enter args");
         parser.next();
         state.enter(GroupingSymbol::SquareBracket);
         parse_fn_type(parser, state)
@@ -32,54 +35,75 @@ fn parse_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
 }
 
 fn parse_fn_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
+    let  ins = parse_fn_ins(parser, state);
+    let  outs = parse_fn_outs(parser, state);
+    println!("end fun");
+    Fn { ins, outs }
+}
+
+fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
     let mut ins = Vec::with_capacity(2);
-    let mut outs = Vec::with_capacity(1);
-    let mut starting_outs = false;
     loop {
         parser.skip_spaces();
-        if starting_outs {
-            // this is the only place we may expect '('
-            if let Some('(') = parser.curr_char() {
-                parser.next();
-                state.enter(GroupingSymbol::Parens);
-            }
-            starting_outs = false;
-        }
-        if state.is_inside(GroupingSymbol::SquareBracket) {
-            println!("in args");
-            if let Some(']') = parser.curr_char() {
-                println!("got ]");
-                parser.next();
-                state.exit_symbol();
-                starting_outs = true;
-                continue;
-            }
-        } else if state.is_inside(GroupingSymbol::Parens) {
-            println!("in parens");
-            if let Some(')') = parser.curr_char() {
-                parser.next();
-                state.exit_symbol();
-                break;
-            }
-        }
-        if let Some(';') = parser.curr_char() {
+        if let Some(']') = parser.curr_char() {
+            println!("end args");
+            parser.next();
+            state.exit_symbol();
             break;
         }
-        println!("parsing type");
         let typ = parse_type(parser, state);
         println!("Type: {:?}", &typ);
-        match typ {
-            Type::Error { text: _, reason: _ } => {
-                return typ;
-            }
-            _ => {
-                if state.is_inside(GroupingSymbol::SquareBracket) {
-                    ins.push(typ);
-                } else {
-                    outs.push(typ);
+        let is_error = typ.is_error();
+        ins.push(typ);
+        if is_error { break; }
+    }
+    ins
+}
+
+fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
+    println!("in outs");
+    let mut outs = Vec::with_capacity(2);
+    parser.skip_spaces();
+    let in_parens = match parser.curr_char() {
+        Some('(') => {
+            println!("enter parens");
+            state.enter(GroupingSymbol::Parens);
+            parser.next();
+            true
+        }
+        _ => false
+    };
+    loop {
+        parser.skip_spaces();
+        match parser.curr_char() {
+            Some(')') => {
+                if in_parens {
+                    println!("end parens");
+                    state.exit_symbol();
+                    parser.next();
+                    break;
+                }
+                if state.is_inside(Parens) {
+                    break;
                 }
             }
+            Some(']') => {
+                if state.is_inside(SquareBracket) {
+                    break;
+                }
+            }
+            Some(';') => {
+                if !in_parens {
+                    break;
+                }
+            }
+            _ => {}
         }
+        let typ = parse_type(parser, state);
+        println!("Type: {:?}", &typ);
+        let is_error = typ.is_error();
+        outs.push(typ);
+        if is_error { break; }
     }
-    Fn { ins, outs }
+    outs
 }

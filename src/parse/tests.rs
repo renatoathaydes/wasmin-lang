@@ -125,7 +125,7 @@ fn test_type_values() {
 #[test]
 fn test_type_functions() {
     let mut chars = "[]; [](); []i32; [ ] (i64 ) ; [f32]f32 ; [i32 i64 ] f64 i32;
-        [i32] ([i64] f32) [i64] ([i32](f32) [i64] i32 ) err".chars();
+        [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
     let mut parser = new_parser(&mut chars);
 
     assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
@@ -157,19 +157,31 @@ fn test_type_functions() {
     assert_eq!(parser.curr_char(), Some(';'));
     parser.next();
 
-    // [i32] ([i64] f32) [i64] ([i32](f32) [i64] i32 ) err
-    // println!("Starting last type here");
-    // assert_eq!(parser.parse_type(),
-    //            Type::Fn {
-    //                ins: vec![Type::I32],
-    //                outs: vec![
-    //                    Type::Fn { ins: vec![Type::I64], outs: vec![Type::F32] }
-    //                ],
-    //            });
-    //
-    //
-    // assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
-    // assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+    assert_eq!(parser.parse_type(),
+               Type::Fn {
+                   ins: vec![Type::I32],
+                   outs: vec![
+                       Type::Fn { ins: vec![Type::I64], outs: vec![Type::F32] }
+                   ],
+               });
+
+    assert_eq!(parser.parse_type(),
+               Type::Fn {
+                   ins: vec![Type::I64],
+                   outs: vec![
+                       Type::Fn {
+                           ins: vec![Type::Fn { ins: vec![Type::I32], outs: vec![] }],
+                           outs: vec![Type::F32],
+                       },
+                       Type::Fn {
+                           ins: vec![Type::I64],
+                           outs: vec![Type::I32],
+                       }
+                   ],
+               });
+
+    assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
+    assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
 }
 
 macro_rules! assert_symbols_contains {

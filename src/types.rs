@@ -15,6 +15,17 @@ impl Type {
     pub fn error(text: &str, reason: &str) -> Type {
         Type::Error { text: text.to_string(), reason: reason.to_string() }
     }
+
+    pub fn is_error(&self) -> bool {
+        match self {
+            Type::Error { text: _, reason: _ } => true,
+            Type::Fn { ins, outs } => {
+                ins.iter().any(|t| t.is_error()) ||
+                    outs.iter().any(|t| t.is_error())
+            }
+            _ => false
+        }
+    }
 }
 
 pub fn type_of(str: &String) -> Type {
