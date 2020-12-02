@@ -88,4 +88,31 @@ mod tests {
             assert_eq!(type_of(&f.to_string()), Type::F32, "Example: {}", f);
         }
     }
+
+    #[test]
+    fn test_type_is_error() {
+        assert_eq!(Type::I32.is_error(), false);
+        assert_eq!(Type::I64.is_error(), false);
+        assert_eq!(Type::F32.is_error(), false);
+        assert_eq!(Type::F64.is_error(), false);
+        assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![] }.is_error(), false);
+        assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![Type::I32] }.is_error(), false);
+        assert_eq!(Type::Empty.is_error(), false);
+
+        assert_eq!(Type::error("", "").is_error(), true);
+        assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![Type::error("", "")] }.is_error(), true);
+        assert_eq!(Type::Fn { ins: vec![Type::error("", "")], outs: vec![Type::I32] }.is_error(), true);
+        assert_eq!(Type::Fn {
+            ins: vec![Type::I64],
+            outs: vec![
+                Type::Fn { ins: vec![Type::I64], outs: vec![Type::error("", "")] }
+            ],
+        }.is_error(), true);
+        assert_eq!(Type::Fn {
+            ins: vec![Type::I64],
+            outs: vec![
+                Type::Fn { ins: vec![Type::I64, Type::error("", "")], outs: vec![] }
+            ],
+        }.is_error(), true);
+    }
 }
