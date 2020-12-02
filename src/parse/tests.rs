@@ -124,7 +124,7 @@ fn test_type_values() {
 
 #[test]
 fn test_type_functions() {
-    let mut chars = "[]; [](); []i32; [ ] (i64 ) ; [f32]f32 ; [i32 i64 ] f64 i32;
+    let mut chars = "[]; []() []i32; [ ] (i64 ) ; [f32]f32 ; [i32 i64 ] f64 i32;
         [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
     let mut parser = new_parser(&mut chars);
 
@@ -134,8 +134,7 @@ fn test_type_functions() {
     parser.next();
     assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
 
-    assert_eq!(parser.curr_char(), Some(';'));
-    parser.next();
+    assert_eq!(parser.curr_char(), Some('['));
     assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I32] });
 
     assert_eq!(parser.curr_char(), Some(';'));
@@ -144,8 +143,7 @@ fn test_type_functions() {
 
     assert_eq!(parser.curr_char(), Some(' '));
     parser.next();
-    assert_eq!(parser.curr_char(), Some(';'));
-    parser.next();
+    assert_eq!(parser.curr_char(), Some('['));
 
     assert_eq!(parser.parse_type(), Type::Fn { ins: vec![Type::F32], outs: vec![Type::F32] });
 
@@ -182,6 +180,16 @@ fn test_type_functions() {
 
     assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
     assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+}
+
+#[test]
+fn test_type_function_optional_semi_colon() {
+    let mut chars = "[](i32);[]()".chars();
+    let mut parser = new_parser(&mut chars);
+
+    // first type parsing should consume the optional semi-colon
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I32] });
+    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
 }
 
 macro_rules! assert_symbols_contains {

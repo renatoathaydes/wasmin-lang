@@ -35,8 +35,8 @@ fn parse_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
 }
 
 fn parse_fn_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
-    let  ins = parse_fn_ins(parser, state);
-    let  outs = parse_fn_outs(parser, state);
+    let ins = parse_fn_ins(parser, state);
+    let outs = parse_fn_outs(parser, state);
     println!("end fun");
     Fn { ins, outs }
 }
@@ -81,6 +81,7 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
                     println!("end parens");
                     state.exit_symbol();
                     parser.next();
+                    consume_optional_semi_colon(parser);
                     break;
                 }
                 if state.is_inside(Parens) {
@@ -106,4 +107,11 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
         if is_error { break; }
     }
     outs
+}
+
+fn consume_optional_semi_colon(parser: &mut Parser) {
+    parser.skip_spaces();
+    if let Some(';') = parser.curr_char() {
+        parser.next();
+    }
 }
