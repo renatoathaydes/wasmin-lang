@@ -181,7 +181,7 @@ impl Parser<'_> {
                 Result::Ok(())
             }
         } else {
-            let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("{}", c) });
+            let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("'{}'", c) });
             self.parser_err(format!("Expected identifier after def, but got {}", curr))
         }
     }

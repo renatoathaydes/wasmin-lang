@@ -225,5 +225,14 @@ fn test_def() -> Result<(), ParserError> {
         "ending" => Type::Error {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)});
     assert_eq!(parser.curr_char(), None);
 
+    assert_eq!(parser.parse_def(),
+               Err(ParserError { pos: (0, 30), msg: "Expected identifier after def, but got EOF".to_string() }));
+
+    let mut chars = "[".chars();
+    let mut parser = new_parser(&mut chars);
+
+    assert_eq!(parser.parse_def(),
+               Err(ParserError { pos: (0, 1), msg: "Expected identifier after def, but got '['".to_string() }));
+
     Result::Ok(())
 }
