@@ -113,6 +113,10 @@ impl Parser<'_> {
         &self.stack
     }
 
+    pub fn error(&self, reason: &str) -> Type {
+        Type::Error { reason: reason.to_string(), pos: self.pos() }
+    }
+
     pub fn next(&mut self) -> Option<char> {
         let next = self.chars.next();
         if let Some(c) = next {
@@ -127,7 +131,7 @@ impl Parser<'_> {
         next
     }
 
-    pub fn pos(&mut self) -> (usize, usize) {
+    pub fn pos(&self) -> (usize, usize) {
         (self.line, self.col)
     }
 
@@ -170,18 +174,11 @@ impl Parser<'_> {
     pub fn parse_def(&mut self) -> Result<(), ParserError> {
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
-            match typ {
-                Type::Error { text, reason } => {
-                    self.parser_err(format!("Bad type in '{}' def: '{}' --> {}", id, text, reason))
-                }
-                _ => {
-                    if let Some(id_back) = self.stack.push_item(id, typ) {
-                        self.parser_err(format!("Attempting to re-define {}, which \
-                            is not allowed", &id_back))
-                    } else {
-                        Result::Ok(())
-                    }
-                }
+            if let Some(id) = self.stack.push_item(id, typ) {
+                self.parser_err(format!("Attempting to re-define {}, which \
+                            is not allowed", &id))
+            } else {
+                Result::Ok(())
             }
         } else {
             let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("{}", c) });

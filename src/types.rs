@@ -8,17 +8,13 @@ pub enum Type {
     F32,
     Empty,
     Fn { ins: Vec<Type>, outs: Vec<Type> },
-    Error { text: String, reason: String },
+    Error { reason: String, pos: (usize, usize) },
 }
 
 impl Type {
-    pub fn error(text: &str, reason: &str) -> Type {
-        Type::Error { text: text.to_string(), reason: reason.to_string() }
-    }
-
     pub fn is_error(&self) -> bool {
         match self {
-            Type::Error { text: _, reason: _ } => true,
+            Type::Error { pos: _, reason: _ } => true,
             Type::Fn { ins, outs } => {
                 ins.iter().any(|t| t.is_error()) ||
                     outs.iter().any(|t| t.is_error())
@@ -34,7 +30,7 @@ pub fn type_of(str: &String) -> Type {
     return match c {
         Some('0'..='9') => { type_of_num(str, &mut chars) }
         None => { Type::Empty }
-        _ => { Type::Error { text: str.clone(), reason: "not a number".to_string() } }
+        _ => { Type::Error { pos: (0, 0), reason: "not a number".to_string() } }
     };
 }
 
@@ -56,7 +52,7 @@ fn type_of_num(text: &String, chars: &mut Chars) -> Type {
         }
     }
     if error || dots > 1 {
-        Type::Error { text: text.clone(), reason: "number contains invalid digits".to_string() }
+        Type::Error { pos: (0, 0), reason: "number contains invalid digits".to_string() }
     } else if dots == 1 {
         Type::F32
     } else {
@@ -91,6 +87,7 @@ mod tests {
 
     #[test]
     fn test_type_is_error() {
+        let error = || { Type::Error { pos: (0, 0), reason: "".to_string() } };
         assert_eq!(Type::I32.is_error(), false);
         assert_eq!(Type::I64.is_error(), false);
         assert_eq!(Type::F32.is_error(), false);
@@ -99,19 +96,19 @@ mod tests {
         assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![Type::I32] }.is_error(), false);
         assert_eq!(Type::Empty.is_error(), false);
 
-        assert_eq!(Type::error("", "").is_error(), true);
-        assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![Type::error("", "")] }.is_error(), true);
-        assert_eq!(Type::Fn { ins: vec![Type::error("", "")], outs: vec![Type::I32] }.is_error(), true);
+        assert_eq!(error().is_error(), true);
+        assert_eq!(Type::Fn { ins: vec![Type::I64], outs: vec![error()] }.is_error(), true);
+        assert_eq!(Type::Fn { ins: vec![error()], outs: vec![Type::I32] }.is_error(), true);
         assert_eq!(Type::Fn {
             ins: vec![Type::I64],
             outs: vec![
-                Type::Fn { ins: vec![Type::I64], outs: vec![Type::error("", "")] }
+                Type::Fn { ins: vec![Type::I64], outs: vec![error()] }
             ],
         }.is_error(), true);
         assert_eq!(Type::Fn {
             ins: vec![Type::I64],
             outs: vec![
-                Type::Fn { ins: vec![Type::I64, Type::error("", "")], outs: vec![] }
+                Type::Fn { ins: vec![Type::I64, error()], outs: vec![] }
             ],
         }.is_error(), true);
     }

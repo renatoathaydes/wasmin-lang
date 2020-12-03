@@ -118,8 +118,8 @@ fn test_type_values() {
     assert_eq!(parser.parse_type(), Type::I64);
     assert_eq!(parser.parse_type(), Type::F32);
     assert_eq!(parser.parse_type(), Type::F64);
-    assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
-    assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+    assert_eq!(parser.parse_type(), Type::Error { reason: "type does not exist: err".to_string(), pos: (0, 19) });
+    assert_eq!(parser.parse_type(), Type::Error { reason: "EOF reached (type was expected)".to_string(), pos: (0, 19) });
 }
 
 #[test]
@@ -178,8 +178,8 @@ fn test_type_functions() {
                    ],
                });
 
-    assert_eq!(parser.parse_type(), Type::error("err", "type does not exist"));
-    assert_eq!(parser.parse_type(), Type::error("", "EOF reached"));
+    assert_eq!(parser.parse_type(), Type::Error { reason: "type does not exist: err".to_string(), pos: (1, 61) });
+    assert_eq!(parser.parse_type(), Type::Error { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) });
 }
 
 #[test]
@@ -212,16 +212,18 @@ fn test_def() -> Result<(), ParserError> {
     assert_eq!(parser.parse_def()?, ());
     assert_symbols_contains!(parser, "blah" => Type::F64);
     assert_symbols_contains!(parser, "foo" => Type::I32);
-    assert_eq!(parser.parse_def(), Result::Err(ParserError {
-        pos: (0, 23),
-        msg: "Bad type in 'wrong' def: ':' --> unexpected character".to_string(),
-    }));
+    assert_eq!(parser.parse_def()?, ());
+
+    // error on ':'
+    assert_symbols_contains!(parser,
+        "wrong" => Type::Error {reason: "unexpected character: ':'".to_string(), pos: (0, 23)});
+    assert_eq!(parser.curr_char(), Some(':'));
     parser.next();
-    assert_eq!(parser.parse_def(), Result::Err(ParserError {
-        pos: (0, 30),
-        msg: "Bad type in 'ending' def: '' --> EOF reached".to_string(),
-    }));
-    assert_symbols_contains!(parser, "blah" => Type::F64);
-    assert_symbols_contains!(parser, "foo" => Type::I32);
+
+    assert_eq!(parser.parse_def()?, ());
+    assert_symbols_contains!(parser,
+        "ending" => Type::Error {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)});
+    assert_eq!(parser.curr_char(), None);
+
     Result::Ok(())
 }
