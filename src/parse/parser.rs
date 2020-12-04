@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::Chars;
 
-use crate::parse::types::parse_type_internal;
+use crate::parse::type_parser::parse_type;
 use crate::types::{*};
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -167,10 +167,6 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_type(&mut self) -> Type {
-        parse_type_internal(self)
-    }
-
     pub fn parse_def(&mut self) -> Result<(), ParserError> {
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
@@ -184,5 +180,9 @@ impl Parser<'_> {
             let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("'{}'", c) });
             self.parser_err(format!("Expected identifier after def, but got {}", curr))
         }
+    }
+
+    pub fn parse_type(&mut self) -> Type {
+        parse_type(self)
     }
 }

@@ -1,10 +1,10 @@
-use crate::parse::structs::{*};
-use crate::parse::structs::GroupingSymbol::{Parens, SquareBracket};
+use crate::parse::parser::{*};
+use crate::parse::parser::GroupingSymbol::{Parens, SquareBracket};
 use crate::types::{*, Type::*};
 
-pub fn parse_type_internal(parser: &mut Parser) -> Type {
+pub fn parse_type(parser: &mut Parser) -> Type {
     let mut state = GroupingState::new();
-    let typ = parse_type(parser, &mut state);
+    let typ = parse_type_internal(parser, &mut state);
     if state.is_empty() {
         typ
     } else {
@@ -12,7 +12,7 @@ pub fn parse_type_internal(parser: &mut Parser) -> Type {
     }
 }
 
-fn parse_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
+fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
     println!("Parsing type at {:?}", parser.pos());
     if let Some(word) = parser.parse_word() {
         match word.as_ref() {
@@ -51,7 +51,7 @@ fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
             state.exit_symbol();
             break;
         }
-        let typ = parse_type(parser, state);
+        let typ = parse_type_internal(parser, state);
         println!("Type: {:?}", &typ);
         let is_error = typ.is_error();
         ins.push(typ);
@@ -100,7 +100,7 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
             }
             _ => {}
         }
-        let typ = parse_type(parser, state);
+        let typ = parse_type_internal(parser, state);
         println!("Type: {:?}", &typ);
         let is_error = typ.is_error();
         outs.push(typ);
