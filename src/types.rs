@@ -24,7 +24,7 @@ impl Type {
     }
 }
 
-pub fn type_of(str: &String) -> Type {
+pub fn type_of(str: &str) -> Type {
     let mut chars = str.chars();
     let c = chars.next();
     return match c {
@@ -34,7 +34,7 @@ pub fn type_of(str: &String) -> Type {
     };
 }
 
-fn type_of_num(text: &String, chars: &mut Chars) -> Type {
+fn type_of_num(text: &str, chars: &mut Chars) -> Type {
     let mut dots = 0;
     let mut digits = 0;
     let mut error = false;

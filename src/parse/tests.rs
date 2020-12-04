@@ -1,33 +1,32 @@
 use super::*;
 
+macro_rules! parse_expr {
+    ($e:expr) => {{
+        let mut chars = $e.chars();
+        let mut parser = new_parser(&mut chars);
+        parser.parse_expr() 
+    }};
+}
+
 #[test]
 fn test_empty() {
-    let mut chars = "()".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Empty);
+    assert_eq!(parse_expr!("()"), Expression::Empty);
 }
 
 #[test]
 fn test_i32() {
-    let mut chars = "(0)".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("0"), I32));
-
-    let mut chars = "( 1 )".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("1"), I32));
-
-    let mut chars = "( 100)".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("100"), I32));
+    assert_eq!(parse_expr!("(0)"), Expression::Const(String::from("0"), I32));
+    assert_eq!(parse_expr!("( 1 )"), Expression::Const(String::from("1"), I32));
+    assert_eq!(parse_expr!("( 100)"), Expression::Const(String::from("100"), I32));
+    assert_eq!(parse_expr!("( 100_000 )"), Expression::Const(String::from("100_000"), I32));
 }
 
 #[test]
 fn test_f32() {
-    let mut chars = "(0.0)".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("0.0"), F32));
-
-    let mut chars = "( 1.0 )".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("1.0"), F32));
-
-    let mut chars = "( 1.00)".chars();
-    assert_eq!(parse_expr(&mut chars), Expression::Const(String::from("1.00"), F32));
+    assert_eq!(parse_expr!("(0.0)"), Expression::Const(String::from("0.0"), F32));
+    assert_eq!(parse_expr!("( 1.0 )"), Expression::Const(String::from("1.0"), F32));
+    assert_eq!(parse_expr!("( 1.00)"), Expression::Const(String::from("1.00"), F32));
+    assert_eq!(parse_expr!("( 1_0.0_0)"), Expression::Const(String::from("1_0.0_0"), F32));
 }
 
 #[test]
@@ -194,7 +193,7 @@ fn test_type_function_optional_semi_colon() {
 
 macro_rules! assert_symbols_contains {
     ($parser:ident, $key:expr => $value:expr) => {{
-        if let Some(v) = $parser.stack().get($key.to_string()) {
+        if let Some(v) = $parser.stack().get($key) {
             assert_eq!(v, &$value);
         } else {
             panic!("Stack does not contain key {}", &$key);

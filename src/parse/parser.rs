@@ -3,6 +3,8 @@ use std::str::Chars;
 
 use crate::parse::type_parser::parse_type;
 use crate::types::{*};
+use crate::parse::expr_parser::parse_expr;
+use crate::ast::Expression;
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ParserError {
@@ -51,11 +53,11 @@ impl Stack {
         }
     }
 
-    pub fn get(&self, id: String) -> Option<&Type> {
+    pub fn get(&self, id: &str) -> Option<&Type> {
         let i = self.items.len() - 1;
         while i >= 0 as usize {
             let symbols = self.items.get(i).unwrap();
-            if let Some(val) = symbols.get(&id) {
+            if let Some(val) = symbols.get(id) {
                 return Some(val);
             }
         }
@@ -184,5 +186,9 @@ impl Parser<'_> {
 
     pub fn parse_type(&mut self) -> Type {
         parse_type(self)
+    }
+
+    pub fn parse_expr(&mut self) -> Expression {
+        parse_expr(self)
     }
 }

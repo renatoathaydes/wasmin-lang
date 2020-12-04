@@ -1,14 +1,15 @@
-use parse::parse_expr;
+use crate::parse::new_parser;
 
 pub mod ast;
 pub mod types;
 pub mod parse;
 
 fn main() {
-    let program = "(256)";
+    let mut program = "(256)".chars();
+    let mut parser = new_parser(&mut program);
+    let program = parser.parse_expr();
 
     println!("Wasmin compiler version 0.0");
-
-    println!("{:?}", parse_expr(&mut program.chars()));
+    println!("{:?}", program);
 }
 
