@@ -78,6 +78,12 @@ impl Stack {
     }
 }
 
+impl Default for Stack {
+    fn default() -> Self {
+        Stack::new()
+    }
+}
+
 impl GroupingState {
     pub fn new() -> GroupingState {
         GroupingState { items: Vec::with_capacity(2) }
@@ -144,16 +150,12 @@ impl Parser<'_> {
 
     pub fn parse_word(&mut self) -> Option<String> {
         self.skip_spaces();
-        let c_opt = self.curr_char;
-        if c_opt.is_none() { return None; }
-        let c = c_opt.unwrap();
+        let c = self.curr_char?;
         space_sep_or!(c, { return None }, {});
         let mut word = String::with_capacity(8);
         word.push(c);
-        loop {
-            if let Some(c) = self.next() {
-                space_sep_or!(c, { break; }, { word.push(c) });
-            } else { break; }
+        while let Some(c) = self.next() {
+            space_sep_or!(c, { break; }, { word.push(c) });
         }
         Some(word)
     }
@@ -162,10 +164,8 @@ impl Parser<'_> {
         if let Some(c) = self.curr_char {
             space_or!(c, {}, { return; });
         }
-        loop {
-            if let Some(c) = self.next() {
-                space_or!(c, {}, { break; });
-            } else { break; }
+        while let Some(c) = self.next() {
+            space_or!(c, {}, { break; });
         }
     }
 
@@ -243,6 +243,5 @@ mod stack_tests {
         assert_eq!(stack.get(&"z"), None);
         assert_eq!(stack.get(&"bar"), None);
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
-
     }
 }

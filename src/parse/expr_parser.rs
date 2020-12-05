@@ -27,7 +27,7 @@ fn parse_parens(parser: &mut Parser) -> Expression {
         println!("Parser: {:?}, words: {:?}", parser, &words);
         parser.skip_spaces();
         if let Some(')') = parser.curr_char() { break; }
-        if let None = parser.curr_char() {
+        if parser.curr_char().is_none() {
             return Expression::Err(parser.error("Unclosed parens"));
         }
         if let Some(word) = parser.parse_word() {
@@ -56,7 +56,7 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
             Expression::Const(arg, typ)
         }).collect();
         println!("Ags are : {:?}", &args);
-        let typ = parser.stack().get(&name).map(|t| t.clone())
+        let typ = parser.stack().get(&name).cloned()
             .unwrap_or_else(|| parser.error(&format!("Unknown function: '{}'", &name)));
 
         println!("Done here");
@@ -93,47 +93,44 @@ fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
     let mut explicit_type: Option<Type> = None;
     let mut is_second_digit = true;
 
-    loop {
-        if let Some(c) = chars.next() {
-            match c {
-                '0'..='9' => {
-                    if is_second_digit {
-                        if first_digit == '0' && c == '0' {
-                            return Err("number cannot start with more than one zero".to_string());
-                        }
-                        is_second_digit = false;
+    while let Some(c) = chars.next() {
+        match c {
+            '0'..='9' => {
+                if is_second_digit {
+                    if first_digit == '0' && c == '0' {
+                        return Err("number cannot start with more than one zero".to_string());
                     }
-                    if has_dot {
-                        decimal_digits += 1;
-                    } else {
-                        whole_digits += 1;
-                    }
-                }
-                '_' => {}
-                '.' => {
-                    if has_dot {
-                        return Err("number contains more than one dot".to_string());
-                    }
-                    has_dot = true;
                     is_second_digit = false;
                 }
-                'i' | 'f' => {
-                    match read_num_type(chars, c == 'i') {
-                        Ok(t) => {
-                            explicit_type = Some(t);
-                            break;
-                        }
-                        Err(reason) => return Err(reason)
-                    }
-                }
-                _ => {
-                    return Err(format!("number contains invalid character: '{}'", c));
+                if has_dot {
+                    decimal_digits += 1;
+                } else {
+                    whole_digits += 1;
                 }
             }
-        } else {
-            break;
+            '_' => {}
+            '.' => {
+                if has_dot {
+                    return Err("number contains more than one dot".to_string());
+                }
+                has_dot = true;
+                is_second_digit = false;
+            }
+            'i' | 'f' => {
+                match read_num_type(chars, c == 'i') {
+                    Ok(t) => {
+                        explicit_type = Some(t);
+                        break;
+                    }
+                    Err(reason) => return Err(reason)
+                }
+            }
+            _ => {
+                return Err(format!("number contains invalid character: '{}'", c));
+            }
         }
     }
+
     if has_dot {
         if decimal_digits == 0 {
             return Err("number cannot end with dot".to_string());
