@@ -66,15 +66,30 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
 
 pub fn type_of(str: &str, stack: &Stack) -> Result<Type, String> {
     let mut chars = str.chars();
-    let c = chars.next();
-    match c {
-        Some('0'..='9') => { type_of_num(c.unwrap(), &mut chars) }
-        None => { Ok(Type::Empty) }
-        _ => {
-            stack.get(str).map(|t| Ok(t.to_owned())).unwrap_or_else(||
-                Err(format!("variable '{}' does not exist", str)))
+    type_of_with_sign(str, &mut chars, stack, None)
+}
+
+pub fn type_of_with_sign(str: &str, chars: &mut Chars, stack: &Stack, sign: Option<bool>) -> Result<Type, String> {
+    if let Some(c) = chars.next() {
+        match c {
+            '0'..='9' => type_of_num(c, chars),
+            '-' | '+' =>
+                if let Some(_) = sign {
+                    // already consumed sign, so this is not a number
+                    type_of_var(str, stack)
+                } else {
+                    type_of_with_sign(str, chars, stack, Some(c == '+'))
+                },
+            _ => type_of_var(str, stack)
         }
+    } else {
+        Ok(Type::Empty)
     }
+}
+
+fn type_of_var(str: &str, stack: &Stack) -> Result<Type, String> {
+    stack.get(str).map(|t| Ok(t.to_owned())).unwrap_or_else(||
+        Err(format!("variable '{}' does not exist", str)))
 }
 
 fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
@@ -129,7 +144,7 @@ fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
         if decimal_digits == 0 {
             return Err("number cannot end with dot".to_string());
         }
-        let fits_in_32_bits = decimal_digits + whole_digits < 10;
+        let fits_in_32_bits = decimal_digits + whole_digits < 11;
         if let Some(t) = explicit_type {
             return explicit_float_type(t, fits_in_32_bits);
         }
@@ -138,7 +153,7 @@ fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
         if first_digit == '0' && whole_digits > 1 {
             return Err("non-zero integer cannot start with zero".to_string());
         }
-        let fits_in_32_bits = whole_digits < 10;
+        let fits_in_32_bits = whole_digits < 11;
         if let Some(t) = explicit_type {
             return explicit_int_type(t, fits_in_32_bits);
         }
@@ -164,7 +179,7 @@ fn explicit_float_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String>
             if fits_in_32_bits {
                 Ok(Type::F32)
             } else {
-                Err("number is too big to fit in f32 (max total digits for f32 literals is 9)".to_string())
+                Err("number is too big to fit in f32 (max total digits for f32 literals is 10)".to_string())
             }
         }
         _ => unreachable!()
@@ -178,7 +193,7 @@ fn explicit_int_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String> {
             if fits_in_32_bits {
                 Ok(typ)
             } else {
-                Err("number is too big to fit in i32 (max total digits for i32 literals is 9)".to_string())
+                Err("number is too big to fit in i32 (max total digits for i32 literals is 10)".to_string())
             }
         }
         _ => unreachable!()

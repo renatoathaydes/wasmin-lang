@@ -22,12 +22,13 @@ fn test_type_of_empty() {
 
 #[test]
 fn test_type_of_int() {
-    // max value is "2147483647", anything with less digits is classified as i32
+    // max value of i32 is "2147483647", anything with more digits is classified as i64
     for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11", "20", "100",
-        "1_000", "111_222_333", "1_2_3_4_0", "214748364"].iter() {
+        "1_000", "111_222_333", "1_2_3_4_0", "2147483647",
+        "-1", "-0", "-1_2", "-98_76_43"].iter() {
         assert_eq!(type_of!(i), Ok(Type::I32), "Example: {}", i);
     }
-    for i in ["2147483647", "1234567890", "123_456_789_012_345_678_900"].iter() {
+    for i in ["21474836478", "12345678900", "123_456_789_012_345_678_900"].iter() {
         assert_eq!(type_of!(i), Ok(Type::I64), "Example: {}", i);
     }
 
@@ -41,10 +42,11 @@ fn test_type_of_int() {
 #[test]
 fn test_type_of_float() {
     for f in ["0.1", "2.0", "1.3", "3.14151695", "2345.67890",
-        "1_000.0", "0.1_111_222_3", "9_1_2_.3_4", "1.0000000"].iter() {
+        "1_000.0", "0.1_111_222_3", "9_1_2_.3_4", "1.0000000",
+        "-0.1", "-1_.000", "-3.141516956"].iter() {
         assert_eq!(type_of!(f), Ok(Type::F32), "Example: {}", f);
     }
-    for f in ["0.111111111", "2.000000000000", "3.141_592_653_589_793"].iter() {
+    for f in ["0.1111111111", "2.000000000000", "3.141_592_653_589_793"].iter() {
         assert_eq!(type_of!(f), Ok(Type::F64), "Example: {}", f);
     }
 
@@ -56,21 +58,30 @@ fn test_type_of_float() {
     assert_eq!(type_of!("0_012.3"), Err("number cannot start with more than one zero".to_string()));
 }
 
+#[test]
 fn test_type_of_num_explicit() {
     // max value is "2147483647", anything with less digits is classified as i32
-    assert_eq!(type_of!("214748364"), Ok(Type::I32));
-    assert_eq!(type_of!("2147483647"), Ok(Type::I64));
     assert_eq!(type_of!("2147483647i32"), Ok(Type::I32));
+    assert_eq!(type_of!("-2147483646i32"), Ok(Type::I32));
     assert_eq!(type_of!("0i32"), Ok(Type::I32));
+    assert_eq!(type_of!("-0i32"), Ok(Type::I32));
     assert_eq!(type_of!("0i64"), Ok(Type::I64));
+    assert_eq!(type_of!("-0i64"), Ok(Type::I64));
     assert_eq!(type_of!("512i64"), Ok(Type::I64));
+    assert_eq!(type_of!("-512i64"), Ok(Type::I64));
 
     assert_eq!(type_of!("0f32"), Ok(Type::F32));
+    assert_eq!(type_of!("-0f32"), Ok(Type::F32));
     assert_eq!(type_of!("0f64"), Ok(Type::F64));
+    assert_eq!(type_of!("-0f64"), Ok(Type::F64));
     assert_eq!(type_of!("10f32"), Ok(Type::F32));
+    assert_eq!(type_of!("-10f32"), Ok(Type::F32));
     assert_eq!(type_of!("10_000_f64"), Ok(Type::F64));
+    assert_eq!(type_of!("-10_000_f64"), Ok(Type::F64));
     assert_eq!(type_of!("0.5_f64"), Ok(Type::F64));
+    assert_eq!(type_of!("-0.5_f64"), Ok(Type::F64));
     assert_eq!(type_of!("12.__5678__f64"), Ok(Type::F64));
+    assert_eq!(type_of!("-12.__5678__f64"), Ok(Type::F64));
 }
 
 #[test]
