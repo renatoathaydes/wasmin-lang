@@ -1,6 +1,8 @@
+use std::str::Chars;
+
 use crate::ast::Expression;
-use crate::parse::parser::Parser;
-use crate::types::type_of;
+use crate::parse::parser::{Parser, Stack};
+use crate::types::Type;
 
 pub fn parse_expr(parser: &mut Parser) -> Expression {
     println!("Parsing expression");
@@ -42,13 +44,13 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
         Expression::Empty
     } else if words.len() == 1 {
         let w = words.remove(0);
-        let typ = type_of(&w);
+        let typ = type_of(&w, parser.stack());
         Expression::Const(w, typ)
     } else {
         let name = words.remove(0);
-        let mut args = words.drain(0..).map(|arg| {
+        let args = words.drain(0..).map(|arg| {
             println!("Arg: {}", &arg);
-            let typ = type_of(&arg);
+            let typ = type_of(&arg, parser.stack());
             Expression::Const(arg, typ)
         }).collect();
         println!("Ags are : {:?}", &args);
@@ -57,5 +59,45 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
 
         println!("Done here");
         Expression::FnCall { name, args, typ }
+    }
+}
+
+
+pub fn type_of(str: &str, stack: &Stack) -> Type {
+    let mut chars = str.chars();
+    let c = chars.next();
+    return match c {
+        Some('0'..='9') => { type_of_num(&mut chars) }
+        None => { Type::Empty }
+        _ => {
+            stack.get(str).map(|t| t.to_owned()).unwrap_or_else(||
+                Type::Error { pos: (0, 0), reason: "not a number".to_string() })
+        }
+    };
+}
+
+fn type_of_num(chars: &mut Chars) -> Type {
+    let mut dots = 0;
+    let mut digits = 0;
+    let mut error = false;
+
+    loop {
+        if let Some(c) = chars.next() {
+            match c {
+                '0'..='9' => { digits += 1 }
+                '_' => {}
+                '.' => { dots += 1; }
+                _ => { error = true; }
+            }
+        } else {
+            break;
+        }
+    }
+    if error || dots > 1 {
+        Type::Error { pos: (0, 0), reason: "number contains invalid digits".to_string() }
+    } else if dots == 1 {
+        Type::F32
+    } else {
+        Type::I32
     }
 }

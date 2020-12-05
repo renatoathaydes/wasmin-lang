@@ -56,8 +56,7 @@ impl Stack {
     }
 
     pub fn get(&self, id: &str) -> Option<&Type> {
-        let mut i = self.items.len() - 1;
-        (i..=0).find_map(|i| {
+        ((self.items.len() - 1)..=0).find_map(|i| {
             let symbols = self.items.get(i).unwrap();
             if let Some(val) = symbols.get(id) {
                 Some(val)

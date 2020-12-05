@@ -4,8 +4,36 @@ macro_rules! parse_expr {
     ($e:expr) => {{
         let mut chars = $e.chars();
         let mut parser = new_parser(&mut chars);
-        parser.parse_expr() 
+        parser.parse_expr()
     }};
+}
+
+macro_rules! type_of {
+    ($e:expr) => {{
+        let stack = Stack::new();
+        expr_parser::type_of($e, &stack)
+    }};
+}
+
+#[test]
+fn test_type_of_empty() {
+    assert_eq!(type_of!(""), Type::Empty);
+}
+
+#[test]
+fn test_type_of_i32() {
+    for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11", "20", "100",
+        "1_000", "1_111_222_333", "0_1_2_3_4"].iter() {
+        assert_eq!(type_of!(i), Type::I32, "Example: {}", i);
+    }
+}
+
+#[test]
+fn test_type_of_f32() {
+    for f in ["0.1", "2.0", "1.3", "3.14151695", "234566788.4344566",
+        "1_000.0", "0.1_111_222_333", "0_1_2_.3_4"].iter() {
+        assert_eq!(type_of!(f), Type::F32, "Example: {}", f);
+    }
 }
 
 #[test]
@@ -32,9 +60,9 @@ fn test_f32() {
 #[test]
 fn test_fn_basic() {
     assert_eq!(parse_expr!("(print 0.0)"),
-               Expression::fnCall("print",
-                                  vec![Expression::Const(String::from("0.0"), F32)],
-                                  Error { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
+               Expression::fn_call("print",
+                                   vec![Expression::Const(String::from("0.0"), F32)],
+                                   Error { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
 }
 
 #[test]

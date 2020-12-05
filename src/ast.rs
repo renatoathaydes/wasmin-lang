@@ -11,7 +11,9 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn fnCall(name: &str, args: Vec<Expression>, typ: Type) -> Expression {
+    pub fn
+
+    fn_call(name: &str, args: Vec<Expression>, typ: Type) -> Expression {
         Expression::FnCall { name: name.to_string(), args, typ }
     }
 }
