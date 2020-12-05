@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::str::Chars;
 
-use crate::parse::type_parser::parse_type;
-use crate::types::{*};
-use crate::parse::expr_parser::parse_expr;
 use crate::ast::Expression;
+use crate::parse::expr_parser;
+use crate::parse::type_parser;
+use crate::types::{*};
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ParserError {
@@ -12,10 +12,12 @@ pub struct ParserError {
     pub msg: String,
 }
 
+#[derive(Debug)]
 pub struct Stack {
     items: Vec<HashMap<String, Type>>
 }
 
+#[derive(Debug)]
 pub struct Parser<'s> {
     line: usize,
     col: usize,
@@ -54,14 +56,13 @@ impl Stack {
     }
 
     pub fn get(&self, id: &str) -> Option<&Type> {
-        let i = self.items.len() - 1;
-        while i >= 0 as usize {
+        let mut i = self.items.len() - 1;
+        (i..=0).find_map(|i| {
             let symbols = self.items.get(i).unwrap();
             if let Some(val) = symbols.get(id) {
-                return Some(val);
-            }
-        }
-        None
+                Some(val)
+            } else { None }
+        })
     }
 
     pub fn new_level(&mut self) {
@@ -185,10 +186,11 @@ impl Parser<'_> {
     }
 
     pub fn parse_type(&mut self) -> Type {
-        parse_type(self)
+        type_parser::parse_type(self)
     }
 
     pub fn parse_expr(&mut self) -> Expression {
-        parse_expr(self)
+        println!("Calling parse_expr");
+        expr_parser::parse_expr(self)
     }
 }

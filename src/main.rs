@@ -5,7 +5,7 @@ pub mod types;
 pub mod parse;
 
 fn main() {
-    let mut program = "(256)".chars();
+    let mut program = "(print 256)".chars();
     let mut parser = new_parser(&mut program);
     let program = parser.parse_expr();
 

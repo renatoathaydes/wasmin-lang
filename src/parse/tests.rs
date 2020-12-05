@@ -30,6 +30,14 @@ fn test_f32() {
 }
 
 #[test]
+fn test_fn_basic() {
+    assert_eq!(parse_expr!("(print 0.0)"),
+               Expression::fnCall("print",
+                                  vec![Expression::Const(String::from("0.0"), F32)],
+                                  Error { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
+}
+
+#[test]
 fn test_word() {
     let mut chars = "abc".chars();
     let mut parser = new_parser(&mut chars);
