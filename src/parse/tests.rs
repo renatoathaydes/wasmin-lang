@@ -1,7 +1,7 @@
 use crate::ast::Expression;
-use crate::types::{*, Type::*};
-use crate::parse::parser::{*};
 use crate::parse::{expr_parser, new_parser};
+use crate::parse::parser::{*};
+use crate::types::{*, Type::*};
 
 macro_rules! parse_expr {
     ($e:expr) => {{
@@ -16,11 +16,28 @@ macro_rules! type_of {
         let stack = Stack::new();
         expr_parser::type_of($e, &stack)
     }};
+    ($e:expr, $($id:expr => $typ:expr),+) => {{
+        let mut stack = Stack::new();
+        $(stack.push_item($id.to_string(), $typ);)*
+        expr_parser::type_of($e, &stack)
+    }};
 }
 
 #[test]
 fn test_type_of_empty() {
     assert_eq!(type_of!(""), Ok(Type::Empty));
+}
+
+#[test]
+fn test_type_of_var() {
+    assert_eq!(type_of!("foo", "foo" => Type::F32), Ok(Type::F32));
+    assert_eq!(type_of!("bar", "foo" => Type::F32),
+               Err("variable \'bar\' does not exist".to_string()));
+    assert_eq!(type_of!("bar", "foo" => Type::F32, "bar" => Type::I64), Ok(Type::I64));
+
+    // funny variable names
+    assert_eq!(type_of!("--", "++" => Type::F32, "--" => Type::I64), Ok(Type::I64));
+    assert_eq!(type_of!("++", "++" => Type::F32, "--" => Type::I64), Ok(Type::F32));
 }
 
 #[test]
