@@ -44,13 +44,15 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
         Expression::Empty
     } else if words.len() == 1 {
         let w = words.remove(0);
-        let typ = type_of(&w, parser.stack());
+        let typ = type_of(&w, parser.stack()).unwrap_or_else(|reason|
+            Type::Error { reason, pos: parser.pos() });
         Expression::Const(w, typ)
     } else {
         let name = words.remove(0);
         let args = words.drain(0..).map(|arg| {
             println!("Arg: {}", &arg);
-            let typ = type_of(&arg, parser.stack());
+            let typ = type_of(&arg, parser.stack()).unwrap_or_else(|reason|
+                Type::Error { reason, pos: parser.pos() });
             Expression::Const(arg, typ)
         }).collect();
         println!("Ags are : {:?}", &args);
@@ -62,42 +64,123 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     }
 }
 
-
-pub fn type_of(str: &str, stack: &Stack) -> Type {
+pub fn type_of(str: &str, stack: &Stack) -> Result<Type, String> {
     let mut chars = str.chars();
     let c = chars.next();
-    return match c {
-        Some('0'..='9') => { type_of_num(&mut chars) }
-        None => { Type::Empty }
+    match c {
+        Some('0'..='9') => { type_of_num(c.unwrap(), &mut chars) }
+        None => { Ok(Type::Empty) }
         _ => {
-            stack.get(str).map(|t| t.to_owned()).unwrap_or_else(||
-                Type::Error { pos: (0, 0), reason: "not a number".to_string() })
+            stack.get(str).map(|t| Ok(t.to_owned())).unwrap_or_else(||
+                Err(format!("variable '{}' does not exist", str)))
         }
-    };
+    }
 }
 
-fn type_of_num(chars: &mut Chars) -> Type {
-    let mut dots = 0;
-    let mut digits = 0;
-    let mut error = false;
+fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
+    let mut has_dot = false;
+    let mut whole_digits = 1;
+    let mut decimal_digits = 0;
+    let mut explicit_type: Option<Type> = None;
+    let mut is_second_digit = true;
 
     loop {
         if let Some(c) = chars.next() {
             match c {
-                '0'..='9' => { digits += 1 }
+                '0'..='9' => {
+                    if is_second_digit {
+                        if first_digit == '0' && c == '0' {
+                            return Err("number cannot start with more than one zero".to_string());
+                        }
+                        is_second_digit = false;
+                    }
+                    if has_dot {
+                        decimal_digits += 1;
+                    } else {
+                        whole_digits += 1;
+                    }
+                }
                 '_' => {}
-                '.' => { dots += 1; }
-                _ => { error = true; }
+                '.' => {
+                    if has_dot {
+                        return Err("number contains more than one dot".to_string());
+                    }
+                    has_dot = true;
+                    is_second_digit = false;
+                }
+                'i' | 'f' => {
+                    match read_num_type(chars, c == 'i') {
+                        Ok(t) => {
+                            explicit_type = Some(t);
+                            break;
+                        }
+                        Err(reason) => return Err(reason)
+                    }
+                }
+                _ => {
+                    return Err(format!("number contains invalid character: '{}'", c));
+                }
             }
         } else {
             break;
         }
     }
-    if error || dots > 1 {
-        Type::Error { pos: (0, 0), reason: "number contains invalid digits".to_string() }
-    } else if dots == 1 {
-        Type::F32
+    if has_dot {
+        if decimal_digits == 0 {
+            return Err("number cannot end with dot".to_string());
+        }
+        let fits_in_32_bits = decimal_digits + whole_digits < 10;
+        if let Some(t) = explicit_type {
+            return explicit_float_type(t, fits_in_32_bits);
+        }
+        Ok(if fits_in_32_bits { Type::F32 } else { Type::F64 })
     } else {
-        Type::I32
+        if first_digit == '0' && whole_digits > 1 {
+            return Err("non-zero integer cannot start with zero".to_string());
+        }
+        let fits_in_32_bits = whole_digits < 10;
+        if let Some(t) = explicit_type {
+            return explicit_int_type(t, fits_in_32_bits);
+        }
+        Ok(if fits_in_32_bits { Type::I32 } else { Type::I64 })
+    }
+}
+
+fn read_num_type(chars: &mut Chars, is_int: bool) -> Result<Type, String> {
+    let text: String = chars.collect();
+    match text.as_ref() {
+        "32" => return Ok(if is_int { Type::I32 } else { Type::F32 }),
+        "64" => return Ok(if is_int { Type::I64 } else { Type::F64 }),
+        _ => {}
+    }
+    Err(format!("Unexpected number suffix: '{}'. Valid suffixes are 'i32', 'i64', 'f32' or 'f64'.", text))
+}
+
+fn explicit_float_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String> {
+    match typ {
+        Type::I64 | Type::I32 => Err("number with decimal part cannot have integer suffix".to_string()),
+        Type::F64 => Ok(Type::F64),
+        Type::F32 => {
+            if fits_in_32_bits {
+                Ok(Type::F32)
+            } else {
+                Err("number is too big to fit in f32 (max total digits for f32 literals is 9)".to_string())
+            }
+        }
+        _ => unreachable!()
+    }
+}
+
+fn explicit_int_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String> {
+    match typ {
+        Type::I64 | Type::F64 => Ok(typ),
+        Type::I32 | Type::F32 => {
+            if fits_in_32_bits {
+                Ok(typ)
+            } else {
+                Err("number is too big to fit in i32 (max total digits for i32 literals is 9)".to_string())
+            }
+        }
+        _ => unreachable!()
     }
 }

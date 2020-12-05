@@ -17,23 +17,60 @@ macro_rules! type_of {
 
 #[test]
 fn test_type_of_empty() {
-    assert_eq!(type_of!(""), Type::Empty);
+    assert_eq!(type_of!(""), Ok(Type::Empty));
 }
 
 #[test]
-fn test_type_of_i32() {
+fn test_type_of_int() {
+    // max value is "2147483647", anything with less digits is classified as i32
     for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11", "20", "100",
-        "1_000", "1_111_222_333", "0_1_2_3_4"].iter() {
-        assert_eq!(type_of!(i), Type::I32, "Example: {}", i);
+        "1_000", "111_222_333", "1_2_3_4_0", "214748364"].iter() {
+        assert_eq!(type_of!(i), Ok(Type::I32), "Example: {}", i);
     }
+    for i in ["2147483647", "1234567890", "123_456_789_012_345_678_900"].iter() {
+        assert_eq!(type_of!(i), Ok(Type::I64), "Example: {}", i);
+    }
+
+    assert_eq!(type_of!("123z"), Err("number contains invalid character: 'z'".to_string()));
+    assert_eq!(type_of!("123!0123"), Err("number contains invalid character: '!'".to_string()));
+    assert_eq!(type_of!("0123"), Err("non-zero integer cannot start with zero".to_string()));
+    assert_eq!(type_of!("000"), Err("number cannot start with more than one zero".to_string()));
+    assert_eq!(type_of!("0_0"), Err("number cannot start with more than one zero".to_string()));
 }
 
 #[test]
-fn test_type_of_f32() {
-    for f in ["0.1", "2.0", "1.3", "3.14151695", "234566788.4344566",
-        "1_000.0", "0.1_111_222_333", "0_1_2_.3_4"].iter() {
-        assert_eq!(type_of!(f), Type::F32, "Example: {}", f);
+fn test_type_of_float() {
+    for f in ["0.1", "2.0", "1.3", "3.14151695", "2345.67890",
+        "1_000.0", "0.1_111_222_3", "9_1_2_.3_4", "1.0000000"].iter() {
+        assert_eq!(type_of!(f), Ok(Type::F32), "Example: {}", f);
     }
+    for f in ["0.111111111", "2.000000000000", "3.141_592_653_589_793"].iter() {
+        assert_eq!(type_of!(f), Ok(Type::F64), "Example: {}", f);
+    }
+
+    assert_eq!(type_of!("0.0.0"), Err("number contains more than one dot".to_string()));
+    assert_eq!(type_of!("0.0."), Err("number contains more than one dot".to_string()));
+    assert_eq!(type_of!("0."), Err("number cannot end with dot".to_string()));
+    assert_eq!(type_of!("1z"), Err("number contains invalid character: 'z'".to_string()));
+    assert_eq!(type_of!("00.1"), Err("number cannot start with more than one zero".to_string()));
+    assert_eq!(type_of!("0_012.3"), Err("number cannot start with more than one zero".to_string()));
+}
+
+fn test_type_of_num_explicit() {
+    // max value is "2147483647", anything with less digits is classified as i32
+    assert_eq!(type_of!("214748364"), Ok(Type::I32));
+    assert_eq!(type_of!("2147483647"), Ok(Type::I64));
+    assert_eq!(type_of!("2147483647i32"), Ok(Type::I32));
+    assert_eq!(type_of!("0i32"), Ok(Type::I32));
+    assert_eq!(type_of!("0i64"), Ok(Type::I64));
+    assert_eq!(type_of!("512i64"), Ok(Type::I64));
+
+    assert_eq!(type_of!("0f32"), Ok(Type::F32));
+    assert_eq!(type_of!("0f64"), Ok(Type::F64));
+    assert_eq!(type_of!("10f32"), Ok(Type::F32));
+    assert_eq!(type_of!("10_000_f64"), Ok(Type::F64));
+    assert_eq!(type_of!("0.5_f64"), Ok(Type::F64));
+    assert_eq!(type_of!("12.__5678__f64"), Ok(Type::F64));
 }
 
 #[test]
