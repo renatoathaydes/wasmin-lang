@@ -66,20 +66,14 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
 
 pub fn type_of(str: &str, stack: &Stack) -> Result<Type, String> {
     let mut chars = str.chars();
-    type_of_with_sign(str, &mut chars, stack, None)
+    type_of_with_sign(str, &mut chars, stack, false)
 }
 
-pub fn type_of_with_sign(str: &str, chars: &mut Chars, stack: &Stack, sign: Option<bool>) -> Result<Type, String> {
+pub fn type_of_with_sign(str: &str, chars: &mut Chars, stack: &Stack, has_sign: bool) -> Result<Type, String> {
     if let Some(c) = chars.next() {
         match c {
             '0'..='9' => type_of_num(c, chars),
-            '-' | '+' =>
-                if let Some(_) = sign {
-                    // already consumed sign, so this is not a number
-                    type_of_var(str, stack)
-                } else {
-                    type_of_with_sign(str, chars, stack, Some(c == '+'))
-                },
+            '-' | '+' if !has_sign => type_of_with_sign(str, chars, stack, true),
             _ => type_of_var(str, stack)
         }
     } else {
