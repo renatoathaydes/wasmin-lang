@@ -56,7 +56,7 @@ impl Stack {
     }
 
     pub fn get(&self, id: &str) -> Option<&Type> {
-        ((self.items.len() - 1)..=0).find_map(|i| {
+        (0..self.items.len()).rev().find_map(|i| {
             let symbols = self.items.get(i).unwrap();
             if let Some(val) = symbols.get(id) {
                 Some(val)
@@ -191,5 +191,58 @@ impl Parser<'_> {
     pub fn parse_expr(&mut self) -> Expression {
         println!("Calling parse_expr");
         expr_parser::parse_expr(self)
+    }
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::*;
+
+    #[test]
+    fn stack_can_have_bindings() {
+        let mut stack = Stack::new();
+        assert_eq!(stack.get(&"foo"), None);
+        stack.push_item("foo".to_string(), Type::Empty);
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.push_item("bar".to_string(), Type::I64);
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        assert_eq!(stack.get(&"z"), None);
+    }
+
+    #[test]
+    fn stack_can_have_multi_level_bindings() {
+        let mut stack = Stack::new();
+        stack.push_item("foo".to_string(), Type::Empty);
+        stack.new_level();
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.new_level();
+        stack.push_item("bar".to_string(), Type::I64);
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.new_level();
+        stack.push_item("z".to_string(), Type::F32);
+        assert_eq!(stack.get(&"z"), Some(&Type::F32));
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.new_level();
+        stack.push_item("foo".to_string(), Type::F64);
+        assert_eq!(stack.get(&"z"), Some(&Type::F32));
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::F64));
+
+        stack.drop_level();
+        assert_eq!(stack.get(&"z"), Some(&Type::F32));
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.drop_level();
+        assert_eq!(stack.get(&"z"), None);
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+        stack.drop_level();
+        assert_eq!(stack.get(&"z"), None);
+        assert_eq!(stack.get(&"bar"), None);
+        assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+
     }
 }
