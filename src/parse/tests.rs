@@ -1,5 +1,5 @@
 use crate::ast::Expression;
-use crate::parse::{expr_parser, new_parser};
+use crate::parse::{expr_parser, new_parser, new_parser_with_stack};
 use crate::parse::parser::{*};
 use crate::types::{*, Type::*};
 
@@ -7,6 +7,13 @@ macro_rules! parse_expr {
     ($e:expr) => {{
         let mut chars = $e.chars();
         let mut parser = new_parser(&mut chars);
+        parser.parse_expr()
+    }};
+    ($e:expr, $($id:expr => $typ:expr),+) => {{
+        let mut chars = $e.chars();
+        let mut stack = Stack::new();
+        $(stack.push_item($id.to_string(), $typ);)*
+        let mut parser = new_parser_with_stack(&mut chars, stack);
         parser.parse_expr()
     }};
 }
@@ -25,19 +32,19 @@ macro_rules! type_of {
 
 #[test]
 fn test_type_of_empty() {
-    assert_eq!(type_of!(""), Ok(Type::Empty));
+    assert_eq!(type_of!(""), Ok(Empty));
 }
 
 #[test]
 fn test_type_of_var() {
-    assert_eq!(type_of!("foo", "foo" => Type::F32), Ok(Type::F32));
-    assert_eq!(type_of!("bar", "foo" => Type::F32),
+    assert_eq!(type_of!("foo", "foo" => F32), Ok(F32));
+    assert_eq!(type_of!("bar", "foo" => F32),
                Err("variable \'bar\' does not exist".to_string()));
-    assert_eq!(type_of!("bar", "foo" => Type::F32, "bar" => Type::I64), Ok(Type::I64));
+    assert_eq!(type_of!("bar", "foo" => F32, "bar" => I64), Ok(I64));
 
     // funny variable names
-    assert_eq!(type_of!("--", "++" => Type::F32, "--" => Type::I64), Ok(Type::I64));
-    assert_eq!(type_of!("++", "++" => Type::F32, "--" => Type::I64), Ok(Type::F32));
+    assert_eq!(type_of!("--", "++" => F32, "--" => I64), Ok(I64));
+    assert_eq!(type_of!("++", "++" => F32, "--" => I64), Ok(F32));
 }
 
 #[test]
@@ -46,10 +53,10 @@ fn test_type_of_int() {
     for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11", "20", "100",
         "1_000", "111_222_333", "1_2_3_4_0", "2147483647",
         "-1", "-0", "-1_2", "-98_76_43"].iter() {
-        assert_eq!(type_of!(i), Ok(Type::I32), "Example: {}", i);
+        assert_eq!(type_of!(i), Ok(I32), "Example: {}", i);
     }
     for i in ["21474836478", "12345678900", "123_456_789_012_345_678_900"].iter() {
-        assert_eq!(type_of!(i), Ok(Type::I64), "Example: {}", i);
+        assert_eq!(type_of!(i), Ok(I64), "Example: {}", i);
     }
 
     assert_eq!(type_of!("123z"), Err("number contains invalid character: 'z'".to_string()));
@@ -64,10 +71,10 @@ fn test_type_of_float() {
     for f in ["0.1", "2.0", "1.3", "3.14151695", "2345.67890",
         "1_000.0", "0.1_111_222_3", "9_1_2_.3_4", "1.0000000",
         "-0.1", "-1_.000", "-3.141516956"].iter() {
-        assert_eq!(type_of!(f), Ok(Type::F32), "Example: {}", f);
+        assert_eq!(type_of!(f), Ok(F32), "Example: {}", f);
     }
     for f in ["0.1111111111", "2.000000000000", "3.141_592_653_589_793"].iter() {
-        assert_eq!(type_of!(f), Ok(Type::F64), "Example: {}", f);
+        assert_eq!(type_of!(f), Ok(F64), "Example: {}", f);
     }
 
     assert_eq!(type_of!("0.0.0"), Err("number contains more than one dot".to_string()));
@@ -81,36 +88,38 @@ fn test_type_of_float() {
 #[test]
 fn test_type_of_num_explicit() {
     // max value is "2147483647", anything with less digits is classified as i32
-    assert_eq!(type_of!("2147483647i32"), Ok(Type::I32));
-    assert_eq!(type_of!("-2147483646i32"), Ok(Type::I32));
-    assert_eq!(type_of!("0i32"), Ok(Type::I32));
-    assert_eq!(type_of!("-0i32"), Ok(Type::I32));
-    assert_eq!(type_of!("0i64"), Ok(Type::I64));
-    assert_eq!(type_of!("-0i64"), Ok(Type::I64));
-    assert_eq!(type_of!("512i64"), Ok(Type::I64));
-    assert_eq!(type_of!("-512i64"), Ok(Type::I64));
+    assert_eq!(type_of!("2147483647i32"), Ok(I32));
+    assert_eq!(type_of!("-2147483646i32"), Ok(I32));
+    assert_eq!(type_of!("0i32"), Ok(I32));
+    assert_eq!(type_of!("-0i32"), Ok(I32));
+    assert_eq!(type_of!("0i64"), Ok(I64));
+    assert_eq!(type_of!("-0i64"), Ok(I64));
+    assert_eq!(type_of!("512i64"), Ok(I64));
+    assert_eq!(type_of!("-512i64"), Ok(I64));
 
-    assert_eq!(type_of!("0f32"), Ok(Type::F32));
-    assert_eq!(type_of!("-0f32"), Ok(Type::F32));
-    assert_eq!(type_of!("0f64"), Ok(Type::F64));
-    assert_eq!(type_of!("-0f64"), Ok(Type::F64));
-    assert_eq!(type_of!("10f32"), Ok(Type::F32));
-    assert_eq!(type_of!("-10f32"), Ok(Type::F32));
-    assert_eq!(type_of!("10_000_f64"), Ok(Type::F64));
-    assert_eq!(type_of!("-10_000_f64"), Ok(Type::F64));
-    assert_eq!(type_of!("0.5_f64"), Ok(Type::F64));
-    assert_eq!(type_of!("-0.5_f64"), Ok(Type::F64));
-    assert_eq!(type_of!("12.__5678__f64"), Ok(Type::F64));
-    assert_eq!(type_of!("-12.__5678__f64"), Ok(Type::F64));
+    assert_eq!(type_of!("0f32"), Ok(F32));
+    assert_eq!(type_of!("-0f32"), Ok(F32));
+    assert_eq!(type_of!("0f64"), Ok(F64));
+    assert_eq!(type_of!("-0f64"), Ok(F64));
+    assert_eq!(type_of!("10f32"), Ok(F32));
+    assert_eq!(type_of!("-10f32"), Ok(F32));
+    assert_eq!(type_of!("10_000_f64"), Ok(F64));
+    assert_eq!(type_of!("-10_000_f64"), Ok(F64));
+    assert_eq!(type_of!("0.5_f64"), Ok(F64));
+    assert_eq!(type_of!("-0.5_f64"), Ok(F64));
+    assert_eq!(type_of!("12.__5678__f64"), Ok(F64));
+    assert_eq!(type_of!("-12.__5678__f64"), Ok(F64));
 }
 
 #[test]
 fn test_empty() {
     assert_eq!(parse_expr!("()"), Expression::Empty);
+    assert_eq!(parse_expr!("(())"), Expression::Empty);
+    assert_eq!(parse_expr!("(( (  ) ) )"), Expression::Empty);
 }
 
 #[test]
-fn test_i32() {
+fn test_expr_i32() {
     assert_eq!(parse_expr!("(0)"), Expression::Const(String::from("0"), I32));
     assert_eq!(parse_expr!("( 1 )"), Expression::Const(String::from("1"), I32));
     assert_eq!(parse_expr!("( 100)"), Expression::Const(String::from("100"), I32));
@@ -118,7 +127,7 @@ fn test_i32() {
 }
 
 #[test]
-fn test_f32() {
+fn test_expr_f32() {
     assert_eq!(parse_expr!("(0.0)"), Expression::Const(String::from("0.0"), F32));
     assert_eq!(parse_expr!("( 1.0 )"), Expression::Const(String::from("1.0"), F32));
     assert_eq!(parse_expr!("( 1.00)"), Expression::Const(String::from("1.00"), F32));
@@ -126,11 +135,41 @@ fn test_f32() {
 }
 
 #[test]
-fn test_fn_basic() {
+fn test_expr_non_parens() {
+    assert_eq!(parse_expr!("0.0;"), Expression::Const(String::from("0.0"), F32));
+    assert_eq!(parse_expr!("  1_000; "), Expression::Const(String::from("1_000"), I32));
+    assert_eq!(parse_expr!(" 0  ; "), Expression::Const(String::from("0"), I32));
+    assert_eq!(parse_expr!("  1_000; "), Expression::Const(String::from("1_000"), I32));
+}
+
+#[test]
+fn test_expr_single_item_nested() {
+    assert_eq!(parse_expr!("((0.0))"), Expression::Const(String::from("0.0"), F32));
+    assert_eq!(parse_expr!("(;;1)"), Expression::Const(String::from("1"), I32));
+    assert_eq!(parse_expr!("(((((  42 )))))"), Expression::Const(String::from("42"), I32));
+    assert_eq!(parse_expr!("( ( ; ; ) (4) )"), Expression::Const(String::from("4"), I32));
+}
+
+#[test]
+fn test_fn_call_basic() {
+    assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(FnType { ins: vec![I32], outs: vec![] } )),
+               Expression::fn_call("do-it", vec![
+                   Expression::Const(String::from("2"), I32)], vec![]));
+
+    assert_eq!(parse_expr!("add 2 2;", "add" => Fn(FnType { ins: vec![I32, I32], outs: vec![I64] } )),
+               Expression::fn_call("add", vec![
+                   Expression::Const(String::from("2"), I32), Expression::Const(String::from("2"), I32)
+               ], vec![I64]));
+
+    assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(FnType { ins: vec![I32, I32], outs: vec![I32, I32] } )),
+               Expression::fn_call("div-rem", vec![
+                   Expression::Const(String::from("4"), I32), Expression::Const(String::from("2"), I32)
+               ], vec![I32, I32]));
+
     assert_eq!(parse_expr!("(print 0.0)"),
                Expression::fn_call("print",
                                    vec![Expression::Const(String::from("0.0"), F32)],
-                                   Error { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
+                                   vec![Error { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }]));
 }
 
 #[test]
@@ -217,12 +256,12 @@ fn test_type_values() {
     let mut chars = "i32 i64 f32 f64 err".chars();
     let mut parser = new_parser(&mut chars);
 
-    assert_eq!(parser.parse_type(), Type::I32);
-    assert_eq!(parser.parse_type(), Type::I64);
-    assert_eq!(parser.parse_type(), Type::F32);
-    assert_eq!(parser.parse_type(), Type::F64);
-    assert_eq!(parser.parse_type(), Type::Error { reason: "type does not exist: err".to_string(), pos: (0, 19) });
-    assert_eq!(parser.parse_type(), Type::Error { reason: "EOF reached (type was expected)".to_string(), pos: (0, 19) });
+    assert_eq!(parser.parse_type(), I32);
+    assert_eq!(parser.parse_type(), I64);
+    assert_eq!(parser.parse_type(), F32);
+    assert_eq!(parser.parse_type(), F64);
+    assert_eq!(parser.parse_type(), Error { reason: "type does not exist: err".to_string(), pos: (0, 19) });
+    assert_eq!(parser.parse_type(), Error { reason: "EOF reached (type was expected)".to_string(), pos: (0, 19) });
 }
 
 #[test]
@@ -231,58 +270,58 @@ fn test_type_functions() {
         [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
     let mut parser = new_parser(&mut chars);
 
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
 
     assert_eq!(parser.curr_char(), Some(';'));
     parser.next();
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
 
     assert_eq!(parser.curr_char(), Some('['));
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I32] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
 
     assert_eq!(parser.curr_char(), Some(';'));
     parser.next();
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I64] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I64] }));
 
     assert_eq!(parser.curr_char(), Some(' '));
     parser.next();
     assert_eq!(parser.curr_char(), Some('['));
 
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![Type::F32], outs: vec![Type::F32] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![F32], outs: vec![F32] }));
 
     assert_eq!(parser.curr_char(), Some(';'));
     parser.next();
     assert_eq!(parser.parse_type(),
-               Type::Fn { ins: vec![Type::I32, Type::I64], outs: vec![Type::F64, Type::I32] });
+               Fn(FnType { ins: vec![I32, I64], outs: vec![F64, I32] }));
 
     assert_eq!(parser.curr_char(), Some(';'));
     parser.next();
 
     assert_eq!(parser.parse_type(),
-               Type::Fn {
-                   ins: vec![Type::I32],
+               Fn(FnType {
+                   ins: vec![I32],
                    outs: vec![
-                       Type::Fn { ins: vec![Type::I64], outs: vec![Type::F32] }
+                       Fn(FnType { ins: vec![I64], outs: vec![F32] })
                    ],
-               });
+               }));
 
     assert_eq!(parser.parse_type(),
-               Type::Fn {
-                   ins: vec![Type::I64],
+               Fn(FnType {
+                   ins: vec![I64],
                    outs: vec![
-                       Type::Fn {
-                           ins: vec![Type::Fn { ins: vec![Type::I32], outs: vec![] }],
-                           outs: vec![Type::F32],
-                       },
-                       Type::Fn {
-                           ins: vec![Type::I64],
-                           outs: vec![Type::I32],
-                       }
+                       Fn(FnType {
+                           ins: vec![Fn(FnType { ins: vec![I32], outs: vec![] })],
+                           outs: vec![F32],
+                       }),
+                       Fn(FnType {
+                           ins: vec![I64],
+                           outs: vec![I32],
+                       })
                    ],
-               });
+               }));
 
-    assert_eq!(parser.parse_type(), Type::Error { reason: "type does not exist: err".to_string(), pos: (1, 61) });
-    assert_eq!(parser.parse_type(), Type::Error { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) });
+    assert_eq!(parser.parse_type(), Error { reason: "type does not exist: err".to_string(), pos: (1, 61) });
+    assert_eq!(parser.parse_type(), Error { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) });
 }
 
 #[test]
@@ -291,8 +330,8 @@ fn test_type_function_optional_semi_colon() {
     let mut parser = new_parser(&mut chars);
 
     // first type parsing should consume the optional semi-colon
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![Type::I32] });
-    assert_eq!(parser.parse_type(), Type::Fn { ins: vec![], outs: vec![] });
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
+    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
 }
 
 macro_rules! assert_symbols_contains {
@@ -311,21 +350,21 @@ fn test_def() -> Result<(), ParserError> {
     let mut parser = new_parser(&mut chars);
 
     assert_eq!(parser.parse_def()?, ());
-    assert_symbols_contains!(parser, "foo" => Type::I32);
+    assert_symbols_contains!(parser, "foo" => I32);
     assert_eq!(parser.parse_def()?, ());
-    assert_symbols_contains!(parser, "blah" => Type::F64);
-    assert_symbols_contains!(parser, "foo" => Type::I32);
+    assert_symbols_contains!(parser, "blah" => F64);
+    assert_symbols_contains!(parser, "foo" => I32);
     assert_eq!(parser.parse_def()?, ());
 
     // error on ':'
     assert_symbols_contains!(parser,
-        "wrong" => Type::Error {reason: "unexpected character: ':'".to_string(), pos: (0, 23)});
+        "wrong" => Error {reason: "unexpected character: ':'".to_string(), pos: (0, 23)});
     assert_eq!(parser.curr_char(), Some(':'));
     parser.next();
 
     assert_eq!(parser.parse_def()?, ());
     assert_symbols_contains!(parser,
-        "ending" => Type::Error {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)});
+        "ending" => Error {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)});
     assert_eq!(parser.curr_char(), None);
 
     assert_eq!(parser.parse_def(),

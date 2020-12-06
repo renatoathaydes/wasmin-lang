@@ -110,6 +110,10 @@ impl GroupingState {
 impl Parser<'_> {
     pub fn new<'s>(chars: &'s mut Chars<'s>) -> Parser<'s> {
         let stack = Stack::new();
+        Self::with_stack(chars, stack)
+    }
+
+    pub fn with_stack<'s>(chars: &'s mut Chars<'s>, stack: Stack) -> Parser<'s> {
         Parser { line: 0, col: 0, stack, curr_char: Option::None, chars }
     }
 
@@ -123,6 +127,10 @@ impl Parser<'_> {
 
     pub fn error(&self, reason: &str) -> Type {
         Type::Error { reason: reason.to_string(), pos: self.pos() }
+    }
+
+    pub fn error_unexpected_char(&self, c: char, reason: &str) -> Type {
+        self.error(&format!("unexpected char: '{}' ({})", c, reason))
     }
 
     pub fn next(&mut self) -> Option<char> {

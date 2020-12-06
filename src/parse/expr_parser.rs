@@ -1,41 +1,83 @@
 use std::str::Chars;
 
 use crate::ast::Expression;
-use crate::parse::parser::{Parser, Stack};
-use crate::types::Type;
+use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
+use crate::parse::parser::GroupingSymbol::Parens;
+use crate::types::{FnType, Type};
 
 pub fn parse_expr(parser: &mut Parser) -> Expression {
-    println!("Parsing expression");
-    parser.skip_spaces();
-    if let Some(c) = parser.curr_char() {
-        match c {
-            '(' => {
-                parser.next();
-                parse_parens(parser)
-            }
-            _ => Expression::Empty,
-        }
+    let mut state = GroupingState::new();
+    let expr = parse_expr_with_state(parser, &mut state);
+    if state.is_empty() {
+        expr
     } else {
-        Expression::Empty
+        Expression::Err(parser.error("Unclosed grouping in expression"))
     }
 }
 
-fn parse_parens(parser: &mut Parser) -> Expression {
-    println!("Parsing parens");
+fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expression {
+    println!("Parsing expression");
     let mut words = Vec::<String>::with_capacity(2);
+    let mut exprs = Vec::<Expression>::with_capacity(2);
     loop {
-        println!("Parser: {:?}, words: {:?}", parser, &words);
         parser.skip_spaces();
-        if let Some(')') = parser.curr_char() { break; }
-        if parser.curr_char().is_none() {
-            return Expression::Err(parser.error("Unclosed parens"));
+        match parser.curr_char() {
+            Some('(') => {
+                parser.next();
+                state.enter(GroupingSymbol::Parens);
+            }
+            Some(')') => {
+                if state.is_inside(Parens) {
+                    parser.next();
+                    state.exit_symbol();
+                    consume_non_empty_expr(parser, &mut words, &mut exprs);
+                    if state.is_empty() { break; }
+                } else {
+                    return Expression::Err(parser.error_unexpected_char(
+                        ')', "Closing parens does not match any opening parens"));
+                }
+            }
+            Some(';') => {
+                parser.next();
+                consume_non_empty_expr(parser, &mut words, &mut exprs);
+                if state.is_empty() { break; }
+            }
+            None => {
+                return Expression::Err(parser.error("Unterminated expression"));
+            }
+            _ => {
+                if let Some(word) = parser.parse_word() {
+                    println!("Word: {}", &word);
+                    words.push(word);
+                } else { break; }
+            }
         }
-        if let Some(word) = parser.parse_word() {
-            println!("Word: {}", &word);
-            words.push(word);
-        } else { break; }
     }
-    to_expr(parser, &mut words)
+
+    if exprs.is_empty() {
+        println!("exprs is empty");
+        to_expr(parser, &mut words)
+    } else if exprs.len() == 1 && words.is_empty() {
+        println!("exprs has 1 expr, words is empty");
+        exprs.remove(0)
+    } else {
+        if !words.is_empty() {
+            println!("words is not empty");
+            exprs.push(to_expr(parser, &mut words));
+        }
+        println!("Group of expressions: {:?}", &exprs);
+        Expression::Group(exprs)
+    }
+}
+
+fn consume_non_empty_expr(parser: &mut Parser,
+                          words: &mut Vec<String>,
+                          exprs: &mut Vec<Expression>) {
+    if !words.is_empty() {
+        let expr = to_expr(parser, words);
+        exprs.push(expr);
+    }
+    words.clear();
 }
 
 fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
@@ -55,11 +97,13 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
                 Type::Error { reason, pos: parser.pos() });
             Expression::Const(arg, typ)
         }).collect();
-        println!("Ags are : {:?}", &args);
-        let typ = parser.stack().get(&name).cloned()
+        let t = parser.stack().get(&name).cloned()
             .unwrap_or_else(|| parser.error(&format!("Unknown function: '{}'", &name)));
-
-        println!("Done here");
+        let typ = match t {
+            Type::Error { .. } => vec![t],
+            Type::Fn(FnType { outs, .. }) => outs,
+            _ => vec![parser.error(&format!("Bad function call. '{}' is not a function", &name))]
+        };
         Expression::FnCall { name, args, typ }
     }
 }

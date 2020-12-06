@@ -8,7 +8,7 @@ pub fn parse_type(parser: &mut Parser) -> Type {
     if state.is_empty() {
         typ
     } else {
-        parser.error("Unclosed grouping")
+        parser.error("Unclosed grouping in type definition")
     }
 }
 
@@ -38,7 +38,7 @@ fn parse_fn_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
     let ins = parse_fn_ins(parser, state);
     let outs = parse_fn_outs(parser, state);
     println!("end fun");
-    Fn { ins, outs }
+    Fn(FnType { ins, outs })
 }
 
 fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
