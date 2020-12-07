@@ -76,6 +76,11 @@ impl Stack {
             panic!("attempt to drop single stack level");
         }
     }
+
+    /// Returns the length of the top-level stack container.
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 
 impl Default for Stack {
@@ -189,6 +194,37 @@ impl Parser<'_> {
         } else {
             let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("'{}'", c) });
             self.parser_err(format!("Expected identifier after def, but got {}", curr))
+        }
+    }
+
+    pub fn parse_let(&mut self) -> Result<(), ParserError> {
+        let mut ids = Vec::new();
+        while let Some(id) = self.parse_word() {
+            ids.push(id);
+            self.skip_spaces();
+            if let Some(',') = self.curr_char() { self.next(); } else { break; }
+        }
+        self.skip_spaces();
+        if let Some('=') = self.curr_char() {
+            self.next();
+            self.stack.new_level();
+            let expr = self.parse_expr();
+            self.stack.drop_level();
+            // TODO yield expr?
+            let mut typ = expr.get_type();
+            if ids.len() == typ.len() {
+                ids.drain(..).zip(typ.drain(..)).for_each(move |(id, t)| {
+                    self.stack.push_item(id, t.clone());
+                });
+                Ok(())
+            } else {
+                // FIXME better error message
+                self.parser_err(format!("Mismatched number of elements"))
+            }
+        } else {
+            self.parser_err(format!("Expected '=' in let expression, but got '{}'",
+                                    self.curr_char().map(|c| c.to_string())
+                                        .unwrap_or("EOF".to_string())))
         }
     }
 

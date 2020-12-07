@@ -378,3 +378,27 @@ fn test_def() -> Result<(), ParserError> {
 
     Result::Ok(())
 }
+
+#[test]
+fn test_let() -> Result<(), ParserError> {
+    let mut chars = "foo = 1; blah=2.0   ; z=(2) wrong:".chars();
+    let mut parser = new_parser(&mut chars);
+
+    assert_eq!(parser.parse_let()?, ());
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.parse_let()?, ());
+    assert_symbols_contains!(parser, "blah" => F32);
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.parse_let()?, ());
+    assert_symbols_contains!(parser, "z" => I32);
+    assert_symbols_contains!(parser, "blah" => F32);
+    assert_symbols_contains!(parser, "foo" => I32);
+    // assert_eq!(parser.stack().len(), 3);
+    assert_eq!(parser.parse_let(), Err(ParserError {
+        pos: (0, 34),
+        msg: "Expected '=' in let expression, but got ':'".to_string(),
+    }));
+    assert_eq!(parser.curr_char(), Some(':'));
+
+    Result::Ok(())
+}
