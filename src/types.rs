@@ -12,13 +12,13 @@ pub enum Type {
     F32,
     Empty,
     Fn(FnType),
-    Error { reason: String, pos: (usize, usize) },
+    TypeError { reason: String, pos: (usize, usize) },
 }
 
 impl Type {
     pub fn is_error(&self) -> bool {
         match self {
-            Type::Error { pos: _, reason: _ } => true,
+            Type::TypeError { pos: _, reason: _ } => true,
             Type::Fn(FnType { ins, outs }) => {
                 ins.iter().any(|t| t.is_error()) ||
                     outs.iter().any(|t| t.is_error())
@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn test_type_is_error() {
-        let error = || { Type::Error { pos: (0, 0), reason: "".to_string() } };
+        let error = || { Type::TypeError { pos: (0, 0), reason: "".to_string() } };
         assert_eq!(Type::I32.is_error(), false);
         assert_eq!(Type::I64.is_error(), false);
         assert_eq!(Type::F32.is_error(), false);

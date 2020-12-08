@@ -11,13 +11,14 @@ pub fn parse_expr(parser: &mut Parser) -> Expression {
     if state.is_empty() {
         expr
     } else {
-        Expression::Err(parser.error("Unclosed grouping in expression"))
+        Expression::ExprError(parser.error("Unclosed grouping in expression"))
     }
 }
 
 fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expression {
     println!("Parsing expression");
     let mut words = Vec::<String>::with_capacity(2);
+    let mut multi = Vec::<Expression>::with_capacity(2);
     let mut exprs = Vec::<Expression>::with_capacity(2);
     loop {
         parser.skip_spaces();
@@ -25,26 +26,53 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
             Some('(') => {
                 parser.next();
                 state.enter(GroupingSymbol::Parens);
+                let expr = parse_expr_with_state(parser, state);
+                if !expr.get_type().is_empty() {
+                    parser.skip_spaces();
+                    let is_multi = parser.curr_char() == Some(',') || !multi.is_empty();
+                    if is_multi {
+                        multi.push(expr);
+                    } else {
+                        exprs.push(expr);
+                    }
+                    // allow redundant trailing ';' after (..)
+                    if let Some(';') = parser.curr_char() {
+                        parser.next();
+                    }
+                }
+                if state.is_empty() { break; }
             }
             Some(')') => {
+                parser.next();
                 if state.is_inside(Parens) {
-                    parser.next();
                     state.exit_symbol();
-                    consume_non_empty_expr(parser, &mut words, &mut exprs);
-                    if state.is_empty() { break; }
+                    if multi.is_empty() {
+                        consume_expr(parser, &mut words, &mut exprs);
+                    } else {
+                        consume_expr_with_multi(parser, &mut words, &mut exprs,
+                                                std::mem::replace(&mut multi, Vec::with_capacity(2)));
+                    }
+                    break;
                 } else {
-                    return Expression::Err(parser.error_unexpected_char(
+                    return Expression::ExprError(parser.error_unexpected_char(
                         ')', "Closing parens does not match any opening parens"));
                 }
             }
             Some(';') => {
                 parser.next();
-                consume_non_empty_expr(parser, &mut words, &mut exprs);
+                if multi.is_empty() {
+                    consume_expr(parser, &mut words, &mut exprs);
+                } else {
+                    consume_expr_with_multi(parser, &mut words, &mut exprs,
+                                            std::mem::replace(&mut multi, Vec::with_capacity(2)));
+                }
                 if state.is_empty() { break; }
             }
-            None => {
-                return Expression::Err(parser.error("Unterminated expression"));
+            Some(',') => {
+                parser.next();
+                consume_expr(parser, &mut words, &mut multi);
             }
+            None => { break; }
             _ => {
                 if let Some(word) = parser.parse_word() {
                     println!("Word: {}", &word);
@@ -52,6 +80,11 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 } else { break; }
             }
         }
+    }
+
+    if !multi.is_empty() {
+        consume_expr_with_multi(parser, &mut words, &mut exprs,
+                                std::mem::replace(&mut multi, Vec::with_capacity(2)));
     }
 
     if exprs.is_empty() {
@@ -70,9 +103,22 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
     }
 }
 
-fn consume_non_empty_expr(parser: &mut Parser,
-                          words: &mut Vec<String>,
-                          exprs: &mut Vec<Expression>) {
+fn consume_expr_with_multi(parser: &mut Parser,
+                           words: &mut Vec<String>,
+                           exprs: &mut Vec<Expression>,
+                           mut multi: Vec<Expression>) {
+    println!("Consuming multi: {:?}", &multi);
+    if words.is_empty() && multi.len() == 1 {
+        exprs.push(multi.remove(0));
+        return;
+    }
+    consume_expr(parser, words, &mut multi);
+    exprs.push(Expression::Multi(multi));
+}
+
+fn consume_expr(parser: &mut Parser,
+                words: &mut Vec<String>,
+                exprs: &mut Vec<Expression>) {
     if !words.is_empty() {
         let expr = to_expr(parser, words);
         exprs.push(expr);
@@ -87,20 +133,20 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     } else if words.len() == 1 {
         let w = words.remove(0);
         let typ = type_of(&w, parser.stack()).unwrap_or_else(|reason|
-            Type::Error { reason, pos: parser.pos() });
+            Type::TypeError { reason, pos: parser.pos() });
         Expression::Const(w, typ)
     } else {
         let name = words.remove(0);
         let args = words.drain(0..).map(|arg| {
             println!("Arg: {}", &arg);
             let typ = type_of(&arg, parser.stack()).unwrap_or_else(|reason|
-                Type::Error { reason, pos: parser.pos() });
+                Type::TypeError { reason, pos: parser.pos() });
             Expression::Const(arg, typ)
         }).collect();
         let t = parser.stack().get(&name).cloned()
             .unwrap_or_else(|| parser.error(&format!("Unknown function: '{}'", &name)));
         let typ = match t {
-            Type::Error { .. } => vec![t],
+            Type::TypeError { .. } => vec![t],
             Type::Fn(FnType { outs, .. }) => outs,
             _ => vec![parser.error(&format!("Bad function call. '{}' is not a function", &name))]
         };

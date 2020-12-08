@@ -131,7 +131,7 @@ impl Parser<'_> {
     }
 
     pub fn error(&self, reason: &str) -> Type {
-        Type::Error { reason: reason.to_string(), pos: self.pos() }
+        Type::TypeError { reason: reason.to_string(), pos: self.pos() }
     }
 
     pub fn error_unexpected_char(&self, c: char, reason: &str) -> Type {

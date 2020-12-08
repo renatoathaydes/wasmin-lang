@@ -1,3 +1,5 @@
+use Expression::{*};
+
 use crate::types::Type;
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -7,27 +9,28 @@ pub enum Expression {
     Let(String, Type),
     Mut(String, Type),
     Group(Vec<Expression>),
+    Multi(Vec<Expression>),
     FnCall { name: String, args: Vec<Expression>, typ: Vec<Type> },
-    Err(Type),
+    ExprError(Type),
 }
 
 impl Expression {
     pub fn
 
     fn_call(name: &str, args: Vec<Expression>, typ: Vec<Type>) -> Expression {
-        Expression::FnCall { name: name.to_string(), args, typ }
+        FnCall { name: name.to_string(), args, typ }
     }
 
     pub fn get_type(&self) -> Vec<&Type> {
         match self {
-            Expression::Empty => vec![&Type::Empty],
-            Expression::Const(_, typ) => vec![typ],
-            Expression::Let(_, _) => Vec::new(),
-            Expression::Mut(_, _) => Vec::new(),
-            Expression::Group(es) => es.last()
+            Expression::Empty | Let(..) | Mut(..) => Vec::new(),
+            Const(.., typ) => vec![typ],
+            Group(es) => es.last()
                 .map_or(Vec::new(), |e| e.get_type()),
-            Expression::FnCall { typ, .. } => typ.iter().collect(),
-            Expression::Err(typ) => vec![typ],
+            Multi(es) => es.iter()
+                .flat_map(|e| e.get_type()).collect(),
+            FnCall { typ, .. } => typ.iter().collect(),
+            ExprError(typ) => vec![typ],
         }
     }
 }
