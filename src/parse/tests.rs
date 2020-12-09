@@ -170,6 +170,13 @@ fn test_fn_call_basic() {
                Expression::fn_call("print",
                                    vec![Const(String::from("0.0"), F32)],
                                    vec![TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }]));
+
+    // function without args: only invoke the function if it's alone within parens
+    assert_eq!(parse_expr!("no-args;", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
+               Const(String::from("no-args"), Fn(FnType { ins: vec![], outs: vec![I32] })));
+
+    assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
+               Expression::fn_call("no-args", vec![], vec![I32]));
 }
 
 #[test]
@@ -188,7 +195,6 @@ fn test_expr_multi_value() {
         Const(String::from("1"), I32), Const(String::from("2"), I32)]),
                                                      Const(String::from("3"), I32)]));
 }
-
 
 #[test]
 fn test_word() {
@@ -428,7 +434,7 @@ fn test_let_multi_value() {
         "func".to_string(),
         Fn(FnType { ins: vec![], outs: vec![I64, F32, F64] }));
 
-    let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=func; end".chars();
+    let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=(func); end".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
     assert_eq!(parser.parse_let(), Ok(()));
@@ -447,8 +453,8 @@ fn test_let_multi_value() {
     assert_symbols_contains!(parser, "foo" => I32);
     // assert_eq!(parser.stack().len(), 3);
     assert_eq!(parser.parse_let(), Err(ParserError {
-        pos: (0, 34),
+        pos: (0, 51),
         msg: "Expected '=' in let expression, but got EOF".to_string(),
     }));
-    assert_eq!(parser.curr_char(), Some(':'));
+    assert_eq!(parser.curr_char(), None);
 }

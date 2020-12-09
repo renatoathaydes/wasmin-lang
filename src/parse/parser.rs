@@ -212,18 +212,21 @@ impl Parser<'_> {
             self.stack.drop_level();
             // TODO yield expr?
             let mut typ = expr.get_type();
-            if ids.len() == typ.len() {
+            if ids.len() >= typ.len() {
                 ids.drain(..).zip(typ.drain(..)).for_each(move |(id, t)| {
                     self.stack.push_item(id, t.clone());
                 });
                 Ok(())
             } else {
-                // FIXME better error message
-                self.parser_err(format!("Mismatched number of elements"))
+                let e = format!("multi-value assignment mismatch: \
+                {} identifier{}, but only {} expression{}",
+                                ids.len(), if ids.len() == 1 { "" } else { "s" },
+                                typ.len(), if typ.len() == 1 { "" } else { "s" });
+                self.parser_err(e)
             }
         } else {
-            self.parser_err(format!("Expected '=' in let expression, but got '{}'",
-                                    self.curr_char().map(|c| c.to_string())
+            self.parser_err(format!("Expected '=' in let expression, but got {}",
+                                    self.curr_char().map(|c| format!("'{}'", c))
                                         .unwrap_or("EOF".to_string())))
         }
     }

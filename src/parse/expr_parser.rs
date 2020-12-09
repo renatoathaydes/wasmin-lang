@@ -46,11 +46,12 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 parser.next();
                 if state.is_inside(Parens) {
                     state.exit_symbol();
-                    if multi.is_empty() {
-                        consume_expr(parser, &mut words, &mut exprs);
-                    } else {
-                        consume_expr_with_multi(parser, &mut words, &mut exprs,
-                                                std::mem::replace(&mut multi, Vec::with_capacity(2)));
+                    if multi.is_empty() && words.len() == 1 {
+                        if let Some(Type::Fn(t)) = parser.stack().get(words.last().unwrap()) {
+                            println!("Special case, single function call");
+                            let typ = t.outs.clone();
+                            exprs.push(Expression::FnCall { name: words.remove(0), args: vec![], typ });
+                        }
                     }
                     break;
                 } else {
@@ -122,8 +123,8 @@ fn consume_expr(parser: &mut Parser,
     if !words.is_empty() {
         let expr = to_expr(parser, words);
         exprs.push(expr);
+        words.clear();
     }
-    words.clear();
 }
 
 fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
@@ -148,7 +149,7 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
         let typ = match t {
             Type::TypeError { .. } => vec![t],
             Type::Fn(FnType { outs, .. }) => outs,
-            _ => vec![parser.error(&format!("Bad function call. '{}' is not a function", &name))]
+            _ => vec![parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t))]
         };
         Expression::FnCall { name, args, typ }
     }
