@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct FnType {
     pub ins: Vec<Type>,
@@ -29,6 +31,29 @@ impl Type {
 
     pub fn is_empty(&self) -> bool {
         self == &Type::Empty
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::I64 => write!(f, "i64")?,
+            Type::I32 => write!(f, "i32")?,
+            Type::F64 => write!(f, "f64")?,
+            Type::F32 => write!(f, "f32")?,
+            Type::Empty => write!(f, "()")?,
+            Type::Fn(FnType { ins, outs }) => {
+                write!(f, "fun[ ")?;
+                for t in ins { write!(f, "{} ", t)?; }
+                write!(f, " ]( ")?;
+                for t in outs { write!(f, "{} ", t)?; }
+                write!(f, ")")?;
+            }
+            Type::TypeError { reason, pos } => {
+                write!(f, "ERROR([{}, {}] {})", pos.0, pos.1, reason)?
+            }
+        };
+        Ok(())
     }
 }
 
