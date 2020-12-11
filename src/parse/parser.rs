@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::fmt::Result as FmtResult;
 use std::str::Chars;
+use std::sync::mpsc::Sender;
 
-use crate::ast::Expression;
+use crate::ast::{Expression, TopLevelExpression};
 use crate::parse::expr_parser;
 use crate::parse::type_parser;
 use crate::types::{*};
@@ -10,6 +13,13 @@ use crate::types::{*};
 pub struct ParserError {
     pub pos: (usize, usize),
     pub msg: String,
+}
+
+impl Display for ParserError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "[{}, {}]: {}", self.pos.0, self.pos.1, self.msg)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -24,6 +34,7 @@ pub struct Parser<'s> {
     stack: Stack,
     chars: &'s mut Chars<'s>,
     curr_char: Option<char>,
+    sink: Sender<TopLevelExpression>,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -113,13 +124,12 @@ impl GroupingState {
 }
 
 impl Parser<'_> {
-    pub fn new<'s>(chars: &'s mut Chars<'s>) -> Parser<'s> {
-        let stack = Stack::new();
-        Self::with_stack(chars, stack)
-    }
-
-    pub fn with_stack<'s>(chars: &'s mut Chars<'s>, stack: Stack) -> Parser<'s> {
-        Parser { line: 0, col: 0, stack, curr_char: Option::None, chars }
+    pub fn new<'s>(
+        chars: &'s mut Chars<'s>,
+        stack: Stack,
+        sink: Sender<TopLevelExpression>,
+    ) -> Parser<'s> {
+        Parser { line: 0, col: 0, curr_char: Option::None, chars, stack, sink }
     }
 
     pub fn curr_char(&self) -> Option<char> {
@@ -197,7 +207,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_let(&mut self) -> Result<(), ParserError> {
+    pub fn parse_let(&mut self) -> Result<Vec<(String, Type)>, ParserError> {
         let mut ids = Vec::new();
         while let Some(id) = self.parse_word() {
             ids.push(id);
@@ -210,13 +220,16 @@ impl Parser<'_> {
             self.stack.new_level();
             let expr = self.parse_expr();
             self.stack.drop_level();
-            // TODO yield expr?
-            let mut typ = expr.get_type();
+            let mut typ = expr.get_type_owned();
             if ids.len() >= typ.len() {
-                ids.drain(..).zip(typ.drain(..)).for_each(move |(id, t)| {
-                    self.stack.push_item(id, t.clone());
-                });
-                Ok(())
+                let ignored_ids: Vec<_> = ids.iter().skip(typ.len()).collect();
+                if !ignored_ids.is_empty() {
+                    println!("WARNING: ignored IDs: {:?}", ignored_ids)
+                }
+                Ok(ids.drain(..).zip(typ.drain(..)).map(move |(id, t)| {
+                    self.stack.push_item(id.clone(), t.clone());
+                    (id, t)
+                }).collect())
             } else {
                 let e = format!("multi-value assignment mismatch: \
                 {} identifier{}, but only {} expression{}",
@@ -238,6 +251,27 @@ impl Parser<'_> {
     pub fn parse_expr(&mut self) -> Expression {
         println!("Calling parse_expr");
         expr_parser::parse_expr(self)
+    }
+
+    pub fn parse(&mut self) {
+        loop {
+            if let Some(word) = self.parse_word() {
+                if word == "let" {
+                    match self.parse_let() {
+                        Ok(items) => {
+                            for (name, typ) in items {
+                                self.sink.send(TopLevelExpression::Let(name, typ))
+                                    .expect("Wasmin Program Receiver Error");
+                            }
+                        }
+                        Err(e) => { println!("ERROR at {}", e); }
+                    }
+                } else {
+                    println!("ERROR: only let supported, got {}", word);
+                    break;
+                }
+            } else { break; }
+        }
     }
 }
 

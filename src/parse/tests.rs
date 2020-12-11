@@ -1,12 +1,12 @@
 use crate::ast::{*, Expression::*};
-use crate::parse::{expr_parser, new_parser, new_parser_with_stack};
+use crate::parse::{expr_parser, new_parser_with_stack, new_parser_without_sink};
 use crate::parse::parser::{*};
 use crate::types::{*, Type::*};
 
 macro_rules! parse_expr {
     ($e:expr) => {{
         let mut chars = $e.chars();
-        let mut parser = new_parser(&mut chars);
+        let mut parser = new_parser_without_sink(&mut chars);
         parser.parse_expr()
     }};
     ($e:expr, $($id:expr => $typ:expr),+) => {{
@@ -199,14 +199,14 @@ fn test_expr_multi_value() {
 #[test]
 fn test_word() {
     let mut chars = "abc".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
     assert_eq!(parser.parse_word(), Some("abc".to_string()));
 }
 
 #[test]
 fn test_words() {
     let mut chars = "a b  cde    fgh\nij\n  klmnop  \r\n  rs  ".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
     assert_eq!(parser.parse_word(), Some("a".to_string()));
     assert_eq!(parser.parse_word(), Some("b".to_string()));
     assert_eq!(parser.parse_word(), Some("cde".to_string()));
@@ -221,7 +221,7 @@ fn test_words() {
 #[test]
 fn test_pos() {
     let mut chars = "a b  cde    fgh\nij\n  klmnop  \r\n  rs  ".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
     assert_eq!(parser.pos(), (0, 0));
     parser.parse_word();
     assert_eq!(parser.pos(), (0, 2));
@@ -242,7 +242,7 @@ fn test_pos() {
 #[test]
 fn test_separators() {
     let mut chars = "a{b}  (cde)   [ fgh]\n\"foo\"  last'''".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
     assert_eq!(parser.parse_word(), Some("a".to_string()));
     assert_eq!(parser.curr_char(), Some('{'));
     parser.next();
@@ -278,7 +278,7 @@ fn test_separators() {
 #[test]
 fn test_type_values() {
     let mut chars = "i32 i64 f32 f64 err".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_type(), I32);
     assert_eq!(parser.parse_type(), I64);
@@ -292,7 +292,7 @@ fn test_type_values() {
 fn test_type_functions() {
     let mut chars = "[]; []() []i32; [ ] (i64 ) ; [f32]f32 ; [i32 i64 ] f64 i32;
         [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
 
@@ -351,7 +351,7 @@ fn test_type_functions() {
 #[test]
 fn test_type_function_optional_semi_colon() {
     let mut chars = "[](i32);[]()".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
     // first type parsing should consume the optional semi-colon
     assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
@@ -371,7 +371,7 @@ macro_rules! assert_symbols_contains {
 #[test]
 fn test_def() -> Result<(), ParserError> {
     let mut chars = "foo i32 blah f64 wrong: ending".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_def()?, ());
     assert_symbols_contains!(parser, "foo" => I32);
@@ -395,7 +395,7 @@ fn test_def() -> Result<(), ParserError> {
                Err(ParserError { pos: (0, 30), msg: "Expected identifier after def, but got EOF".to_string() }));
 
     let mut chars = "[".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_def(),
                Err(ParserError { pos: (0, 1), msg: "Expected identifier after def, but got '['".to_string() }));
@@ -406,14 +406,14 @@ fn test_def() -> Result<(), ParserError> {
 #[test]
 fn test_let() -> Result<(), ParserError> {
     let mut chars = "foo = 1; blah=2.0   ; z=(2) wrong:".chars();
-    let mut parser = new_parser(&mut chars);
+    let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_let()?, ());
+    assert_eq!(parser.parse_let()?, vec![("foo".to_string(), I32)]);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let()?, ());
+    assert_eq!(parser.parse_let()?, vec![("blah".to_string(), F32)]);
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let()?, ());
+    assert_eq!(parser.parse_let()?, vec![("z".to_string(), I32)]);
     assert_symbols_contains!(parser, "z" => I32);
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
@@ -437,14 +437,14 @@ fn test_let_multi_value() {
     let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=(func); end".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
-    assert_eq!(parser.parse_let(), Ok(()));
+    assert_eq!(parser.parse_let(), Ok(vec![("foo".to_string(), I32), ("bar".to_string(), I32)]));
     assert_symbols_contains!(parser, "foo" => I32);
     assert_symbols_contains!(parser, "bar" => I32);
-    assert_eq!(parser.parse_let(), Ok(()));
+    assert_eq!(parser.parse_let(), Ok(vec![("b".to_string(), F32), ("c".to_string(), I64)]));
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let(), Ok(()));
+    assert_eq!(parser.parse_let(), Ok(vec![("e".to_string(), I64), ("f".to_string(), F32), ("g".to_string(), F64)]));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);

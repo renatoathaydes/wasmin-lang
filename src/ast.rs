@@ -14,9 +14,29 @@ pub enum Expression {
     ExprError(Type),
 }
 
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum Visibility {
+    Public,
+    Private,
+    Internal,
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum TopLevelExpression {
+    Def(String, Type, Visibility),
+    Const(String, Type),
+    Let(String, Type),
+    Mut(String, Type),
+    Fn(String, Type),
+}
+
 impl Expression {
     pub fn fn_call(name: &str, args: Vec<Expression>, typ: Vec<Type>) -> Expression {
         FnCall { name: name.to_string(), args, typ }
+    }
+
+    pub fn get_type_owned(&self) -> Vec<Type> {
+        self.get_type().drain(..).map(|t| t.clone()).collect()
     }
 
     pub fn get_type(&self) -> Vec<&Type> {
