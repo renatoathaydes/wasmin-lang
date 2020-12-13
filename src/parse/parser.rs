@@ -46,6 +46,12 @@ pub enum GroupingSymbol {
 #[derive(Debug)]
 pub struct GroupingState { items: Vec<GroupingSymbol> }
 
+impl Into<TypeError> for ParserError {
+    fn into(self) -> TypeError {
+        TypeError { reason: self.msg, pos: self.pos }
+    }
+}
+
 impl Stack {
     pub fn new() -> Stack {
         let mut s = Stack { items: Vec::with_capacity(4) };

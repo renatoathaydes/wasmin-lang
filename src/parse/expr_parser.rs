@@ -1,6 +1,7 @@
 use std::str::Chars;
 
 use crate::ast::Expression;
+use crate::ast::Expression::Let;
 use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
 use crate::parse::parser::GroupingSymbol::Parens;
 use crate::types::{FnType, Type, TypeError};
@@ -77,7 +78,18 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
             _ => {
                 if let Some(word) = parser.parse_word() {
                     println!("Word: {}", &word);
-                    words.push(word);
+                    match word.as_str() {
+                        "let" if words.is_empty() => {
+                            match parser.parse_let() {
+                                Ok(e) => {
+                                    let container = if multi.is_empty() { &mut exprs } else { &mut multi };
+                                    container.push(Let(e));
+                                }
+                                Err(e) => return Expression::ExprError(e.into())
+                            }
+                        }
+                        _ => words.push(word)
+                    }
                 } else { break; }
             }
         }

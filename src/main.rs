@@ -8,8 +8,15 @@ pub mod types;
 pub mod parse;
 
 // test program
-const PROGRAM: &str = "let a, b = 2, 4;
-    let x = mul a b";
+const PROGRAM: &str = "let constant-ten = 10;
+
+let one, two = 1, 2;
+
+let three, four = (
+    let t = 3;
+    let f = 4;
+    t, f
+)";
 
 fn main() {
     println!("Wasmin compiler version 0.0");
