@@ -232,9 +232,10 @@ impl Parser<'_> {
                 Ok((ids, expr.into_multi()))
             } else {
                 let e = format!("multi-value assignment mismatch: \
-                {} identifier{} but {} expression{} found",
+                {} identifier{} but {} expression{} of type{3} '{}' found",
                                 ids.len(), if ids.len() == 1 { "" } else { "s" },
-                                typ.len(), if typ.len() == 1 { "" } else { "s" });
+                                typ.len(), if typ.len() == 1 { "" } else { "s" },
+                                typ.iter().map(|t| format!("{}", t)).collect::<Vec<_>>().join(" "));
                 self.parser_err(e)
             }
         } else {
