@@ -1,5 +1,5 @@
 use std::str::Chars;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::Sender;
 
 use crate::ast::TopLevelExpression;
 use crate::parse::parser::Stack;
@@ -12,22 +12,27 @@ mod tests;
 mod type_parser;
 mod parser;
 mod expr_parser;
+mod top_level_parser;
 
 
 /// Parser of Wasmin programs.
 pub type Parser<'s> = parser::Parser<'s>;
 
+#[cfg(test)]
 fn no_op_sink() -> Sender<TopLevelExpression> {
+    use std::sync::mpsc::channel;
     let (sink, _) = channel();
     sink
 }
 
-pub fn new_parser_without_sink<'s>(chars: &'s mut Chars<'s>) -> Parser<'s> {
+#[cfg(test)]
+pub(crate) fn new_parser_without_sink<'s>(chars: &'s mut Chars<'s>) -> Parser<'s> {
     let sink = no_op_sink();
     Parser::new(chars, Stack::default(), sink)
 }
 
-pub fn new_parser_with_stack<'s>(chars: &'s mut Chars<'s>, stack: Stack) -> Parser<'s> {
+#[cfg(test)]
+pub(crate) fn new_parser_with_stack<'s>(chars: &'s mut Chars<'s>, stack: Stack) -> Parser<'s> {
     let sink = no_op_sink();
     Parser::new(chars, stack, sink)
 }

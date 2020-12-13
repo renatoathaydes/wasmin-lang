@@ -4,8 +4,8 @@ use std::fmt::Result as FmtResult;
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::{Expression, TopLevelExpression};
-use crate::parse::expr_parser;
+use crate::ast::{Assignment, Expression, TopLevelExpression};
+use crate::parse::{expr_parser, top_level_parser};
 use crate::parse::type_parser;
 use crate::types::{*};
 
@@ -22,7 +22,7 @@ impl Display for ParserError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Stack {
     items: Vec<HashMap<String, Type>>
 }
@@ -140,11 +140,11 @@ impl Parser<'_> {
         &self.stack
     }
 
-    pub fn error(&self, reason: &str) -> Type {
-        Type::TypeError { reason: reason.to_string(), pos: self.pos() }
+    pub fn error(&self, reason: &str) -> TypeError {
+        TypeError { reason: reason.to_string(), pos: self.pos() }
     }
 
-    pub fn error_unexpected_char(&self, c: char, reason: &str) -> Type {
+    pub fn error_unexpected_char(&self, c: char, reason: &str) -> TypeError {
         self.error(&format!("unexpected char: '{}' ({})", c, reason))
     }
 
@@ -164,6 +164,10 @@ impl Parser<'_> {
 
     pub fn pos(&self) -> (usize, usize) {
         (self.line, self.col)
+    }
+
+    pub fn sink(&self) -> &Sender<TopLevelExpression> {
+        &self.sink
     }
 
     pub fn parser_err<T>(&mut self, msg: String) -> Result<T, ParserError> {
@@ -207,7 +211,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_let(&mut self) -> Result<Vec<(String, Type)>, ParserError> {
+    pub fn parse_let(&mut self) -> Result<Assignment, ParserError> {
         let mut ids = Vec::new();
         while let Some(id) = self.parse_word() {
             ids.push(id);
@@ -220,19 +224,15 @@ impl Parser<'_> {
             self.stack.new_level();
             let expr = self.parse_expr();
             self.stack.drop_level();
-            let mut typ = expr.get_type_owned();
-            if ids.len() >= typ.len() {
-                let ignored_ids: Vec<_> = ids.iter().skip(typ.len()).collect();
-                if !ignored_ids.is_empty() {
-                    println!("WARNING: ignored IDs: {:?}", ignored_ids)
-                }
-                Ok(ids.drain(..).zip(typ.drain(..)).map(move |(id, t)| {
-                    self.stack.push_item(id.clone(), t.clone());
-                    (id, t)
-                }).collect())
+            let mut typ = expr.get_type();
+            if ids.len() == typ.len() {
+                ids.iter().zip(typ.drain(..)).for_each(move |(id, t)| {
+                    self.stack.push_item(id.clone(), t);
+                });
+                Ok((ids, expr.into_multi()))
             } else {
                 let e = format!("multi-value assignment mismatch: \
-                {} identifier{}, but only {} expression{}",
+                {} identifier{} but {} expression{} found",
                                 ids.len(), if ids.len() == 1 { "" } else { "s" },
                                 typ.len(), if typ.len() == 1 { "" } else { "s" });
                 self.parser_err(e)
@@ -240,7 +240,7 @@ impl Parser<'_> {
         } else {
             self.parser_err(format!("Expected '=' in let expression, but got {}",
                                     self.curr_char().map(|c| format!("'{}'", c))
-                                        .unwrap_or("EOF".to_string())))
+                                        .unwrap_or_else(|| "EOF".to_string())))
         }
     }
 
@@ -254,24 +254,7 @@ impl Parser<'_> {
     }
 
     pub fn parse(&mut self) {
-        loop {
-            if let Some(word) = self.parse_word() {
-                if word == "let" {
-                    match self.parse_let() {
-                        Ok(items) => {
-                            for (name, typ) in items {
-                                self.sink.send(TopLevelExpression::Let(name, typ))
-                                    .expect("Wasmin Program Receiver Error");
-                            }
-                        }
-                        Err(e) => { println!("ERROR at {}", e); }
-                    }
-                } else {
-                    println!("ERROR: only let supported, got {}", word);
-                    break;
-                }
-            } else { break; }
-        }
+        top_level_parser::parse(self)
     }
 }
 

@@ -8,7 +8,7 @@ pub fn parse_type(parser: &mut Parser) -> Type {
     if state.is_empty() {
         typ
     } else {
-        parser.error("Unclosed grouping in type definition")
+        Type::Error(parser.error("Unclosed grouping in type definition"))
     }
 }
 
@@ -20,7 +20,7 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
             "f32" => Type::F32,
             "i64" => Type::I64,
             "f64" => Type::F64,
-            _ => parser.error(&format!("type does not exist: {}", word.clone()))
+            _ => Type::Error(parser.error(&format!("type does not exist: {}", word.clone())))
         }
     } else if let Some('[') = parser.curr_char() {
         println!("enter args");
@@ -28,9 +28,9 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
         state.enter(GroupingSymbol::SquareBracket);
         parse_fn_type(parser, state)
     } else if let Some(c) = parser.curr_char() {
-        parser.error(&format!("unexpected character: '{}'", c))
+        Type::Error(parser.error(&format!("unexpected character: '{}'", c)))
     } else {
-        parser.error("EOF reached (type was expected)")
+        Type::Error(parser.error("EOF reached (type was expected)"))
     }
 }
 

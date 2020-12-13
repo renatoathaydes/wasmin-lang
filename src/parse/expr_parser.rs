@@ -3,7 +3,7 @@ use std::str::Chars;
 use crate::ast::Expression;
 use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
 use crate::parse::parser::GroupingSymbol::Parens;
-use crate::types::{FnType, Type};
+use crate::types::{FnType, Type, TypeError};
 
 pub fn parse_expr(parser: &mut Parser) -> Expression {
     let mut state = GroupingState::new();
@@ -27,7 +27,7 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 parser.next();
                 state.enter(GroupingSymbol::Parens);
                 let expr = parse_expr_with_state(parser, state);
-                if !expr.get_type().is_empty() {
+                if !expr.is_empty() {
                     parser.skip_spaces();
                     let is_multi = parser.curr_char() == Some(',') || !multi.is_empty();
                     if is_multi {
@@ -49,7 +49,7 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                     if multi.is_empty() && words.len() == 1 {
                         if let Some(Type::Fn(t)) = parser.stack().get(words.last().unwrap()) {
                             println!("Special case, single function call");
-                            let typ = t.outs.clone();
+                            let typ = Ok(t.clone());
                             exprs.push(Expression::FnCall { name: words.remove(0), args: vec![], typ });
                         }
                     }
@@ -134,22 +134,22 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     } else if words.len() == 1 {
         let w = words.remove(0);
         let typ = type_of(&w, parser.stack()).unwrap_or_else(|reason|
-            Type::TypeError { reason, pos: parser.pos() });
+            Type::Error(TypeError { reason, pos: parser.pos() }));
         Expression::Const(w, typ)
     } else {
         let name = words.remove(0);
         let args = words.drain(0..).map(|arg| {
             println!("Arg: {}", &arg);
             let typ = type_of(&arg, parser.stack()).unwrap_or_else(|reason|
-                Type::TypeError { reason, pos: parser.pos() });
+                Type::Error(TypeError { reason, pos: parser.pos() }));
             Expression::Const(arg, typ)
         }).collect();
         let t = parser.stack().get(&name).cloned()
-            .unwrap_or_else(|| parser.error(&format!("Unknown function: '{}'", &name)));
-        let typ = match t {
-            Type::TypeError { .. } => vec![t],
-            Type::Fn(FnType { outs, .. }) => outs,
-            _ => vec![parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t))]
+            .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown function: '{}'", &name))));
+        let typ: Result<FnType, TypeError> = match t {
+            Type::Error(e) => Err(e),
+            Type::Fn(t) => Ok(t),
+            _ => Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t)))
         };
         Expression::FnCall { name, args, typ }
     }

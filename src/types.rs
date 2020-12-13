@@ -7,6 +7,12 @@ pub struct FnType {
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct TypeError {
+    pub reason: String,
+    pub pos: (usize, usize),
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
     I64,
     I32,
@@ -14,13 +20,13 @@ pub enum Type {
     F32,
     Empty,
     Fn(FnType),
-    TypeError { reason: String, pos: (usize, usize) },
+    Error(TypeError),
 }
 
 impl Type {
     pub fn is_error(&self) -> bool {
         match self {
-            Type::TypeError { pos: _, reason: _ } => true,
+            Type::Error(..) => true,
             Type::Fn(FnType { ins, outs }) => {
                 ins.iter().any(|t| t.is_error()) ||
                     outs.iter().any(|t| t.is_error())
@@ -49,11 +55,23 @@ impl fmt::Display for Type {
                 for t in outs { write!(f, "{} ", t)?; }
                 write!(f, ")")?;
             }
-            Type::TypeError { reason, pos } => {
+            Type::Error(TypeError { reason, pos, .. }) => {
                 write!(f, "ERROR([{}, {}] {})", pos.0, pos.1, reason)?
             }
         };
         Ok(())
+    }
+}
+
+impl FnType {
+    pub fn get_type(&self) -> Vec<Type> {
+        self.outs.clone()
+    }
+}
+
+impl TypeError {
+    pub fn get_type(&self) -> Vec<Type> {
+        vec![Type::Error(self.clone())]
     }
 }
 
@@ -63,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_type_is_error() {
-        let error = || { Type::TypeError { pos: (0, 0), reason: "".to_string() } };
+        let error = || { Type::Error(TypeError { pos: (0, 0), reason: "".to_string() }) };
         assert_eq!(Type::I32.is_error(), false);
         assert_eq!(Type::I64.is_error(), false);
         assert_eq!(Type::F32.is_error(), false);

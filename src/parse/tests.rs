@@ -30,6 +30,28 @@ macro_rules! type_of {
     }};
 }
 
+macro_rules! expr_const {
+    ($id:literal $typ:expr) => { Const($id.to_string(), $typ) }
+}
+
+macro_rules! fn_call {
+    ($id:literal $($args:expr)* => [$($ins:expr)*] $($outs:expr)* ) => {{
+        #[allow(unused_mut)]
+        let (mut args, mut ins, mut outs) = (Vec::new(), Vec::new(), Vec::new());
+        $(args.push($args);)*
+        $(ins.push($ins);)*
+        $(outs.push($outs);)*
+        let typ = FnType{ins , outs};
+        FnCall { name: $id.to_string(), args, typ: Ok(typ) }
+    }};
+    ($id:literal $($args:expr)* => $err:expr ) => {{
+        #[allow(unused_mut)]
+        let mut args = Vec::new();
+        $(args.push($args);)*
+        FnCall { name: $id.to_string(), args, typ: Err($err) }
+    }};
+}
+
 #[test]
 fn test_type_of_empty() {
     assert_eq!(type_of!(""), Ok(Type::Empty));
@@ -153,30 +175,24 @@ fn test_expr_single_item_nested() {
 #[test]
 fn test_fn_call_basic() {
     assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(FnType { ins: vec![I32], outs: vec![] } )),
-               Expression::fn_call("do-it", vec![
-                   Const(String::from("2"), I32)], vec![]));
+               fn_call!("do-it" expr_const!("2" I32) => [I32] ));
 
     assert_eq!(parse_expr!("add 2 2;", "add" => Fn(FnType { ins: vec![I32, I32], outs: vec![I64] } )),
-               Expression::fn_call("add", vec![
-                   Const(String::from("2"), I32), Const(String::from("2"), I32)
-               ], vec![I64]));
+               fn_call!("add" expr_const!("2" I32) expr_const!("2" I32) => [I32 I32] I64));
 
     assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(FnType { ins: vec![I32, I32], outs: vec![I32, I32] } )),
-               Expression::fn_call("div-rem", vec![
-                   Const(String::from("4"), I32), Const(String::from("2"), I32)
-               ], vec![I32, I32]));
+               fn_call!("div-rem" expr_const!("4" I32) expr_const!("2" I32) => [I32 I32] I32 I32));
 
     assert_eq!(parse_expr!("(print 0.0)"),
-               Expression::fn_call("print",
-                                   vec![Const(String::from("0.0"), F32)],
-                                   vec![TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }]));
+               fn_call!("print" expr_const!("0.0" F32) =>
+               TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
 
     // function without args: only invoke the function if it's alone within parens
     assert_eq!(parse_expr!("no-args;", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
                Const(String::from("no-args"), Fn(FnType { ins: vec![], outs: vec![I32] })));
 
     assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
-               Expression::fn_call("no-args", vec![], vec![I32]));
+               fn_call!("no-args" => [] I32));
 }
 
 #[test]
@@ -284,8 +300,8 @@ fn test_type_values() {
     assert_eq!(parser.parse_type(), I64);
     assert_eq!(parser.parse_type(), F32);
     assert_eq!(parser.parse_type(), F64);
-    assert_eq!(parser.parse_type(), TypeError { reason: "type does not exist: err".to_string(), pos: (0, 19) });
-    assert_eq!(parser.parse_type(), TypeError { reason: "EOF reached (type was expected)".to_string(), pos: (0, 19) });
+    assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "type does not exist: err".to_string(), pos: (0, 19) }));
+    assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "EOF reached (type was expected)".to_string(), pos: (0, 19) }));
 }
 
 #[test]
@@ -344,8 +360,8 @@ fn test_type_functions() {
                    ],
                }));
 
-    assert_eq!(parser.parse_type(), TypeError { reason: "type does not exist: err".to_string(), pos: (1, 61) });
-    assert_eq!(parser.parse_type(), TypeError { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) });
+    assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "type does not exist: err".to_string(), pos: (1, 61) }));
+    assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) }));
 }
 
 #[test]
@@ -382,13 +398,13 @@ fn test_def() -> Result<(), ParserError> {
 
     // error on ':'
     assert_symbols_contains!(parser,
-        "wrong" => TypeError {reason: "unexpected character: ':'".to_string(), pos: (0, 23)});
+        "wrong" =>Type::Error( TypeError {reason: "unexpected character: ':'".to_string(), pos: (0, 23)}));
     assert_eq!(parser.curr_char(), Some(':'));
     parser.next();
 
     assert_eq!(parser.parse_def()?, ());
     assert_symbols_contains!(parser,
-        "ending" => TypeError {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)});
+        "ending" => Type::Error(TypeError {reason: "EOF reached (type was expected)".to_string(), pos: (0, 30)}));
     assert_eq!(parser.curr_char(), None);
 
     assert_eq!(parser.parse_def(),
@@ -403,17 +419,27 @@ fn test_def() -> Result<(), ParserError> {
     Result::Ok(())
 }
 
+macro_rules! let_expr {
+    ($($id:literal),+ = $($e:expr),+) => {{
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        $(ids.push($id.to_string());)*
+        $(exprs.push($e);)*
+        Ok((ids, exprs))
+    }};
+}
+
 #[test]
-fn test_let() -> Result<(), ParserError> {
+fn test_let() {
     let mut chars = "foo = 1; blah=2.0   ; z=(2) wrong:".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_let()?, vec![("foo".to_string(), I32)]);
+    assert_eq!(parser.parse_let(), let_expr!("foo" = expr_const!("1" I32)));
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let()?, vec![("blah".to_string(), F32)]);
+    assert_eq!(parser.parse_let(), let_expr!("blah" = expr_const!("2.0" F32)));
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let()?, vec![("z".to_string(), I32)]);
+    assert_eq!(parser.parse_let(), let_expr!("z" = expr_const!("2" I32)));
     assert_symbols_contains!(parser, "z" => I32);
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
@@ -423,8 +449,6 @@ fn test_let() -> Result<(), ParserError> {
         msg: "Expected '=' in let expression, but got ':'".to_string(),
     }));
     assert_eq!(parser.curr_char(), Some(':'));
-
-    Result::Ok(())
 }
 
 #[test]
@@ -434,17 +458,19 @@ fn test_let_multi_value() {
         "func".to_string(),
         Fn(FnType { ins: vec![], outs: vec![I64, F32, F64] }));
 
+    let stack2 = stack.clone();
+
     let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=(func); end".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
-    assert_eq!(parser.parse_let(), Ok(vec![("foo".to_string(), I32), ("bar".to_string(), I32)]));
+    assert_eq!(parser.parse_let(), let_expr!("foo", "bar" = expr_const!("1" I32), expr_const!("2" I32)));
     assert_symbols_contains!(parser, "foo" => I32);
     assert_symbols_contains!(parser, "bar" => I32);
-    assert_eq!(parser.parse_let(), Ok(vec![("b".to_string(), F32), ("c".to_string(), I64)]));
+    assert_eq!(parser.parse_let(), let_expr!("b", "c" = expr_const!("2.0" F32), expr_const!("4i64" I64)));
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let(), Ok(vec![("e".to_string(), I64), ("f".to_string(), F32), ("g".to_string(), F64)]));
+    assert_eq!(parser.parse_let(), let_expr!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64)));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);
@@ -457,4 +483,12 @@ fn test_let_multi_value() {
         msg: "Expected '=' in let expression, but got EOF".to_string(),
     }));
     assert_eq!(parser.curr_char(), None);
+
+    let mut chars = " ee, ff = (func) ".chars();
+    let mut parser = new_parser_with_stack(&mut chars, stack2);
+
+    assert_eq!(parser.parse_let(), Err(ParserError {
+        msg: "multi-value assignment mismatch: 2 identifiers but 3 expressions found".to_string(),
+        pos: (0, 17),
+    }));
 }
