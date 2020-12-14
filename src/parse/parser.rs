@@ -23,8 +23,14 @@ impl Display for ParserError {
 }
 
 #[derive(Debug, Clone)]
+pub struct StackEntry {
+    typ: Type,
+    is_def: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct Stack {
-    items: Vec<HashMap<String, Type>>
+    items: Vec<HashMap<String, StackEntry>>
 }
 
 #[derive(Debug)]
@@ -59,24 +65,37 @@ impl Stack {
         s
     }
 
-    /// push_item onto stack, returning None if the item is accepted, or its ID otherwise.
-    pub fn push_item(&mut self, id: String, typ: Type) -> Option<String> {
-        let mut symbols = self.items.remove(self.items.len() - 1);
-        if !symbols.contains_key(&id) {
-            symbols.insert(id, typ);
-            self.items.push(symbols);
-            None
+    /// Push a definition onto the stack, returning an empty value if the definition is accepted,
+    /// or an error message in case something goes wrong.
+    ///
+    /// If [is_def] is `true`, then the definition is only accepted if it did not exist yet,
+    /// otherwise this is considered as a direct implementation, hence it will be accepted
+    /// if either the type matches a previous definition or if no definition exist yet.
+    pub fn push(&mut self, id: String, typ: Type, is_def: bool) -> Result<(), String> {
+        let last_index = self.items.len() - 1;
+        let symbols = self.items.get_mut(last_index).unwrap();
+        if let Some(mut entry) = symbols.get_mut(&id) {
+            println!("ID={}, T is {}, was_def={}", &id, entry.typ, entry.is_def);
+            if entry.is_def && !is_def {
+                if !typ.is_assignable_to(&entry.typ) {
+                    return Err(format!("Cannot implement '{}' with type '{}' because its \
+                      defined type '{}' does not match", &id, &typ, &entry.typ));
+                }
+                entry.is_def = false;
+            } else {
+                return Err(format!("Cannot re-implement '{}'", &id));
+            }
         } else {
-            self.items.push(symbols);
-            Some(id)
+            symbols.insert(id, StackEntry { typ, is_def });
         }
+        Ok(())
     }
 
     pub fn get(&self, id: &str) -> Option<&Type> {
         (0..self.items.len()).rev().find_map(|i| {
             let symbols = self.items.get(i).unwrap();
-            if let Some(val) = symbols.get(id) {
-                Some(val)
+            if let Some(entry) = symbols.get(id) {
+                Some(&entry.typ)
             } else { None }
         })
     }
@@ -92,11 +111,6 @@ impl Stack {
         } else {
             panic!("attempt to drop single stack level");
         }
-    }
-
-    /// Returns the length of the top-level stack container.
-    pub fn len(&self) -> usize {
-        self.items.len()
     }
 }
 
@@ -126,6 +140,19 @@ impl GroupingState {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+}
+
+impl Display for GroupingState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        for item in &self.items {
+            let str = match item {
+                &GroupingSymbol::Parens => "(",
+                &GroupingSymbol::SquareBracket => "[",
+            };
+            f.write_str(str)?;
+        }
+        Ok(())
     }
 }
 
@@ -205,9 +232,8 @@ impl Parser<'_> {
     pub fn parse_def(&mut self) -> Result<(), ParserError> {
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
-            if let Some(id) = self.stack.push_item(id, typ) {
-                self.parser_err(format!("Attempting to re-define {}, which \
-                            is not allowed", &id))
+            if let Err(msg) = self.stack.push(id, typ, true) {
+                self.parser_err(msg)
             } else {
                 Result::Ok(())
             }
@@ -232,9 +258,14 @@ impl Parser<'_> {
             self.stack.drop_level();
             let mut typ = expr.get_type();
             if ids.len() == typ.len() {
-                ids.iter().zip(typ.drain(..)).for_each(move |(id, t)| {
-                    self.stack.push_item(id.clone(), t);
-                });
+                let error = ids.iter().zip(typ.drain(..))
+                    .map(move |(id, t)| {
+                        self.stack.push(id.clone(), t, false)
+                            .map_err(|msg| self.parser_err::<Assignment>(msg).unwrap_err())
+                    }).filter(|r| r.is_err()).nth(0);
+                if let Some(Err(e)) = error {
+                    return Err(e);
+                }
                 Ok((ids, expr.into_multi()))
             } else {
                 let e = format!("multi-value assignment mismatch: \
@@ -273,9 +304,9 @@ mod stack_tests {
     fn stack_can_have_bindings() {
         let mut stack = Stack::new();
         assert_eq!(stack.get(&"foo"), None);
-        stack.push_item("foo".to_string(), Type::Empty);
+        stack.push("foo".to_string(), Type::Empty, false).unwrap();
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
-        stack.push_item("bar".to_string(), Type::I64);
+        stack.push("bar".to_string(), Type::I64, false).unwrap();
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         assert_eq!(stack.get(&"z"), None);
@@ -284,20 +315,20 @@ mod stack_tests {
     #[test]
     fn stack_can_have_multi_level_bindings() {
         let mut stack = Stack::new();
-        stack.push_item("foo".to_string(), Type::Empty);
+        stack.push("foo".to_string(), Type::Empty, false).unwrap();
         stack.new_level();
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         stack.new_level();
-        stack.push_item("bar".to_string(), Type::I64);
+        stack.push("bar".to_string(), Type::I64, false).unwrap();
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         stack.new_level();
-        stack.push_item("z".to_string(), Type::F32);
+        stack.push("z".to_string(), Type::F32, false).unwrap();
         assert_eq!(stack.get(&"z"), Some(&Type::F32));
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         stack.new_level();
-        stack.push_item("foo".to_string(), Type::F64);
+        stack.push("foo".to_string(), Type::F64, false).unwrap();
         assert_eq!(stack.get(&"z"), Some(&Type::F32));
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::F64));

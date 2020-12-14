@@ -5,10 +5,10 @@ use crate::types::{*, Type::*};
 pub fn parse_type(parser: &mut Parser) -> Type {
     let mut state = GroupingState::new();
     let typ = parse_type_internal(parser, &mut state);
-    if state.is_empty() {
-        typ
-    } else {
-        Type::Error(parser.error("Unclosed grouping in type definition"))
+    parser.skip_spaces();
+    if let Some(';') = parser.curr_char() { parser.next(); }
+    if state.is_empty() { typ } else {
+        Type::Error(parser.error(&format!("Unclosed '{}' in type definition", state)))
     }
 }
 
