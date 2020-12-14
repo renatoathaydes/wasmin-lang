@@ -24,6 +24,15 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn is_assignable_to(&self, other: &Type) -> bool {
+        match (self, other) {
+            (a, b) if *a == *b => true,
+            (&Type::I32, &Type::I64) => true,
+            (&Type::F32, &Type::F64) => true,
+            _ => false,
+        }
+    }
+
     pub fn is_error(&self) -> bool {
         match self {
             Type::Error(..) => true,
@@ -78,31 +87,58 @@ impl TypeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::Type::{*};
+
+    #[test]
+    fn test_type_is_assignable_to() {
+        assert!(F32.is_assignable_to(&F32));
+        assert!(F64.is_assignable_to(&F64));
+        assert!(I32.is_assignable_to(&I32));
+        assert!(I64.is_assignable_to(&I64));
+
+        // cannot truncate
+        assert!(!I64.is_assignable_to(&I32));
+        assert!(!F64.is_assignable_to(&F32));
+
+        // incompatible types
+        assert!(!F32.is_assignable_to(&I32));
+        assert!(!F32.is_assignable_to(&I64));
+        assert!(!F64.is_assignable_to(&I32));
+        assert!(!F64.is_assignable_to(&I64));
+        assert!(!I32.is_assignable_to(&F32));
+        assert!(!I32.is_assignable_to(&F64));
+        assert!(!I64.is_assignable_to(&F32));
+        assert!(!I64.is_assignable_to(&F64));
+
+        // widening conversion
+        assert!(I32.is_assignable_to(&I64));
+        assert!(F32.is_assignable_to(&F64));
+    }
 
     #[test]
     fn test_type_is_error() {
-        let error = || { Type::Error(TypeError { pos: (0, 0), reason: "".to_string() }) };
-        assert_eq!(Type::I32.is_error(), false);
-        assert_eq!(Type::I64.is_error(), false);
-        assert_eq!(Type::F32.is_error(), false);
-        assert_eq!(Type::F64.is_error(), false);
-        assert_eq!(Type::Fn(FnType { ins: vec![Type::I64], outs: vec![] }).is_error(), false);
-        assert_eq!(Type::Fn(FnType { ins: vec![Type::I64], outs: vec![Type::I32] }).is_error(), false);
-        assert_eq!(Type::Empty.is_error(), false);
+        let error = || { Error(TypeError { pos: (0, 0), reason: "".to_string() }) };
+        assert_eq!(I32.is_error(), false);
+        assert_eq!(I64.is_error(), false);
+        assert_eq!(F32.is_error(), false);
+        assert_eq!(F64.is_error(), false);
+        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![] }).is_error(), false);
+        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![I32] }).is_error(), false);
+        assert_eq!(Empty.is_error(), false);
 
         assert_eq!(error().is_error(), true);
-        assert_eq!(Type::Fn(FnType { ins: vec![Type::I64], outs: vec![error()] }).is_error(), true);
-        assert_eq!(Type::Fn(FnType { ins: vec![error()], outs: vec![Type::I32] }).is_error(), true);
-        assert_eq!(Type::Fn(FnType {
-            ins: vec![Type::I64],
+        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![error()] }).is_error(), true);
+        assert_eq!(Fn(FnType { ins: vec![error()], outs: vec![I32] }).is_error(), true);
+        assert_eq!(Fn(FnType {
+            ins: vec![I64],
             outs: vec![
-                Type::Fn(FnType { ins: vec![Type::I64], outs: vec![error()] })
+                Fn(FnType { ins: vec![I64], outs: vec![error()] })
             ],
         }).is_error(), true);
-        assert_eq!(Type::Fn(FnType {
-            ins: vec![Type::I64],
+        assert_eq!(Fn(FnType {
+            ins: vec![I64],
             outs: vec![
-                Type::Fn(FnType { ins: vec![Type::I64, error()], outs: vec![] })
+                Fn(FnType { ins: vec![I64, error()], outs: vec![] })
             ],
         }).is_error(), true);
     }
