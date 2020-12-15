@@ -243,7 +243,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_let(&mut self) -> Result<Assignment, ParserError> {
+    pub fn parse_assignment(&mut self) -> Result<Assignment, ParserError> {
         let mut ids = Vec::new();
         while let Some(id) = self.parse_word() {
             ids.push(id);

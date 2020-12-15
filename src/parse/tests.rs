@@ -423,17 +423,17 @@ fn test_let() {
     let mut chars = "foo = 1; blah=2.0   ; z=(2) wrong:".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_let(), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32))));
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let(), Ok(assign!("blah" = expr_const!("2.0" F32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("blah" = expr_const!("2.0" F32))));
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let(), Ok(assign!("z" = expr_const!("2" I32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("z" = expr_const!("2" I32))));
     assert_symbols_contains!(parser, "z" => I32);
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
     // assert_eq!(parser.stack().len(), 3);
-    assert_eq!(parser.parse_let(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(), Err(ParserError {
         pos: (0, 34),
         msg: "Expected '=' in let expression, but got ':'".to_string(),
     }));
@@ -441,14 +441,14 @@ fn test_let() {
 }
 
 #[test]
-fn test_def_then_let() {
+fn test_def_then_assign() {
     let mut chars = "foo i64; foo = 1; bar f32; bar = 1; zed i32; zed = 0.1;".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "foo" => I64);
 
-    assert_eq!(parser.parse_let(), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32))));
 }
 
 #[test]
@@ -463,14 +463,14 @@ fn test_let_multi_value() {
     let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=(func); end".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
-    assert_eq!(parser.parse_let(), Ok(assign!("foo", "bar" = expr_const!("1" I32), expr_const!("2" I32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("foo", "bar" = expr_const!("1" I32), expr_const!("2" I32))));
     assert_symbols_contains!(parser, "foo" => I32);
     assert_symbols_contains!(parser, "bar" => I32);
-    assert_eq!(parser.parse_let(), Ok(assign!("b", "c" = expr_const!("2.0" F32), expr_const!("4i64" I64))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("b", "c" = expr_const!("2.0" F32), expr_const!("4i64" I64))));
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_let(), Ok(assign!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64))));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);
@@ -478,7 +478,7 @@ fn test_let_multi_value() {
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
     // assert_eq!(parser.stack().len(), 3);
-    assert_eq!(parser.parse_let(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(), Err(ParserError {
         pos: (0, 51),
         msg: "Expected '=' in let expression, but got EOF".to_string(),
     }));
@@ -487,7 +487,7 @@ fn test_let_multi_value() {
     let mut chars = " ee, ff = (func) ".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack2);
 
-    assert_eq!(parser.parse_let(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(), Err(ParserError {
         msg: "multi-value assignment mismatch: 2 identifiers but 3 expressions of types \
         'i64 f32 f64' found".to_string(),
         pos: (0, 17),

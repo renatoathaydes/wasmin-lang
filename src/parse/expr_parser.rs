@@ -31,11 +31,7 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 if !expr.is_empty() {
                     parser.skip_spaces();
                     let is_multi = parser.curr_char() == Some(',') || !multi.is_empty();
-                    if is_multi {
-                        multi.push(expr);
-                    } else {
-                        exprs.push(expr);
-                    }
+                    if is_multi { &mut multi } else { &mut exprs }.push(expr);
                     // allow redundant trailing ';' after (..)
                     if let Some(';') = parser.curr_char() {
                         parser.next();
@@ -79,11 +75,10 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 if let Some(word) = parser.parse_word() {
                     println!("Word: {}", &word);
                     match word.as_str() {
-                        "let" if words.is_empty() => {
-                            match parser.parse_let() {
+                        "let" | "mut" if words.is_empty() => {
+                            match parser.parse_assignment() {
                                 Ok(e) => {
-                                    let container = if multi.is_empty() { &mut exprs } else { &mut multi };
-                                    container.push(Let(e));
+                                    if multi.is_empty() { &mut exprs } else { &mut multi }.push(Let(e));
                                 }
                                 Err(e) => return Expression::ExprError(e.into())
                             }
