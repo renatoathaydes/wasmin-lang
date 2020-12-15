@@ -1,5 +1,5 @@
 [package]
-name = "wasmin-lang"
+name = "wasmin"
 version = "0.1.0"
 authors = ["Renato Athaydes <renato@athaydes.com>"]
 edition = "2018"

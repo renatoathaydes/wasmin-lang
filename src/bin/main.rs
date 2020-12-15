@@ -1,11 +1,7 @@
 use std::sync::mpsc;
 use std::thread;
 
-use crate::parse::new_parser;
-
-pub mod ast;
-pub mod types;
-pub mod parse;
+use wasmin::parse::new_parser;
 
 // test program
 const PROGRAM: &str = "let constant-ten = 10;
