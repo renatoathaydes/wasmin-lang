@@ -1,6 +1,7 @@
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel};
 
-use wasmin::ast::{Expression, TopLevelExpression};
+use wasmin::ast::{*};
+use wasmin::{expr_const};
 use wasmin::ast::Visibility::Public;
 use wasmin::parse::new_parser;
 use wasmin::types::Type::I32;
@@ -13,5 +14,5 @@ fn test_let() {
     parser.parse();
 
     assert_eq!(rcv.iter().next().unwrap(), TopLevelExpression::Let(
-        (vec!["x".to_string()], vec![Expression::Const("1".to_string(), I32)]), Public));
+        (vec!["x".to_string()], vec![expr_const!("1" I32)]), Public));
 }

@@ -30,20 +30,6 @@ macro_rules! type_of {
     }};
 }
 
-macro_rules! expr_const {
-    ($id:literal $typ:expr) => { Const($id.to_string(), $typ) }
-}
-
-macro_rules! expr_let {
-    ($($id:literal),+ = $($e:expr),+) => {{
-        let mut ids = Vec::new();
-        let mut exprs = Vec::new();
-        $(ids.push($id.to_string());)*
-        $(exprs.push($e);)*
-        Let((ids, exprs))
-    }};
-}
-
 macro_rules! assign {
     ($($id:literal),+ = $($e:expr),+) => {{
         let mut ids = Vec::new();
