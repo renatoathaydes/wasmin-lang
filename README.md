@@ -4,7 +4,7 @@ A minimal, concatenative, statically typed programming language that builds on t
 ## Wasmin Goals
 
 - stay close to WASM for fast compilation and zero runtime dependencies.
-- no heap memory management (GC) by using a linear type system.
+- no memory management nor garbage collection (GC) by using a linear type system.
 - mix the functional and concatenative (exposing the WASM stack) programming paradigms.
 - simplest possible syntax that preserves readability.
 
