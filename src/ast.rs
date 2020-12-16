@@ -30,6 +30,7 @@ pub enum TopLevelExpression {
     Let(Assignment, Visibility),
     Mut(Assignment, Visibility),
     Fn(String, Expression, Visibility),
+    Error(String, (usize, usize))
 }
 
 impl Expression {
@@ -71,6 +72,12 @@ impl Expression {
     }
 }
 
+impl From<TypeError> for TopLevelExpression {
+    fn from(e: TypeError) -> Self {
+        TopLevelExpression::Error(e.reason, e.pos)
+    }
+}
+
 #[macro_export]
 macro_rules! expr_const {
     ($id:literal $typ:expr) => { Expression::Const($id.to_string(), $typ) }
@@ -104,10 +111,19 @@ macro_rules! expr_let {
 #[macro_export]
 macro_rules! texpr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
-        TopLevelExpression::Let((ids, exprs), Public)
+        TopLevelExpression::Let((ids, exprs), Visibility::Private)
+    }};
+    (p $($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        $(ids.push($id.to_string());)*
+        $(exprs.push($e);)*
+        TopLevelExpression::Let((ids, exprs), Visibility::Public)
     }};
 }
