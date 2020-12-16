@@ -1,10 +1,10 @@
 use std::str::Chars;
 
 use crate::ast::Expression;
-use crate::ast::Expression::Let;
+use crate::ast::Expression::{ExprError, Let};
 use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
 use crate::parse::parser::GroupingSymbol::Parens;
-use crate::types::{FnType, Type, TypeError};
+use crate::types::{*};
 
 pub fn parse_expr(parser: &mut Parser) -> Expression {
     let mut state = GroupingState::new();
@@ -97,14 +97,14 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
 
     if exprs.is_empty() {
         println!("exprs is empty");
-        to_expr(parser, &mut words)
+        create_expr(parser, &mut words)
     } else if exprs.len() == 1 && words.is_empty() {
         println!("exprs has 1 expr, words is empty");
         exprs.remove(0)
     } else {
         if !words.is_empty() {
             println!("words is not empty");
-            exprs.push(to_expr(parser, &mut words));
+            exprs.push(create_expr(parser, &mut words));
         }
         println!("Group of expressions: {:?}", &exprs);
         Expression::Group(exprs)
@@ -128,28 +128,26 @@ fn consume_expr(parser: &mut Parser,
                 words: &mut Vec<String>,
                 exprs: &mut Vec<Expression>) {
     if !words.is_empty() {
-        let expr = to_expr(parser, words);
+        let expr = create_expr(parser, words);
         exprs.push(expr);
         words.clear();
     }
 }
 
-fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
+fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     println!("To expr: {:?}", words);
     if words.is_empty() {
         Expression::Empty
     } else if words.len() == 1 {
         let w = words.remove(0);
-        let typ = type_of(&w, parser.stack()).unwrap_or_else(|reason|
-            Type::Error(TypeError { reason, pos: parser.pos() }));
-        Expression::Const(w, typ)
+        let typ = type_of(&w, parser.stack());
+        expr(parser, w, typ)
     } else {
         let name = words.remove(0);
         let args = words.drain(0..).map(|arg| {
             println!("Arg: {}", &arg);
-            let typ = type_of(&arg, parser.stack()).unwrap_or_else(|reason|
-                Type::Error(TypeError { reason, pos: parser.pos() }));
-            Expression::Const(arg, typ)
+            let typ = type_of(&arg, parser.stack());
+            expr(parser, arg, typ)
         }).collect();
         let t = parser.stack().get(&name).cloned()
             .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown function: '{}'", &name))));
@@ -162,26 +160,41 @@ fn to_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     }
 }
 
-pub fn type_of(str: &str, stack: &Stack) -> Result<Type, String> {
+fn expr(parser: &mut Parser, word: String, typ: Result<TypedElement, String>) -> Expression {
+    match typ {
+        Ok(t) => match t.kind {
+            Kind::Const => Expression::Const(word, t.typ),
+            Kind::Var => Expression::Var(word, t.typ),
+        }
+        Err(e) => ExprError(TypeError { reason: e, pos: parser.pos() })
+    }
+}
+
+pub fn type_of(str: &str, stack: &Stack) -> Result<TypedElement, String> {
     let mut chars = str.chars();
     type_of_with_sign(str, &mut chars, stack, false)
 }
 
-pub fn type_of_with_sign(str: &str, chars: &mut Chars, stack: &Stack, has_sign: bool) -> Result<Type, String> {
+fn type_of_with_sign(
+    str: &str,
+    chars: &mut Chars,
+    stack: &Stack,
+    has_sign: bool,
+) -> Result<TypedElement, String> {
     if let Some(c) = chars.next() {
         match c {
-            '0'..='9' => type_of_num(c, chars),
+            '0'..='9' => type_of_num(c, chars).map(|typ| TypedElement { typ, kind: Kind::Const }),
             '-' | '+' if !has_sign => type_of_with_sign(str, chars, stack, true),
             _ => type_of_var(str, stack)
         }
     } else {
-        Ok(Type::Empty)
+        Err("Unexpected EOF".to_string())
     }
 }
 
-fn type_of_var(str: &str, stack: &Stack) -> Result<Type, String> {
-    stack.get(str).map(|t| Ok(t.to_owned())).unwrap_or_else(||
-        Err(format!("variable '{}' does not exist", str)))
+fn type_of_var(str: &str, stack: &Stack) -> Result<TypedElement, String> {
+    stack.get(str).map(|t| Ok(TypedElement { typ: t.to_owned(), kind: Kind::Var }))
+        .unwrap_or_else(|| Err(format!("variable '{}' does not exist", str)))
 }
 
 fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {

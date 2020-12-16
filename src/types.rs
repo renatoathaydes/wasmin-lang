@@ -23,6 +23,15 @@ pub enum Type {
     Error(TypeError),
 }
 
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub enum Kind { Const, Var }
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct TypedElement {
+    pub typ: Type,
+    pub kind: Kind,
+}
+
 impl Type {
     pub fn is_assignable_to(&self, other: &Type) -> bool {
         match (self, other) {

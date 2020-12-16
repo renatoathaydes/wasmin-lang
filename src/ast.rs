@@ -8,6 +8,7 @@ pub type Assignment = (Vec<String>, Vec<Expression>);
 pub enum Expression {
     Empty,
     Const(String, Type),
+    Var(String, Type),
     Let(Assignment),
     Mut(Assignment),
     Group(Vec<Expression>),
@@ -39,7 +40,7 @@ impl Expression {
     pub fn get_type(&self) -> Vec<Type> {
         match self {
             Expression::Empty | Let(..) | Mut(..) => Vec::new(),
-            Const(.., typ) => vec![typ.clone()],
+            Const(.., typ) | Var(.., typ) => vec![typ.clone()],
             Group(es) => es.last()
                 .map_or(Vec::new(), |e| e.get_type()),
             Multi(es) => es.iter()
@@ -55,7 +56,7 @@ impl Expression {
     pub fn is_empty(&self) -> bool {
         match self {
             Expression::Empty => true,
-            Const(..) | Let(..) | Mut(..) | Multi(_) | FnCall { .. } | ExprError(..) => false,
+            Const(..) | Var(..) | Let(..) | Mut(..) | Multi(_) | FnCall { .. } | ExprError(..) => false,
             Group(es) => es.last()
                 .map_or(true, |e| e.is_empty()),
         }
@@ -64,7 +65,7 @@ impl Expression {
     pub fn into_multi(self) -> Vec<Expression> {
         match self {
             Expression::Empty => vec![],
-            Let(..) | Mut(..) | Const(..) | FnCall { .. } | ExprError(..) | Group(..) => vec![self],
+            Let(..) | Mut(..) | Const(..) | Var(..) | FnCall { .. } | ExprError(..) | Group(..) => vec![self],
             Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
@@ -76,6 +77,20 @@ macro_rules! expr_const {
 }
 
 #[macro_export]
+macro_rules! expr_var {
+    ($id:literal $typ:expr) => { Expression::Var($id.to_string(), $typ) }
+}
+
+#[macro_export]
+macro_rules! expr_group {
+    ($($e:expr)*) => {{
+        let mut exprs = Vec::new();
+        $(exprs.push($e);)*
+        Expression::Group(exprs)
+    }}
+}
+
+#[macro_export]
 macro_rules! expr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
         let mut ids = Vec::new();
@@ -83,5 +98,16 @@ macro_rules! expr_let {
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
         Expression::Let((ids, exprs))
+    }};
+}
+
+#[macro_export]
+macro_rules! texpr_let {
+    ($($id:literal),+ = $($e:expr),+) => {{
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        $(ids.push($id.to_string());)*
+        $(exprs.push($e);)*
+        TopLevelExpression::Let((ids, exprs), Public)
     }};
 }

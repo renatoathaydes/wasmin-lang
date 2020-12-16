@@ -21,12 +21,12 @@ macro_rules! parse_expr {
 macro_rules! type_of {
     ($e:expr) => {{
         let stack = Stack::new();
-        expr_parser::type_of($e, &stack)
+        expr_parser::type_of($e, &stack).map(|t| (t.typ, t.kind))
     }};
     ($e:expr, $($id:expr => $typ:expr),+) => {{
         let mut stack = Stack::new();
         $(stack.push($id.to_string(), $typ, false).unwrap();)*
-        expr_parser::type_of($e, &stack)
+        expr_parser::type_of($e, &stack).map(|t| (t.typ, t.kind))
     }};
 }
 
@@ -60,19 +60,19 @@ macro_rules! fn_call {
 
 #[test]
 fn test_type_of_empty() {
-    assert_eq!(type_of!(""), Ok(Type::Empty));
+    assert_eq!(type_of!(""), Err("Unexpected EOF".into()));
 }
 
 #[test]
 fn test_type_of_var() {
-    assert_eq!(type_of!("foo", "foo" => F32), Ok(F32));
+    assert_eq!(type_of!("foo", "foo" => F32), Ok((F32, Kind::Var)));
     assert_eq!(type_of!("bar", "foo" => F32),
                Err("variable \'bar\' does not exist".to_string()));
-    assert_eq!(type_of!("bar", "foo" => F32, "bar" => I64), Ok(I64));
+    assert_eq!(type_of!("bar", "foo" => F32, "bar" => I64), Ok((I64, Kind::Var)));
 
     // funny variable names
-    assert_eq!(type_of!("--", "++" => F32, "--" => I64), Ok(I64));
-    assert_eq!(type_of!("++", "++" => F32, "--" => I64), Ok(F32));
+    assert_eq!(type_of!("--", "++" => F32, "--" => I64), Ok((I64, Kind::Var)));
+    assert_eq!(type_of!("++", "++" => F32, "--" => I64), Ok((F32, Kind::Var)));
 }
 
 #[test]
@@ -81,10 +81,10 @@ fn test_type_of_int() {
     for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "10", "11", "20", "100",
         "1_000", "111_222_333", "1_2_3_4_0", "2147483647",
         "-1", "-0", "-1_2", "-98_76_43"].iter() {
-        assert_eq!(type_of!(i), Ok(I32), "Example: {}", i);
+        assert_eq!(type_of!(i), Ok((I32, Kind::Const)), "Example: {}", i);
     }
     for i in ["21474836478", "12345678900", "123_456_789_012_345_678_900"].iter() {
-        assert_eq!(type_of!(i), Ok(I64), "Example: {}", i);
+        assert_eq!(type_of!(i), Ok((I64, Kind::Const)), "Example: {}", i);
     }
 
     assert_eq!(type_of!("123z"), Err("number contains invalid character: 'z'".to_string()));
@@ -99,10 +99,10 @@ fn test_type_of_float() {
     for f in ["0.1", "2.0", "1.3", "3.14151695", "2345.67890",
         "1_000.0", "0.1_111_222_3", "9_1_2_.3_4", "1.0000000",
         "-0.1", "-1_.000", "-3.141516956"].iter() {
-        assert_eq!(type_of!(f), Ok(F32), "Example: {}", f);
+        assert_eq!(type_of!(f), Ok((F32, Kind::Const)), "Example: {}", f);
     }
     for f in ["0.1111111111", "2.000000000000", "3.141_592_653_589_793"].iter() {
-        assert_eq!(type_of!(f), Ok(F64), "Example: {}", f);
+        assert_eq!(type_of!(f), Ok((F64, Kind::Const)), "Example: {}", f);
     }
 
     assert_eq!(type_of!("0.0.0"), Err("number contains more than one dot".to_string()));
@@ -116,27 +116,27 @@ fn test_type_of_float() {
 #[test]
 fn test_type_of_num_explicit() {
     // max value is "2147483647", anything with less digits is classified as i32
-    assert_eq!(type_of!("2147483647i32"), Ok(I32));
-    assert_eq!(type_of!("-2147483646i32"), Ok(I32));
-    assert_eq!(type_of!("0i32"), Ok(I32));
-    assert_eq!(type_of!("-0i32"), Ok(I32));
-    assert_eq!(type_of!("0i64"), Ok(I64));
-    assert_eq!(type_of!("-0i64"), Ok(I64));
-    assert_eq!(type_of!("512i64"), Ok(I64));
-    assert_eq!(type_of!("-512i64"), Ok(I64));
+    assert_eq!(type_of!("2147483647i32"), Ok((I32, Kind::Const)));
+    assert_eq!(type_of!("-2147483646i32"), Ok((I32, Kind::Const)));
+    assert_eq!(type_of!("0i32"), Ok((I32, Kind::Const)));
+    assert_eq!(type_of!("-0i32"), Ok((I32, Kind::Const)));
+    assert_eq!(type_of!("0i64"), Ok((I64, Kind::Const)));
+    assert_eq!(type_of!("-0i64"), Ok((I64, Kind::Const)));
+    assert_eq!(type_of!("512i64"), Ok((I64, Kind::Const)));
+    assert_eq!(type_of!("-512i64"), Ok((I64, Kind::Const)));
 
-    assert_eq!(type_of!("0f32"), Ok(F32));
-    assert_eq!(type_of!("-0f32"), Ok(F32));
-    assert_eq!(type_of!("0f64"), Ok(F64));
-    assert_eq!(type_of!("-0f64"), Ok(F64));
-    assert_eq!(type_of!("10f32"), Ok(F32));
-    assert_eq!(type_of!("-10f32"), Ok(F32));
-    assert_eq!(type_of!("10_000_f64"), Ok(F64));
-    assert_eq!(type_of!("-10_000_f64"), Ok(F64));
-    assert_eq!(type_of!("0.5_f64"), Ok(F64));
-    assert_eq!(type_of!("-0.5_f64"), Ok(F64));
-    assert_eq!(type_of!("12.__5678__f64"), Ok(F64));
-    assert_eq!(type_of!("-12.__5678__f64"), Ok(F64));
+    assert_eq!(type_of!("0f32"), Ok((F32, Kind::Const)));
+    assert_eq!(type_of!("-0f32"), Ok((F32, Kind::Const)));
+    assert_eq!(type_of!("0f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("-0f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("10f32"), Ok((F32, Kind::Const)));
+    assert_eq!(type_of!("-10f32"), Ok((F32, Kind::Const)));
+    assert_eq!(type_of!("10_000_f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("-10_000_f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("0.5_f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("-0.5_f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("12.__5678__f64"), Ok((F64, Kind::Const)));
+    assert_eq!(type_of!("-12.__5678__f64"), Ok((F64, Kind::Const)));
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn test_fn_call_basic() {
 
     // function without args: only invoke the function if it's alone within parens
     assert_eq!(parse_expr!("no-args;", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
-               Const(String::from("no-args"), Fn(FnType { ins: vec![], outs: vec![I32] })));
+               Var(String::from("no-args"), Fn(FnType { ins: vec![], outs: vec![I32] })));
 
     assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
                fn_call!("no-args" => [] I32));
