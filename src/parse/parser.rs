@@ -22,6 +22,18 @@ impl Display for ParserError {
     }
 }
 
+impl Into<TypeError> for ParserError {
+    fn into(self) -> TypeError {
+        TypeError { reason: self.msg, pos: self.pos }
+    }
+}
+
+impl Into<TopLevelExpression> for ParserError {
+    fn into(self) -> TopLevelExpression {
+        TopLevelExpression::Error(self.msg, self.pos)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StackEntry {
     typ: Type,
@@ -52,12 +64,6 @@ pub enum GroupingSymbol {
 #[derive(Debug)]
 pub struct GroupingState { items: Vec<GroupingSymbol> }
 
-impl Into<TypeError> for ParserError {
-    fn into(self) -> TypeError {
-        TypeError { reason: self.msg, pos: self.pos }
-    }
-}
-
 impl Stack {
     pub fn new() -> Stack {
         let mut s = Stack { items: Vec::with_capacity(4) };
@@ -65,13 +71,14 @@ impl Stack {
         s
     }
 
-    /// Push a definition onto the stack, returning an empty value if the definition is accepted,
-    /// or an error message in case something goes wrong.
+    /// Push a definition onto the stack, returning an empty value if the definition is accepted
+    /// with the exact same type as provided, another type if the implementation type is different
+    /// from the definition but still assignable, or an error message in case something goes wrong.
     ///
     /// If [is_def] is `true`, then the definition is only accepted if it did not exist yet,
     /// otherwise this is considered as a direct implementation, hence it will be accepted
-    /// if either the type matches a previous definition or if no definition exist yet.
-    pub fn push(&mut self, id: String, typ: Type, is_def: bool) -> Result<(), String> {
+    /// if either the type matches a previous definition or if no definition exists yet.
+    pub fn push(&mut self, id: String, typ: Type, is_def: bool) -> Result<Option<Type>, String> {
         let last_index = self.items.len() - 1;
         let symbols = self.items.get_mut(last_index).unwrap();
         if let Some(mut entry) = symbols.get_mut(&id) {
@@ -82,13 +89,18 @@ impl Stack {
                       defined type '{}' does not match", &id, &typ, &entry.typ));
                 }
                 entry.is_def = false;
+                if typ == entry.typ {
+                    Ok(None)
+                } else {
+                    Ok(Some(entry.typ.clone()))
+                }
             } else {
-                return Err(format!("Cannot re-implement '{}'", &id));
+                Err(format!("Cannot re-implement '{}'", &id))
             }
         } else {
             symbols.insert(id, StackEntry { typ, is_def });
+            Ok(None)
         }
-        Ok(())
     }
 
     pub fn get(&self, id: &str) -> Option<&Type> {
@@ -254,19 +266,25 @@ impl Parser<'_> {
         if let Some('=') = self.curr_char() {
             self.next();
             self.stack.new_level();
+            let pos = self.pos();
             let expr = self.parse_expr();
             self.stack.drop_level();
             let mut typ = expr.get_type();
             if ids.len() == typ.len() {
-                let error = ids.iter().zip(typ.drain(..))
+                let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
                     .map(move |(id, t)| {
                         self.stack.push(id.clone(), t, false)
-                            .map_err(|msg| self.parser_err::<Assignment>(msg).unwrap_err())
-                    }).filter(|r| r.is_err()).nth(0);
-                if let Some(Err(e)) = error {
-                    return Err(e);
+                        // .map_err(|msg| self.parser_err::<Assignment>(msg).unwrap_err())
+                    }).partition(|r| r.is_ok());
+                if errors.is_empty() {
+                    let type_replacements = results.drain(..)
+                        .map(|r| r.unwrap()).collect();
+                    Ok((ids, expr.into_multi(), type_replacements))
+                } else {
+                    let msg = errors.drain(..).map(|e| e.unwrap_err())
+                        .collect::<Vec<_>>().join(", ");
+                    Err(ParserError { pos, msg })
                 }
-                Ok((ids, expr.into_multi()))
             } else {
                 let e = format!("multi-value assignment mismatch: \
                 {} identifier{} but {} expression{} of type{3} '{}' found",

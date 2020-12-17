@@ -34,9 +34,19 @@ macro_rules! assign {
     ($($id:literal),+ = $($e:expr),+) => {{
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        (ids, exprs, replacements)
+    }};
+    ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
-        (ids, exprs)
+        $(replacements.push($rep);)*
+        (ids, exprs, replacements)
     }};
 }
 
@@ -434,7 +444,7 @@ fn test_def_then_assign() {
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "foo" => I64);
 
-    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32); Some(I64))));
 }
 
 #[test]

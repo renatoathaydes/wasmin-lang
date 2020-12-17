@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::sync::mpsc::channel;
 
 use wasmin::{*};
@@ -38,6 +39,25 @@ fn test_multi_let() {
                    texpr_let!("x", "y", "z" = expr_const!("1" I32), expr_const!("0.1" F32), expr_const!("10i64" I64)));
         assert_eq!(rcv.iter().next().unwrap(),
                    texpr_let!(p "PI", "E" = expr_const!("3.14" F32), expr_const!("2.16f64" F64)));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_def_then_let() {
+    let mut chars = "def foo i32; let foo = 0; def bar i64; let bar = 3".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_let!("foo" = expr_const!("0" I32)));
+        assert_eq!(rcv.iter().next().unwrap(),
+                   expr_let!("bar" = expr_const!("3" I32); Some(I64)).try_into().unwrap());
     }
 
     assert_eq!(rcv.iter().next(), None);

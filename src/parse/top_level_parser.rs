@@ -16,8 +16,15 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             if let Some(word) = parser.parse_word() {
                 return parse_top(parser, &word, true);
             } else {
-                TopLevelExpression::Error(format!("Unexpected: '{}'. \
-                Expected let, mut or fun", word), parser.pos())
+                Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
+                Expected let, mut or fun", word), parser.pos()))
+            }
+        }
+        "def" => {
+            if let Err(e) = parser.parse_def() {
+                Some(e.into())
+            } else {
+                None
             }
         }
         "let" | "mut" => {
@@ -25,20 +32,22 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
                     if word.starts_with("m") {
-                        TopLevelExpression::Mut(items, visibility)
+                        Some(TopLevelExpression::Mut(items, visibility))
                     } else {
-                        TopLevelExpression::Let(items, visibility)
+                        Some(TopLevelExpression::Let(items, visibility))
                     }
                 }
-                Err(e) => TopLevelExpression::Error(e.msg, e.pos)
+                Err(e) => Some(e.into())
             }
         }
         _ => {
             let allowed = format!("{}def, let, mut or fun", if is_pub { "" } else { "pub, " });
-            TopLevelExpression::Error(format!("Unexpected: '{}'. \
-                Expected {}", word, allowed), parser.pos())
+            Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
+                Expected {}", word, allowed), parser.pos()))
         }
     };
 
-    parser.sink().send(expr).expect("Wasmin Program Receiver Error");
+    if let Some(e) = expr {
+        parser.sink().send(e).expect("Wasmin Program Receiver Error");
+    }
 }

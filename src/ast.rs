@@ -1,8 +1,10 @@
+use std::convert::TryInto;
+
 use Expression::{*};
 
 use crate::types::{FnType, Type, TypeError};
 
-pub type Assignment = (Vec<String>, Vec<Expression>);
+pub type Assignment = (Vec<String>, Vec<Expression>, Vec<Option<Type>>);
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
@@ -26,11 +28,10 @@ pub enum Visibility {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum TopLevelExpression {
-    Const(String, Type, Visibility),
     Let(Assignment, Visibility),
     Mut(Assignment, Visibility),
     Fn(String, Expression, Visibility),
-    Error(String, (usize, usize))
+    Error(String, (usize, usize)),
 }
 
 impl Expression {
@@ -72,6 +73,21 @@ impl Expression {
     }
 }
 
+impl TryInto<TopLevelExpression> for Expression {
+    type Error = String;
+
+    fn try_into(self) -> Result<TopLevelExpression, Self::Error> {
+        match self {
+            Empty => Err("empty expression cannot appear at top-level".to_owned()),
+            Let(l) => Ok(TopLevelExpression::Let(l, Visibility::Private)),
+            Mut(m) => Ok(TopLevelExpression::Mut(m, Visibility::Private)),
+            Const(..) | Var(..) | Group(..) | Multi(..) | FnCall { .. } =>
+                Err("free expression appear at top-level".to_owned()),
+            ExprError(e) => Err(e.reason)
+        }
+    }
+}
+
 impl From<TypeError> for TopLevelExpression {
     fn from(e: TypeError) -> Self {
         TopLevelExpression::Error(e.reason, e.pos)
@@ -102,9 +118,19 @@ macro_rules! expr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        Expression::Let((ids, exprs, replacements))
+    }};
+    ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
-        Expression::Let((ids, exprs))
+        $(replacements.push($rep);)*
+        Expression::Let((ids, exprs, replacements))
     }};
 }
 
@@ -114,16 +140,18 @@ macro_rules! texpr_let {
         use crate::ast::{TopLevelExpression, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
-        $(ids.push($id.to_string());)*
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Let((ids, exprs), Visibility::Private)
+        TopLevelExpression::Let((ids, exprs, replacements), Visibility::Private)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::{TopLevelExpression, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
-        $(ids.push($id.to_string());)*
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Let((ids, exprs), Visibility::Public)
+        TopLevelExpression::Let((ids, exprs, replacements), Visibility::Public)
     }};
 }
