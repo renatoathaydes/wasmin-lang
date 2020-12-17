@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub enum Types<'s> { T(&'s Vec<Type>) }
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct FnType {
     pub ins: Vec<Type>,
@@ -58,6 +60,22 @@ impl Type {
     }
 }
 
+impl fmt::Display for Types<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Types::T(t) => write!(f, "{}", t.iter()
+                .map(|e| format!("{}", e))
+                .collect::<Vec<_>>().join(" "))
+        }
+    }
+}
+
+impl fmt::Display for FnType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}]({})", Types::T(&self.ins), Types::T(&self.outs))
+    }
+}
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -66,13 +84,7 @@ impl fmt::Display for Type {
             Type::F64 => write!(f, "f64")?,
             Type::F32 => write!(f, "f32")?,
             Type::Empty => write!(f, "()")?,
-            Type::Fn(FnType { ins, outs }) => {
-                write!(f, "fun[ ")?;
-                for t in ins { write!(f, "{} ", t)?; }
-                write!(f, " ]( ")?;
-                for t in outs { write!(f, "{} ", t)?; }
-                write!(f, ")")?;
-            }
+            Type::Fn(fun) => write!(f, "{}", fun)?,
             Type::Error(TypeError { reason, pos, .. }) => {
                 write!(f, "ERROR([{}, {}] {})", pos.0, pos.1, reason)?
             }

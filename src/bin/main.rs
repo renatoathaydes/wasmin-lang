@@ -6,8 +6,9 @@ use wasmin::parse::new_parser;
 // test program
 const PROGRAM: &str = "let constant-ten = 10;
 
-let one, two = 1, 2;
+pub let one, two = 1, 2;
 
+def three i64;
 let three, four = (
     let t = 3;
     let f = 4;

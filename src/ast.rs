@@ -6,6 +6,8 @@ use crate::types::{FnType, Type, TypeError};
 
 pub type Assignment = (Vec<String>, Vec<Expression>, Vec<Option<Type>>);
 
+pub type Fun = (String, Vec<String>, Expression, FnType);
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
     Empty,

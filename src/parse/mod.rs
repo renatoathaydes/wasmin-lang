@@ -12,6 +12,7 @@ mod tests;
 mod type_parser;
 mod parser;
 mod expr_parser;
+mod fun_parser;
 mod top_level_parser;
 
 

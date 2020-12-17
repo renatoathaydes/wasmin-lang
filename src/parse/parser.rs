@@ -4,9 +4,8 @@ use std::fmt::Result as FmtResult;
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::{Assignment, Expression, TopLevelExpression};
-use crate::parse::{expr_parser, top_level_parser};
-use crate::parse::type_parser;
+use crate::ast::{Assignment, Expression, Fun, TopLevelExpression};
+use crate::parse::{expr_parser, fun_parser, top_level_parser, type_parser};
 use crate::types::{*};
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -25,6 +24,12 @@ impl Display for ParserError {
 impl Into<TypeError> for ParserError {
     fn into(self) -> TypeError {
         TypeError { reason: self.msg, pos: self.pos }
+    }
+}
+
+impl From<TypeError> for ParserError {
+    fn from(e: TypeError) -> Self {
+        ParserError { msg: format!("(type error) {}", e.reason), pos: e.pos }
     }
 }
 
@@ -302,6 +307,10 @@ impl Parser<'_> {
 
     pub fn parse_type(&mut self) -> Type {
         type_parser::parse_type(self)
+    }
+
+    pub fn parse_fun(&mut self) -> Result<Fun, ParserError> {
+        fun_parser::parse_fun(self)
     }
 
     pub fn parse_expr(&mut self) -> Expression {

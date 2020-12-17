@@ -40,6 +40,9 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                 Err(e) => Some(e.into())
             }
         }
+        // "fun" => {
+        //     parser.parse_fun()
+        // }
         _ => {
             let allowed = format!("{}def, let, mut or fun", if is_pub { "" } else { "pub, " });
             Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
