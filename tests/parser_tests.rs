@@ -62,3 +62,57 @@ fn test_def_then_let() {
 
     assert_eq!(rcv.iter().next(), None);
 }
+
+#[test]
+fn test_fun_0_args() {
+    let mut chars = "def nothing []; fun nothing = ()".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fn_type!([]());
+                              fun "nothing" = expr_empty!()));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_fun_1_arg() {
+    let mut chars = "def f [i32]i32; fun f x = x".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fn_type!([I32](I32));
+                              fun "f" "x" = expr_var!("x" I32)));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_fun_2_arg_multi_value() {
+    let mut chars = "def swap [i32 i64] i64 i32; pub fun swap x y = y, x".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fn_type!([I32 I64](I64 I32));
+                              p fun "swap" "x" "y" = expr_multi!(expr_var!("y" I64), expr_var!("x" I32))));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}

@@ -32,7 +32,7 @@ pub enum Visibility {
 pub enum TopLevelExpression {
     Let(Assignment, Visibility),
     Mut(Assignment, Visibility),
-    Fn(String, Expression, Visibility),
+    Fn(Fun, Visibility),
     Error(String, (usize, usize)),
 }
 
@@ -97,6 +97,11 @@ impl From<TypeError> for TopLevelExpression {
 }
 
 #[macro_export]
+macro_rules! expr_empty {
+    () => { Expression::Empty }
+}
+
+#[macro_export]
 macro_rules! expr_const {
     ($id:literal $typ:expr) => { Expression::Const($id.to_string(), $typ) }
 }
@@ -112,6 +117,15 @@ macro_rules! expr_group {
         let mut exprs = Vec::new();
         $(exprs.push($e);)*
         Expression::Group(exprs)
+    }}
+}
+
+#[macro_export]
+macro_rules! expr_multi {
+    ($($e:expr),*) => {{
+        let mut exprs = Vec::new();
+        $(exprs.push($e);)*
+        Expression::Multi(exprs)
     }}
 }
 
@@ -137,6 +151,18 @@ macro_rules! expr_let {
 }
 
 #[macro_export]
+macro_rules! fn_type {
+    ([$($in:expr)*]($($out:expr)*)) => {{
+        use crate::types::{FnType};
+        let mut ins = Vec::new();
+        let mut outs = Vec::new();
+        $(ins.push($in);)*
+        $(outs.push($out);)*
+        FnType { ins, outs }
+    }}
+}
+
+#[macro_export]
 macro_rules! texpr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::{TopLevelExpression, Visibility};
@@ -156,4 +182,18 @@ macro_rules! texpr_let {
         $(exprs.push($e);)*
         TopLevelExpression::Let((ids, exprs, replacements), Visibility::Public)
     }};
+}
+
+#[macro_export]
+macro_rules! texpr_fun {
+    (def $t:expr; fun $id:literal $($arg:literal)* = $e:expr) => {{
+        let mut args = Vec::new();
+        $(args.push($arg.to_owned());)*
+        TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Private)
+    }};
+    (def $t:expr; p fun $id:literal $($arg:literal)* = $e:expr) => {{
+        let mut args = Vec::new();
+        $(args.push($arg.to_owned());)*
+        TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)
+    }}
 }

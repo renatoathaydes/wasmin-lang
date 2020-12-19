@@ -13,14 +13,14 @@ pub fn parse(parser: &mut Parser) {
 fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
     let expr = match word.as_ref() {
         "pub" if !is_pub => {
-            if let Some(word) = parser.parse_word() {
-                return parse_top(parser, &word, true);
+            if let Some(w) = parser.parse_word() {
+                return parse_top(parser, &w, true);
             } else {
                 Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
                 Expected let, mut or fun", word), parser.pos()))
             }
         }
-        "def" => {
+        "def" if !is_pub => {
             if let Err(e) = parser.parse_def() {
                 Some(e.into())
             } else {
@@ -40,13 +40,17 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                 Err(e) => Some(e.into())
             }
         }
-        // "fun" => {
-        //     parser.parse_fun()
-        // }
+        "fun" => {
+            let visibility = if is_pub { Public } else { Private };
+            match parser.parse_fun() {
+                Ok(fun) => Some(TopLevelExpression::Fn(fun, visibility)),
+                Err(e) => Some(e.into())
+            }
+        }
         _ => {
-            let allowed = format!("{}def, let, mut or fun", if is_pub { "" } else { "pub, " });
+            let allowed = format!("{}let, mut or fun", if is_pub { "" } else { "pub, def, " });
             Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
-                Expected {}", word, allowed), parser.pos()))
+                Expected {} here.", word, allowed), parser.pos()))
         }
     };
 

@@ -190,6 +190,10 @@ impl Parser<'_> {
         &self.stack
     }
 
+    pub fn stack_mut(&mut self) -> &mut Stack {
+        &mut self.stack
+    }
+
     pub fn error(&self, reason: &str) -> TypeError {
         TypeError { reason: reason.to_string(), pos: self.pos() }
     }
