@@ -6,13 +6,16 @@ use wasmin::parse::new_parser;
 // test program
 const PROGRAM: &str = "let constant-ten = 10;
 
+def add-10 [i32] i32;
+fun add-10 n = constant-ten;
+
 pub let one, two = 1, 2;
 
 def three i64;
 let three, four = (
     let t = 3;
     let f = 4;
-    t, f
+    t, add-10 f
 )";
 
 fn main() {
@@ -27,7 +30,7 @@ fn main() {
     });
 
     for expr in rcvr {
-        println!("xxx- {:?}", expr);
+        println!("TOP: {:?}", expr);
     }
 
     parser_handle.join().expect("Parser failed")

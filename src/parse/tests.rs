@@ -30,6 +30,16 @@ macro_rules! type_of {
     }};
 }
 
+macro_rules! assert_symbols_contains {
+    ($parser:ident, $key:expr => $value:expr) => {{
+        if let Some(v) = $parser.stack().get($key) {
+            assert_eq!(v, &$value);
+        } else {
+            panic!("Stack does not contain key {}", &$key);
+        }
+    }};
+}
+
 macro_rules! assign {
     ($($id:literal),+ = $($e:expr),+) => {{
         let mut ids = Vec::new();
@@ -186,6 +196,16 @@ fn test_expr_single_item_nested() {
     assert_eq!(parse_expr!("(;;1)"), Const(String::from("1"), I32));
     assert_eq!(parse_expr!("(((((  42 )))))"), Const(String::from("42"), I32));
     assert_eq!(parse_expr!("( ( ; ; ) (4) )"), Const(String::from("4"), I32));
+}
+
+#[test]
+fn test_var() {
+    assert_eq!(parse_expr!("bar", "bar" => I32), Var(String::from("bar"), I32));
+    assert_eq!(parse_expr!("(foo)", "foo" => I64), Var(String::from("foo"), I64));
+    assert_eq!(parse_expr!("zort"), ExprError(TypeError {
+        reason: "variable 'zort' does not exist".to_string(),
+        pos: (0, 4),
+    }));
 }
 
 #[test]
@@ -369,16 +389,6 @@ fn test_type_function_optional_semi_colon() {
     // first type parsing should consume the optional semi-colon
     assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
     assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
-}
-
-macro_rules! assert_symbols_contains {
-    ($parser:ident, $key:expr => $value:expr) => {{
-        if let Some(v) = $parser.stack().get($key) {
-            assert_eq!(v, &$value);
-        } else {
-            panic!("Stack does not contain key {}", &$key);
-        }
-    }};
 }
 
 #[test]
