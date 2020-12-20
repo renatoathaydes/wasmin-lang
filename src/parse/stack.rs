@@ -32,19 +32,37 @@ impl Stack {
         let symbols = self.items.get_mut(last_index).unwrap();
         if let Some(mut entry) = symbols.get_mut(&id) {
             println!("ID={}, T is {}, was_def={}", &id, entry.typ, entry.is_def);
-            if entry.is_def && !is_def {
-                if !typ.is_assignable_to(&entry.typ) {
-                    return Err(format!("Cannot implement '{}' with type '{}' because its \
+            match (entry.is_def, is_def, &mut entry.typ) {
+                // was def, is def
+                (true, false, _) => {
+                    if !typ.is_assignable_to(&entry.typ) {
+                        return Err(format!("Cannot implement '{}' with type '{}' because its \
                       defined type '{}' does not match", &id, &typ, &entry.typ));
+                    }
+                    entry.is_def = false;
+                    if typ == entry.typ {
+                        Ok(None)
+                    } else {
+                        Ok(Some(entry.typ.clone()))
+                    }
                 }
-                entry.is_def = false;
-                if typ == entry.typ {
+                // was def, is def
+                (false, true, &mut Type::Fn(ref mut current_types)) => {
+                    let t = match typ {
+                        Type::Fn(mut new_type) => {
+                            if current_types.iter().any(|t| new_type.contains(t)) {
+                                return Err(format!("Cannot re-define '{}' with the same type", &id));
+                            }
+                            assert_eq!(new_type.len(), 1);
+                            new_type.remove(0)
+                        }
+                        _ => return Err(format!("Cannot re-implement '{}' as a non-function", &id))
+                    };
+                    entry.is_def = true;
+                    current_types.push(t);
                     Ok(None)
-                } else {
-                    Ok(Some(entry.typ.clone()))
                 }
-            } else {
-                Err(format!("Cannot re-implement '{}'", &id))
+                _ => Err(format!("Cannot re-implement '{}'", &id))
             }
         } else {
             symbols.insert(id, StackEntry { typ, is_def });
@@ -88,6 +106,8 @@ impl Default for Stack {
 
 #[cfg(test)]
 mod stack_tests {
+    use crate::types::FnType;
+
     use super::*;
 
     #[test]
@@ -135,5 +155,39 @@ mod stack_tests {
         assert_eq!(stack.get(&"z"), None);
         assert_eq!(stack.get(&"bar"), None);
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+    }
+
+    #[test]
+    fn stack_allows_def_then_implement() {
+        let mut stack = Stack::new();
+
+        // same type
+        stack.push("foo".to_string(), Type::I32, true).unwrap();
+        stack.push("foo".to_string(), Type::I32, false).unwrap();
+
+        // convertible type
+        stack.push("bar".to_string(), Type::I64, true).unwrap();
+        stack.push("bar".to_string(), Type::I32, false).unwrap();
+
+        assert_eq!(stack.get(&"bar"), Some(&Type::I64));
+        assert_eq!(stack.get(&"foo"), Some(&Type::I32));
+    }
+
+    #[test]
+    fn stack_allows_multiple_def_then_implement_for_functions() {
+        let mut stack = Stack::new();
+
+        // first fun types
+        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![], outs: vec![] }]), true).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![], outs: vec![] }]), false).unwrap();
+
+        // second fun types
+        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![Type::I32], outs: vec![] }]), true).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![Type::I32], outs: vec![] }]), false).unwrap();
+
+        assert_eq!(stack.get(&"foo"), Some(&Type::Fn(vec![
+            FnType { ins: vec![], outs: vec![] },
+            FnType { ins: vec![Type::I32], outs: vec![] },
+        ])));
     }
 }

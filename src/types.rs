@@ -38,6 +38,13 @@ impl Type {
             (a, b) if *a == *b => true,
             (&Type::I32, &Type::I64) => true,
             (&Type::F32, &Type::F64) => true,
+            (&Type::Fn(ref v), &Type::Fn(ref w)) => {
+                if v.len() == 1 {
+                    w.contains(v.get(0).unwrap())
+                } else {
+                    false
+                }
+            }
             _ => false,
         }
     }
@@ -151,6 +158,19 @@ mod tests {
         // widening conversion
         assert!(I32.is_assignable_to(&I64));
         assert!(F32.is_assignable_to(&F64));
+    }
+
+    #[test]
+    fn test_fn_type_is_assignable_to() {
+        assert!(Fn(vec![fn_type!([]())]).is_assignable_to(&Fn(vec![fn_type!([]())])));
+        assert!(Fn(vec![fn_type!([I32]())]).is_assignable_to(&Fn(vec![fn_type!([I32]())])));
+        assert!(Fn(vec![fn_type!([I32](I64))]).is_assignable_to(&Fn(vec![fn_type!([I32](I64))])));
+        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(&Fn(vec![fn_type!([I32 F32](I64 F64))])));
+
+        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(
+            &Fn(vec![fn_type!([I32 F32](I64 F64)), fn_type!([](I32))])));
+        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(
+            &Fn(vec![fn_type!([](I32)), fn_type!([I32 F32](I64 F64))])));
     }
 
     #[test]
