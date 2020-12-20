@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use crate::types::Type;
 
 #[derive(Debug, Clone)]
@@ -7,7 +8,7 @@ pub struct Stack {
 }
 
 #[derive(Debug, Clone)]
-pub struct StackEntry {
+struct StackEntry {
     typ: Type,
     is_def: bool,
 }
@@ -58,6 +59,11 @@ impl Stack {
                 Some(&entry.typ)
             } else { None }
         })
+    }
+
+    pub fn get_def(&self, id: &str) -> Option<&Type> {
+        self.items.get(self.items.len() - 1).and_then(|entries|
+            entries.get(id).filter(|e| e.is_def).map(|e| &e.typ))
     }
 
     pub fn new_level(&mut self) {

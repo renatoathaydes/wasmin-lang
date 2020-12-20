@@ -44,10 +44,13 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 if state.is_inside(Parens) {
                     state.exit_symbol();
                     if multi.is_empty() && words.len() == 1 {
-                        if let Some(Type::Fn(t)) = parser.stack().get(words.last().unwrap()) {
+                        let id = words.last().unwrap();
+                        if let Some(Type::Fn(types)) = parser.stack().get(id) {
                             println!("Special case, single function call");
-                            let typ = Ok(t.clone());
-                            exprs.push(Expression::FnCall { name: words.remove(0), args: vec![], typ });
+                            let args = vec![];
+                            let typ = type_of_fn_call(id, types, &args)
+                                .map_err(|reason| TypeError { pos: parser.pos(), reason });
+                            exprs.push(Expression::FnCall { name: words.remove(0), args, typ });
                         }
                     }
                     break;
@@ -153,11 +156,48 @@ fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
             .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown function: '{}'", &name))));
         let typ: Result<FnType, TypeError> = match t {
             Type::Error(e) => Err(e),
-            Type::Fn(t) => Ok(t),
+            Type::Fn(types) => type_of_fn_call(&name, &types, &args)
+                .map_err(|reason| TypeError { pos: parser.pos(), reason }),
             _ => Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t)))
         };
         Expression::FnCall { name, args, typ }
     }
+}
+
+fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>) -> Result<FnType, String> {
+    let arg_types = {
+        let mut t = Vec::new();
+        for arg in args {
+            let mut types = arg.get_type();
+            t.append(&mut types);
+        }
+        t
+    };
+
+    for typ in fn_types {
+        if typ.ins.is_empty() && arg_types.is_empty() {
+            return Ok(typ.clone())
+        }
+        if typ.ins.len() == arg_types.len() {
+            let matching_fun = typ.ins.iter().zip(arg_types.iter())
+                .find(|(i, arg)| arg.is_assignable_to(i))
+                .map(|(i, _)| i);
+            if let Some(_) = matching_fun {
+                return Ok(typ.clone());
+            }
+        }
+    }
+
+    let types = types_to_string(&arg_types);
+    let valid_types = fn_types.iter()
+        .map(|t| types_to_string(&t.ins))
+        .map(|t| format!("  * {}", t))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Err(format!("fun '{}' cannot be called with arguments of type '{}'.
+        Valid argument types are:
+        {}", name, types, valid_types))
 }
 
 fn expr(parser: &mut Parser, word: String, typ: Result<TypedElement, String>) -> Expression {

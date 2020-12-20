@@ -1,7 +1,5 @@
 use std::fmt;
 
-pub enum Types<'s> { T(&'s Vec<Type>) }
-
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct FnType {
     pub ins: Vec<Type>,
@@ -21,7 +19,7 @@ pub enum Type {
     F64,
     F32,
     Empty,
-    Fn(FnType),
+    Fn(Vec<FnType>),
     Error(TypeError),
 }
 
@@ -47,9 +45,11 @@ impl Type {
     pub fn is_error(&self) -> bool {
         match self {
             Type::Error(..) => true,
-            Type::Fn(FnType { ins, outs }) => {
-                ins.iter().any(|t| t.is_error()) ||
-                    outs.iter().any(|t| t.is_error())
+            Type::Fn(types) => {
+                types.iter()
+                    .any(|t|
+                        t.ins.iter().any(|t| t.is_error()) ||
+                            t.outs.iter().any(|t| t.is_error()))
             }
             _ => false
         }
@@ -60,19 +60,13 @@ impl Type {
     }
 }
 
-impl fmt::Display for Types<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Types::T(t) => write!(f, "{}", t.iter()
-                .map(|e| format!("{}", e))
-                .collect::<Vec<_>>().join(" "))
-        }
-    }
-}
-
 impl fmt::Display for FnType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}]({})", Types::T(&self.ins), Types::T(&self.outs))
+        f.write_str("[")?;
+        f.write_str(&types_to_string(&self.ins))?;
+        f.write_str("](")?;
+        f.write_str(&types_to_string(&self.outs))?;
+        f.write_str(")")
     }
 }
 
@@ -84,7 +78,12 @@ impl fmt::Display for Type {
             Type::F64 => write!(f, "f64")?,
             Type::F32 => write!(f, "f32")?,
             Type::Empty => write!(f, "()")?,
-            Type::Fn(fun) => write!(f, "{}", fun)?,
+            Type::Fn(types) => {
+                write!(f, "(")?;
+                let text = types.iter().map(|t| format!("{}", t))
+                    .collect::<Vec<_>>().join(" | ");
+                write!(f, "{})", text)?;
+            }
             Type::Error(TypeError { reason, pos, .. }) => {
                 write!(f, "ERROR([{}, {}] {})", pos.0, pos.1, reason)?
             }
@@ -103,6 +102,24 @@ impl TypeError {
     pub fn get_type(&self) -> Vec<Type> {
         vec![Type::Error(self.clone())]
     }
+}
+
+pub(crate) fn type_refs_to_string(types: &Vec<&Type>) -> String {
+    let mut res = String::new();
+    if types.is_empty() { return res; }
+    let max = types.len() - 1;
+    for (i, t) in types.iter().enumerate() {
+        res.push_str(&format!("{}", t));
+        if i != max {
+            res.push(' ');
+        }
+    }
+    res
+}
+
+pub(crate) fn types_to_string(types: &Vec<Type>) -> String {
+    let v = types.iter().collect();
+    type_refs_to_string(&v)
 }
 
 #[cfg(test)]
@@ -143,24 +160,24 @@ mod tests {
         assert_eq!(I64.is_error(), false);
         assert_eq!(F32.is_error(), false);
         assert_eq!(F64.is_error(), false);
-        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![] }).is_error(), false);
-        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![I32] }).is_error(), false);
+        assert_eq!(Fn(vec!(FnType { ins: vec![I64], outs: vec![] })).is_error(), false);
+        assert_eq!(Fn(vec!(FnType { ins: vec![I64], outs: vec![I32] })).is_error(), false);
         assert_eq!(Empty.is_error(), false);
 
         assert_eq!(error().is_error(), true);
-        assert_eq!(Fn(FnType { ins: vec![I64], outs: vec![error()] }).is_error(), true);
-        assert_eq!(Fn(FnType { ins: vec![error()], outs: vec![I32] }).is_error(), true);
-        assert_eq!(Fn(FnType {
+        assert_eq!(Fn(vec!((FnType { ins: vec![I64], outs: vec![error()] }))).is_error(), true);
+        assert_eq!(Fn(vec!(FnType { ins: vec![error()], outs: vec![I32] })).is_error(), true);
+        assert_eq!(Fn(vec!(FnType {
             ins: vec![I64],
             outs: vec![
-                Fn(FnType { ins: vec![I64], outs: vec![error()] })
+                Fn(vec!(FnType { ins: vec![I64], outs: vec![error()] })),
             ],
-        }).is_error(), true);
-        assert_eq!(Fn(FnType {
+        })).is_error(), true);
+        assert_eq!(Fn(vec!(FnType {
             ins: vec![I64],
             outs: vec![
-                Fn(FnType { ins: vec![I64, error()], outs: vec![] })
+                Fn(vec!(FnType { ins: vec![I64, error()], outs: vec![] })),
             ],
-        }).is_error(), true);
+        })).is_error(), true);
     }
 }

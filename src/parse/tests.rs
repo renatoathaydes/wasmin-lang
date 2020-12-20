@@ -210,13 +210,13 @@ fn test_var() {
 
 #[test]
 fn test_fn_call_basic() {
-    assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(FnType { ins: vec![I32], outs: vec![] } )),
+    assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![FnType { ins: vec![I32], outs: vec![] }])),
                fn_call!("do-it" expr_const!("2" I32) => [I32] ));
 
-    assert_eq!(parse_expr!("add 2 2;", "add" => Fn(FnType { ins: vec![I32, I32], outs: vec![I64] } )),
+    assert_eq!(parse_expr!("add 2 2;", "add" => Fn(vec![FnType { ins: vec![I32, I32], outs: vec![I64] }])),
                fn_call!("add" expr_const!("2" I32) expr_const!("2" I32) => [I32 I32] I64));
 
-    assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(FnType { ins: vec![I32, I32], outs: vec![I32, I32] } )),
+    assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(vec![FnType { ins: vec![I32, I32], outs: vec![I32, I32] }])),
                fn_call!("div-rem" expr_const!("4" I32) expr_const!("2" I32) => [I32 I32] I32 I32));
 
     assert_eq!(parse_expr!("(print 0.0)"),
@@ -224,10 +224,10 @@ fn test_fn_call_basic() {
                TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
 
     // function without args: only invoke the function if it's alone within parens
-    assert_eq!(parse_expr!("no-args;", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
-               Var(String::from("no-args"), Fn(FnType { ins: vec![], outs: vec![I32] })));
+    assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
+               Var(String::from("no-args"), Fn(vec![FnType { ins: vec![], outs: vec![I32] }])));
 
-    assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(FnType { ins: vec![], outs: vec![I32] } )),
+    assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
                fn_call!("no-args" => [] I32));
 }
 
@@ -346,36 +346,36 @@ fn test_type_functions() {
         [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
     assert_eq!(parser.curr_char(), Some('['));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I64] }));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![F32], outs: vec![F32] }));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![I32, I64], outs: vec![F64, I32] }));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I64] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![F32], outs: vec![F32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![I32, I64], outs: vec![F64, I32] }]));
 
     assert_eq!(parser.parse_type(),
-               Fn(FnType {
+               Fn(vec![FnType {
                    ins: vec![I32],
                    outs: vec![
-                       Fn(FnType { ins: vec![I64], outs: vec![F32] })
+                       Fn(vec![FnType { ins: vec![I64], outs: vec![F32] }])
                    ],
-               }));
+               }]));
 
     assert_eq!(parser.parse_type(),
-               Fn(FnType {
+               Fn(vec![FnType {
                    ins: vec![I64],
                    outs: vec![
-                       Fn(FnType {
-                           ins: vec![Fn(FnType { ins: vec![I32], outs: vec![] })],
+                       Fn(vec![FnType {
+                           ins: vec![Fn(vec![FnType { ins: vec![I32], outs: vec![] }])],
                            outs: vec![F32],
-                       }),
-                       Fn(FnType {
+                       }]),
+                       Fn(vec![FnType {
                            ins: vec![I64],
                            outs: vec![I32],
-                       })
+                       }])
                    ],
-               }));
+               }]));
 
     assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "type does not exist: err".to_string(), pos: (1, 61) }));
     assert_eq!(parser.parse_type(), Type::Error(TypeError { reason: "EOF reached (type was expected)".to_string(), pos: (1, 61) }));
@@ -387,8 +387,8 @@ fn test_type_function_optional_semi_colon() {
     let mut parser = new_parser_without_sink(&mut chars);
 
     // first type parsing should consume the optional semi-colon
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![I32] }));
-    assert_eq!(parser.parse_type(), Fn(FnType { ins: vec![], outs: vec![] }));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
 }
 
 #[test]
@@ -462,7 +462,7 @@ fn test_let_multi_value() {
     let mut stack = Stack::new();
     stack.push(
         "func".to_string(),
-        Fn(FnType { ins: vec![], outs: vec![I64, F32, F64] }), false).unwrap();
+        Fn(vec![FnType { ins: vec![], outs: vec![I64, F32, F64] }]), false).unwrap();
 
     let stack2 = stack.clone();
 
