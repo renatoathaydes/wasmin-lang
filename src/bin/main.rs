@@ -9,6 +9,9 @@ const PROGRAM: &str = "let constant-ten = 10;
 def add-10 [i32] i32;
 fun add-10 n = constant-ten;
 
+def add-10 [i64] i64;
+fun add-10 n = constant-ten;
+
 pub let one, two = 1, 2;
 
 def three i64;

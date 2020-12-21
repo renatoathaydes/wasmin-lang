@@ -116,3 +116,25 @@ fn test_fun_2_arg_multi_value() {
 
     assert_eq!(rcv.iter().next(), None);
 }
+
+#[test]
+fn test_def_multi_fun() {
+    let mut chars = "def foo []i32; fun foo = 0; def foo [i32]i32; fun foo n=n;".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fn_type!([](I32));
+                              fun "foo" = expr_const!("0" I32)));
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fn_type!([I32](I32));
+                              fun "foo" "n" = expr_var!("n" I32)));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}

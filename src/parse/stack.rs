@@ -31,7 +31,7 @@ impl Stack {
         let last_index = self.items.len() - 1;
         let symbols = self.items.get_mut(last_index).unwrap();
         if let Some(mut entry) = symbols.get_mut(&id) {
-            println!("ID={}, T is {}, was_def={}", &id, entry.typ, entry.is_def);
+            println!("ID={}, T is {}, was_def={}, is_def={}", &id, entry.typ, entry.is_def, is_def);
             match (entry.is_def, is_def, &mut entry.typ) {
                 // was def, is def
                 (true, false, _) => {
@@ -62,6 +62,8 @@ impl Stack {
                     current_types.push(t);
                     Ok(None)
                 }
+                (true, true, _) => Err(format!("Cannot re-define '{}'. Try implementing it first, \
+                    then re-defining it with different types.", &id)),
                 _ => Err(format!("Cannot re-implement '{}'", &id))
             }
         } else {

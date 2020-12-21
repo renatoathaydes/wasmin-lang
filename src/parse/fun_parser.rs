@@ -1,7 +1,7 @@
 use crate::ast::Fun;
 use crate::parse::Parser;
 use crate::parse::parser::ParserError;
-use crate::types::{FnType, Type::Fn, types_to_string};
+use crate::types::{FnType, Type, Type::Fn, types_to_string};
 
 pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
     let mut left = Vec::new();
@@ -33,6 +33,7 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
             parser.stack_mut().drop_level();
             match bind_result {
                 Ok(typ) => {
+                    parser.stack_mut().push(name.clone(), Type::Fn(vec![typ.clone()]), false).unwrap();
                     if typ.ins.len() == left.len() {
                         let actual_type = expr.get_type();
                         if typ.outs.len() == actual_type.len() {
