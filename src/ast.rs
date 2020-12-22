@@ -132,6 +132,7 @@ macro_rules! expr_multi {
 #[macro_export]
 macro_rules! expr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::Expression;
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
@@ -140,6 +141,7 @@ macro_rules! expr_let {
         Expression::Let((ids, exprs, replacements))
     }};
     ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
+        use crate::ast::Expression;
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
@@ -151,14 +153,25 @@ macro_rules! expr_let {
 }
 
 #[macro_export]
-macro_rules! fn_type {
+macro_rules! expr_fun_call {
+    ($id:literal $($arg:expr)* ; $typ:expr) => {{
+        use crate::ast::Expression;
+        let name = $id.to_owned();
+        let mut args = Vec::new();
+        $(args.push($arg);)*
+        Expression::FnCall {name, args, typ: Ok($typ)}
+    }};
+}
+
+#[macro_export]
+macro_rules! fun_type {
     ([$($in:expr)*]($($out:expr)*)) => {{
-        use crate::types::{FnType};
-        let mut ins = Vec::new();
-        let mut outs = Vec::new();
-        $(ins.push($in);)*
-        $(outs.push($out);)*
-        FnType { ins, outs }
+        use crate::types::FnType;
+        let mut _ins = Vec::new();
+        let mut _outs = Vec::new();
+        $(_ins.push($in);)*
+        $(_outs.push($out);)*
+        FnType { ins: _ins, outs: _outs }
     }}
 }
 
@@ -187,11 +200,13 @@ macro_rules! texpr_let {
 #[macro_export]
 macro_rules! texpr_fun {
     (def $t:expr; fun $id:literal $($arg:literal)* = $e:expr) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
         TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Private)
     }};
     (def $t:expr; p fun $id:literal $($arg:literal)* = $e:expr) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
         TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)

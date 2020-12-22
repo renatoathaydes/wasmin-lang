@@ -7,10 +7,10 @@ use wasmin::parse::new_parser;
 const PROGRAM: &str = "let constant-ten = 10;
 
 def add-10 [i32] i32;
-fun add-10 n = constant-ten;
+fun add-10 n = add n constant-ten;
 
 def add-10 [i64] i64;
-fun add-10 n = constant-ten;
+fun add-10 n = add n constant-ten;
 
 pub let one, two = 1, 2;
 

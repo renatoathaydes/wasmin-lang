@@ -74,7 +74,7 @@ fn test_fun_0_args() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fn_type!([]());
+                   texpr_fun!(def fun_type!([]());
                               fun "nothing" = expr_empty!()));
     }
 
@@ -92,7 +92,7 @@ fn test_fun_1_arg() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fn_type!([I32](I32));
+                   texpr_fun!(def fun_type!([I32](I32));
                               fun "f" "x" = expr_var!("x" I32)));
     }
 
@@ -110,7 +110,7 @@ fn test_fun_2_arg_multi_value() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fn_type!([I32 I64](I64 I32));
+                   texpr_fun!(def fun_type!([I32 I64](I64 I32));
                               p fun "swap" "x" "y" = expr_multi!(expr_var!("y" I64), expr_var!("x" I32))));
     }
 
@@ -128,12 +128,38 @@ fn test_def_multi_fun() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fn_type!([](I32));
+                   texpr_fun!(def fun_type!([](I32));
                               fun "foo" = expr_const!("0" I32)));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fn_type!([I32](I32));
+                   texpr_fun!(def fun_type!([I32](I32));
                               fun "foo" "n" = expr_var!("n" I32)));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_use_std_wasm_arithmetics() {
+    let mut chars = "let x = add 2 2; let y = mul 3i64 4i64; let z = sub 1.0 0.1;".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_let!("x" = expr_fun_call!("add" expr_const!("2" I32) expr_const!("2" I32);
+                        fun_type!([I32 I32](I32)))));
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_let!("y" = expr_fun_call!("mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
+                        fun_type!([I64 I64](I64)))));
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_let!("z" = expr_fun_call!("sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
+                        fun_type!([F32 F32](F32)))));
     }
 
     assert_eq!(rcv.iter().next(), None);

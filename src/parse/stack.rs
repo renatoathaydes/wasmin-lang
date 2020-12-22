@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::types::Type;
+use crate::wasm_funs::wasm_std_funs;
 
 #[derive(Debug, Clone)]
 pub struct Stack {
@@ -102,7 +103,7 @@ impl Stack {
 
 impl Default for Stack {
     fn default() -> Self {
-        Stack::new()
+        wasm_std_funs()
     }
 }
 

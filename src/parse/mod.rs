@@ -14,7 +14,7 @@ mod parser;
 mod expr_parser;
 mod fun_parser;
 mod top_level_parser;
-mod stack;
+pub(crate) mod stack;
 
 /// Parser of Wasmin programs.
 pub type Parser<'s> = parser::Parser<'s>;

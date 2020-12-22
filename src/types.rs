@@ -23,7 +23,7 @@ pub enum Type {
     Error(TypeError),
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
 pub enum Kind { Const, Var }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -162,15 +162,15 @@ mod tests {
 
     #[test]
     fn test_fn_type_is_assignable_to() {
-        assert!(Fn(vec![fn_type!([]())]).is_assignable_to(&Fn(vec![fn_type!([]())])));
-        assert!(Fn(vec![fn_type!([I32]())]).is_assignable_to(&Fn(vec![fn_type!([I32]())])));
-        assert!(Fn(vec![fn_type!([I32](I64))]).is_assignable_to(&Fn(vec![fn_type!([I32](I64))])));
-        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(&Fn(vec![fn_type!([I32 F32](I64 F64))])));
+        assert!(Fn(vec![fun_type!([]())]).is_assignable_to(&Fn(vec![fun_type!([]())])));
+        assert!(Fn(vec![fun_type!([I32]())]).is_assignable_to(&Fn(vec![fun_type!([I32]())])));
+        assert!(Fn(vec![fun_type!([I32](I64))]).is_assignable_to(&Fn(vec![fun_type!([I32](I64))])));
+        assert!(Fn(vec![fun_type!([I32 F32](I64 F64))]).is_assignable_to(&Fn(vec![fun_type!([I32 F32](I64 F64))])));
 
-        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(
-            &Fn(vec![fn_type!([I32 F32](I64 F64)), fn_type!([](I32))])));
-        assert!(Fn(vec![fn_type!([I32 F32](I64 F64))]).is_assignable_to(
-            &Fn(vec![fn_type!([](I32)), fn_type!([I32 F32](I64 F64))])));
+        assert!(Fn(vec![fun_type!([I32 F32](I64 F64))]).is_assignable_to(
+            &Fn(vec![fun_type!([I32 F32](I64 F64)), fun_type!([](I32))])));
+        assert!(Fn(vec![fun_type!([I32 F32](I64 F64))]).is_assignable_to(
+            &Fn(vec![fun_type!([](I32)), fun_type!([I32 F32](I64 F64))])));
     }
 
     #[test]

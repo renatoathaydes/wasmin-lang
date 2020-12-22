@@ -22,7 +22,7 @@ Feature Checklist:
 - [x] mut assignments.
 - [ ] math operators.
 - [x] function calls.
-- [ ] function implementations.
+- [x] function implementations.
 - [ ] generic functions.
 - [ ] single-line comments.
 - [ ] multi-line comments.
