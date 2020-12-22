@@ -15,6 +15,9 @@ pub type ErrorCode = i32;
 /// It has the purpose of generating output from a Wasmin program (bytecode in a compilation target,
 /// output from an interpreted program, debug information etc.).
 pub trait WasminSink {
+    /// Start writing a module with the given name.
+    fn start(&self, module_name: String) -> Vec<u8>;
+
     /// Receive a [`TopLevelExpression`] from the Wasmin parser.
     ///
     /// If the sink implementation is a compiler, the returned bytes may represent the compilation

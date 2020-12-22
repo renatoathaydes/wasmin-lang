@@ -1,3 +1,4 @@
+use std::io::{Error, ErrorKind, stdout, Write};
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -26,7 +27,7 @@ let three, four = (
     t, add-10 f
 )";
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let opts: CliOptions = CliOptions::from_args();
 
     let (sender, rcvr) = mpsc::channel();
@@ -45,14 +46,23 @@ fn main() {
         };
 
         for expr in rcvr {
-            if let Err(code) = sink.receive(expr) {
-                println!("ERROR: An error has occurred, aborting!");
-                exit(code);
+            match sink.receive(expr) {
+                Ok(bytes) => {
+                    let stdout = stdout();
+                    let mut h = stdout.lock();
+                    h.write_all(&bytes)?;
+                }
+                Err(code) => {
+                    println!("ERROR: An error has occurred, aborting!");
+                    exit(code)
+                }
             }
         }
     }
 
-    parser_handle.join().expect("Parser failed")
+    parser_handle.join()
+        .map(|_| ())
+        .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))
 }
 
 #[derive(StructOpt, Debug)]
