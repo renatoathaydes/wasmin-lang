@@ -65,7 +65,8 @@ enum OutputType {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "wasmin", about = "Wasmin Compiler.")]
 struct CliOptions {
-    #[structopt(short = "f", long = "format", default_value = "wat", help = "output format")]
+    #[structopt(short = "f", long = "format", default_value = "wat",
+    help = "output format (wat, wasm, debug)")]
     output: OutputType,
 }
 
