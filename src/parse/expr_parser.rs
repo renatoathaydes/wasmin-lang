@@ -50,7 +50,7 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                             let args = vec![];
                             let typ = type_of_fn_call(id, types, &args)
                                 .map_err(|reason| TypeError { pos: parser.pos(), reason });
-                            exprs.push(Expression::FnCall { name: words.remove(0), args, typ });
+                            exprs.push(Expression::FunCall { name: words.remove(0), args, typ });
                         }
                     }
                     break;
@@ -160,7 +160,7 @@ fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
                 .map_err(|reason| TypeError { pos: parser.pos(), reason }),
             _ => Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t)))
         };
-        Expression::FnCall { name, args, typ }
+        Expression::FunCall { name, args, typ }
     }
 }
 

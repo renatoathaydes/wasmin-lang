@@ -68,13 +68,13 @@ macro_rules! fn_call {
         $(ins.push($ins);)*
         $(outs.push($outs);)*
         let typ = FnType{ins , outs};
-        FnCall { name: $id.to_string(), args, typ: Ok(typ) }
+        FunCall { name: $id.to_string(), args, typ: Ok(typ) }
     }};
     ($id:literal $($args:expr)* => $err:expr ) => {{
         #[allow(unused_mut)]
         let mut args = Vec::new();
         $(args.push($args);)*
-        FnCall { name: $id.to_string(), args, typ: Err($err) }
+        FunCall { name: $id.to_string(), args, typ: Err($err) }
     }};
 }
 

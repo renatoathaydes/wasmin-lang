@@ -17,7 +17,7 @@ pub enum Expression {
     Mut(Assignment),
     Group(Vec<Expression>),
     Multi(Vec<Expression>),
-    FnCall { name: String, args: Vec<Expression>, typ: Result<FnType, TypeError> },
+    FunCall { name: String, args: Vec<Expression>, typ: Result<FnType, TypeError> },
     ExprError(TypeError),
 }
 
@@ -38,7 +38,7 @@ pub enum TopLevelExpression {
 
 impl Expression {
     pub fn fn_call(name: &str, args: Vec<Expression>, typ: Result<FnType, TypeError>) -> Expression {
-        FnCall { name: name.to_string(), args, typ }
+        FunCall { name: name.to_string(), args, typ }
     }
 
     pub fn get_type(&self) -> Vec<Type> {
@@ -49,7 +49,7 @@ impl Expression {
                 .map_or(Vec::new(), |e| e.get_type()),
             Multi(es) => es.iter()
                 .flat_map(|e| e.get_type()).collect(),
-            FnCall { typ, .. } => match typ {
+            FunCall { typ, .. } => match typ {
                 Ok(t) => t.get_type(),
                 Err(e) => e.get_type(),
             },
@@ -60,7 +60,7 @@ impl Expression {
     pub fn is_empty(&self) -> bool {
         match self {
             Expression::Empty => true,
-            Const(..) | Var(..) | Let(..) | Mut(..) | Multi(_) | FnCall { .. } | ExprError(..) => false,
+            Const(..) | Var(..) | Let(..) | Mut(..) | Multi(_) | FunCall { .. } | ExprError(..) => false,
             Group(es) => es.last()
                 .map_or(true, |e| e.is_empty()),
         }
@@ -69,7 +69,7 @@ impl Expression {
     pub fn into_multi(self) -> Vec<Expression> {
         match self {
             Expression::Empty => vec![],
-            Let(..) | Mut(..) | Const(..) | Var(..) | FnCall { .. } | ExprError(..) | Group(..) => vec![self],
+            Let(..) | Mut(..) | Const(..) | Var(..) | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
             Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
@@ -83,7 +83,7 @@ impl TryInto<TopLevelExpression> for Expression {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
             Let(l) => Ok(TopLevelExpression::Let(l, Visibility::Private)),
             Mut(m) => Ok(TopLevelExpression::Mut(m, Visibility::Private)),
-            Const(..) | Var(..) | Group(..) | Multi(..) | FnCall { .. } =>
+            Const(..) | Var(..) | Group(..) | Multi(..) | FunCall { .. } =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
         }
@@ -159,7 +159,7 @@ macro_rules! expr_fun_call {
         let name = $id.to_owned();
         let mut args = Vec::new();
         $(args.push($arg);)*
-        Expression::FnCall {name, args, typ: Ok($typ)}
+        Expression::FunCall {name, args, typ: Ok($typ)}
     }};
 }
 
