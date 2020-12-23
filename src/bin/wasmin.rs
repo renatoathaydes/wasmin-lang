@@ -1,4 +1,4 @@
-use std::io::{Error, ErrorKind, stdout, Write};
+use std::io::{Read, stdin, stdout, Write};
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -9,40 +9,33 @@ use structopt::{*};
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
 
-// test program
-const PROGRAM: &str = "let constant-ten = 10;
-
-def add-10 [i32] i32;
-fun add-10 n = add n constant-ten;
-
-def add-10 [i64] i64;
-fun add-10 n = add n constant-ten;
-
-pub let one, two = 1, 2;
-
-def three i64;
-let three, four = (
-    let t = 3;
-    let f = 4;
-    t, add-10 f
-)";
-
-fn main() -> std::io::Result<()> {
+fn main() {
     let opts: CliOptions = CliOptions::from_args();
+    match opts {
+        CliOptions::Build { output_format, file } =>
+            compile(&output_format, file),
+        CliOptions::Run => {
+            println!("ERROR: the 'run' sub-command is not supported yet!");
+            exit(-1);
+        }
+    }
+}
 
+fn compile(output_format: &FormatType, file: Option<String>) {
     let (sender, rcvr) = mpsc::channel();
 
     let parser_handle = thread::spawn(move || {
-        let mut chars = PROGRAM.chars();
+        let text = read_program(file);
+        let mut chars = text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
     });
 
     {
-        let sink: Box<dyn WasminSink> = match opts.output {
-            OutputType::DEBUG => Box::new(DebugSink {}),
-            OutputType::WAT => Box::new(Wat {}),
-            OutputType::WASM => Box::new(Wasm {}),
+        let sink: Box<dyn WasminSink> = match output_format {
+            FormatType::DEBUG => Box::new(DebugSink {}),
+            FormatType::WAT => Box::new(Wat {}),
+            FormatType::WASM => Box::new(Wasm {}),
         };
 
         for expr in rcvr {
@@ -50,7 +43,7 @@ fn main() -> std::io::Result<()> {
                 Ok(bytes) => {
                     let stdout = stdout();
                     let mut h = stdout.lock();
-                    h.write_all(&bytes)?;
+                    h.write_all(&bytes).expect("could not write to stdout");
                 }
                 Err(code) => {
                     println!("ERROR: An error has occurred, aborting!");
@@ -60,13 +53,26 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    parser_handle.join()
-        .map(|_| ())
-        .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))
+    parser_handle.join().expect("ERROR in Wasmin parser thread");
+}
+
+fn read_program(file: Option<String>) -> String {
+    match file {
+        Some(f) => {
+            std::fs::read_to_string(&f)
+                .expect(&format!("could not read program from file {}", f))
+        }
+        None => {
+            let mut text = String::with_capacity(512);
+            stdin().lock().read_to_string(&mut text)
+                .expect("could not read program from stdin");
+            text
+        }
+    }
 }
 
 #[derive(StructOpt, Debug)]
-enum OutputType {
+enum FormatType {
     DEBUG,
     WAT,
     WASM,
@@ -74,20 +80,27 @@ enum OutputType {
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "wasmin", about = "Wasmin Compiler.")]
-struct CliOptions {
-    #[structopt(short = "f", long = "format", default_value = "wat",
-    help = "output format (wat, wasm, debug)")]
-    output: OutputType,
+enum CliOptions {
+    /// Build a Wasmin module.
+    Build {
+        #[structopt(short = "f", long = "format", default_value = "wat",
+        help = "output format (wat, wasm, debug)")]
+        output_format: FormatType,
+        /// Wasmin module file. If not given, the module is read from stdin.
+        file: Option<String>,
+    },
+    /// Run a Wasmin module using an interpreter.
+    Run,
 }
 
-impl FromStr for OutputType {
+impl FromStr for FormatType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "debug" => Ok(OutputType::DEBUG),
-            "wat" => Ok(OutputType::WAT),
-            "wasm" => Ok(OutputType::WASM),
+            "debug" => Ok(FormatType::DEBUG),
+            "wat" => Ok(FormatType::WAT),
+            "wasm" => Ok(FormatType::WASM),
             _ => Err("Cannot parse output option".to_owned()),
         }
     }
