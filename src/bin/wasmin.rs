@@ -33,9 +33,9 @@ fn compile(output_format: &FormatType, file: Option<String>) {
     });
 
     {
-        let sink: Box<dyn WasminSink> = match output_format {
+        let mut sink: Box<dyn WasminSink> = match output_format {
             FormatType::DEBUG => Box::new(DebugSink {}),
-            FormatType::WAT => Box::new(Wat {}),
+            FormatType::WAT => Box::<Wat>::default(),
             FormatType::WASM => Box::new(Wasm {}),
         };
 
