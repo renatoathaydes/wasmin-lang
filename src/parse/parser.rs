@@ -239,7 +239,6 @@ impl Parser<'_> {
     }
 
     pub fn parse_expr(&mut self) -> Expression {
-        println!("Calling parse_expr");
         expr_parser::parse_expr(self)
     }
 

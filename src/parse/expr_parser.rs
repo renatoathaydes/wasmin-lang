@@ -17,7 +17,6 @@ pub fn parse_expr(parser: &mut Parser) -> Expression {
 }
 
 fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expression {
-    println!("Parsing expression");
     let mut words = Vec::<String>::with_capacity(2);
     let mut multi = Vec::<Expression>::with_capacity(2);
     let mut exprs = Vec::<Expression>::with_capacity(2);
@@ -46,7 +45,6 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                     if multi.is_empty() && words.len() == 1 {
                         let id = words.last().unwrap();
                         if let Some(Type::Fn(types)) = parser.stack().get(id) {
-                            println!("Special case, single function call");
                             let args = vec![];
                             let typ = type_of_fn_call(id, types, &args)
                                 .map_err(|reason| TypeError { pos: parser.pos(), reason });
@@ -76,7 +74,6 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
             None => { break; }
             _ => {
                 if let Some(word) = parser.parse_word() {
-                    println!("Word: {}", &word);
                     match word.as_str() {
                         "let" | "mut" if words.is_empty() => {
                             match parser.parse_assignment() {
@@ -99,17 +96,13 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
     }
 
     if exprs.is_empty() {
-        println!("exprs is empty");
         create_expr(parser, &mut words)
     } else if exprs.len() == 1 && words.is_empty() {
-        println!("exprs has 1 expr, words is empty");
         exprs.remove(0)
     } else {
         if !words.is_empty() {
-            println!("words is not empty");
             exprs.push(create_expr(parser, &mut words));
         }
-        println!("Group of expressions: {:?}", &exprs);
         Expression::Group(exprs)
     }
 }
@@ -118,7 +111,6 @@ fn consume_expr_with_multi(parser: &mut Parser,
                            words: &mut Vec<String>,
                            exprs: &mut Vec<Expression>,
                            mut multi: Vec<Expression>) {
-    println!("Consuming multi: {:?}", &multi);
     if words.is_empty() && multi.len() == 1 {
         exprs.push(multi.remove(0));
         return;
@@ -138,7 +130,6 @@ fn consume_expr(parser: &mut Parser,
 }
 
 fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
-    println!("To expr: {:?}", words);
     if words.is_empty() {
         Expression::Empty
     } else if words.len() == 1 {
@@ -148,7 +139,6 @@ fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
     } else {
         let name = words.remove(0);
         let args = words.drain(0..).map(|arg| {
-            println!("Arg: {}", &arg);
             let typ = type_of(&arg, parser.stack());
             expr(parser, arg, typ)
         }).collect();

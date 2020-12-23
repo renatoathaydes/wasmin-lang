@@ -66,7 +66,6 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
 }
 
 fn bind_args<'s>(parser: &mut Parser, types: &'s Vec<FnType>, names: &Vec<String>) -> Result<&'s FnType, String> {
-    println!("Binding fun args {:?} to {:?}", names, types);
     let typ = types.get(types.len() - 1).expect("types must not be empty");
     // do not check lengths match here... bind all args we can, an error will happen later if necessary
     for (t, name) in typ.ins.iter().zip(names.iter()) {

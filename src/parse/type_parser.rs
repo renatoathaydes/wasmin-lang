@@ -13,7 +13,6 @@ pub fn parse_type(parser: &mut Parser) -> Type {
 }
 
 fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
-    println!("Parsing type at {:?}", parser.pos());
     if let Some(word) = parser.parse_word() {
         match word.as_ref() {
             "i32" => Type::I32,
@@ -23,7 +22,6 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
             _ => Type::Error(parser.error(&format!("type does not exist: {}", word.clone())))
         }
     } else if let Some('[') = parser.curr_char() {
-        println!("enter args");
         parser.next();
         state.enter(GroupingSymbol::SquareBracket);
         parse_fn_type(parser, state)
@@ -37,7 +35,6 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
 fn parse_fn_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
     let ins = parse_fn_ins(parser, state);
     let outs = parse_fn_outs(parser, state);
-    println!("end fun");
     Fn(vec![FnType { ins, outs }])
 }
 
@@ -46,13 +43,11 @@ fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
     loop {
         parser.skip_spaces();
         if let Some(']') = parser.curr_char() {
-            println!("end args");
             parser.next();
             state.exit_symbol();
             break;
         }
         let typ = parse_type_internal(parser, state);
-        println!("Type: {:?}", &typ);
         let is_error = typ.is_error();
         ins.push(typ);
         if is_error { break; }
@@ -61,12 +56,10 @@ fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
 }
 
 fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
-    println!("in outs");
     let mut outs = Vec::with_capacity(2);
     parser.skip_spaces();
     let in_parens = match parser.curr_char() {
         Some('(') => {
-            println!("enter parens");
             state.enter(GroupingSymbol::Parens);
             parser.next();
             true
@@ -78,7 +71,6 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
         match parser.curr_char() {
             Some(')') => {
                 if in_parens {
-                    println!("end parens");
                     state.exit_symbol();
                     parser.next();
                     consume_optional_semi_colon(parser);
@@ -101,7 +93,6 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
             _ => {}
         }
         let typ = parse_type_internal(parser, state);
-        println!("Type: {:?}", &typ);
         let is_error = typ.is_error();
         outs.push(typ);
         if is_error { break; }
