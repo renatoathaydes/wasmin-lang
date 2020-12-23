@@ -5,7 +5,7 @@ pub struct Wat;
 
 impl WasminSink for Wat {
     fn start(&self, module_name: String) -> Vec<u8> {
-        format!("({}\n", module_name).into_bytes()
+        format!("(module {}\n", module_name).into_bytes()
     }
 
     fn receive(&self, expr: TopLevelExpression) -> Result<Vec<u8>, i32> {

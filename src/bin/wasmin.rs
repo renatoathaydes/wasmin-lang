@@ -7,7 +7,7 @@ use std::thread;
 use structopt::{*};
 
 use wasmin::parse::new_parser;
-use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
+use wasmin::sink::{DebugSink, ErrorCode, Wasm, WasminSink, Wat};
 
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
@@ -24,8 +24,9 @@ fn main() {
 fn compile(output_format: &FormatType, file: Option<String>) {
     let (sender, rcvr) = mpsc::channel();
 
+    let file_name = file.clone();
     let parser_handle = thread::spawn(move || {
-        let text = read_program(file);
+        let text = read_program(file_name);
         let mut chars = text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
@@ -38,22 +39,40 @@ fn compile(output_format: &FormatType, file: Option<String>) {
             FormatType::WASM => Box::new(Wasm {}),
         };
 
-        for expr in rcvr {
-            match sink.receive(expr) {
-                Ok(bytes) => {
-                    let stdout = stdout();
-                    let mut h = stdout.lock();
-                    h.write_all(&bytes).expect("could not write to stdout");
-                }
-                Err(code) => {
-                    println!("ERROR: An error has occurred, aborting!");
-                    exit(code)
-                }
-            }
+        {
+            let mod_name = file.map(|n|
+                n[0..n.rfind(".").unwrap_or(n.len())].to_owned()
+            ).unwrap_or("std_module".to_owned());
+
+            let bytes = sink.start(mod_name);
+            write_to_stdout(&bytes);
         }
+
+        for expr in rcvr {
+            try_write_to_stdout(sink.receive(expr));
+        }
+        try_write_to_stdout(sink.flush());
     }
 
     parser_handle.join().expect("ERROR in Wasmin parser thread");
+}
+
+fn write_to_stdout(bytes: &Vec<u8>) {
+    let stdout = stdout();
+    let mut h = stdout.lock();
+    h.write_all(&bytes).expect("could not write to stdout");
+}
+
+fn try_write_to_stdout(result: Result<Vec<u8>, ErrorCode>) {
+    match result {
+        Ok(bytes) => {
+            write_to_stdout(&bytes);
+        }
+        Err(code) => {
+            println!("ERROR: An error has occurred, aborting!");
+            exit(code);
+        }
+    }
 }
 
 fn read_program(file: Option<String>) -> String {
