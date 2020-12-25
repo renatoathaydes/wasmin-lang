@@ -12,8 +12,8 @@ pub type Fun = (String, Vec<String>, Expression, FnType);
 pub enum Expression {
     Empty,
     Const(String, Type),
-    // FIXME is this local or global
-    Var(String, Type),
+    Local(String, Type),
+    Global(String, Type),
     Let(Assignment),
     Mut(Assignment),
     Group(Vec<Expression>),
@@ -45,7 +45,7 @@ impl Expression {
     pub fn get_type(&self) -> Vec<Type> {
         match self {
             Expression::Empty | Let(..) | Mut(..) => Vec::new(),
-            Const(.., typ) | Var(.., typ) => vec![typ.clone()],
+            Const(.., typ) | Local(.., typ) | Global(.., typ) => vec![typ.clone()],
             Group(es) => es.last()
                 .map_or(Vec::new(), |e| e.get_type()),
             Multi(es) => es.iter()
@@ -61,7 +61,7 @@ impl Expression {
     pub fn is_empty(&self) -> bool {
         match self {
             Expression::Empty => true,
-            Const(..) | Var(..) | Let(..) | Mut(..) | Multi(_) | FunCall { .. } | ExprError(..) => false,
+            Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Multi(_) | FunCall { .. } | ExprError(..) => false,
             Group(es) => es.last()
                 .map_or(true, |e| e.is_empty()),
         }
@@ -70,7 +70,7 @@ impl Expression {
     pub fn into_multi(self) -> Vec<Expression> {
         match self {
             Expression::Empty => vec![],
-            Let(..) | Mut(..) | Const(..) | Var(..) | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
+            Let(..) | Mut(..) | Const(..) | Local(..) | Global(..) | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
             Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
@@ -84,7 +84,7 @@ impl TryInto<TopLevelExpression> for Expression {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
             Let(l) => Ok(TopLevelExpression::Let(l, Visibility::Private)),
             Mut(m) => Ok(TopLevelExpression::Mut(m, Visibility::Private)),
-            Const(..) | Var(..) | Group(..) | Multi(..) | FunCall { .. } =>
+            Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
         }
@@ -108,8 +108,13 @@ macro_rules! expr_const {
 }
 
 #[macro_export]
-macro_rules! expr_var {
-    ($id:literal $typ:expr) => { Expression::Var($id.to_string(), $typ) }
+macro_rules! expr_local {
+    ($id:literal $typ:expr) => { Expression::Local($id.to_string(), $typ) }
+}
+
+#[macro_export]
+macro_rules! expr_global {
+    ($id:literal $typ:expr) => { Expression::Global($id.to_string(), $typ) }
 }
 
 #[macro_export]

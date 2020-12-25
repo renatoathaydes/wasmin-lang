@@ -72,13 +72,17 @@ impl Stack {
         }
     }
 
-    pub fn get(&self, id: &str) -> Option<&Type> {
+    pub fn get_is_global(&self, id: &str) -> Option<(&Type, bool)> {
         (0..self.items.len()).rev().find_map(|i| {
             let symbols = self.items.get(i).unwrap();
             if let Some(entry) = symbols.get(id) {
-                Some(&entry.typ)
+                Some((&entry.typ, i == 0))
             } else { None }
         })
+    }
+
+    pub fn get(&self, id: &str) -> Option<&Type> {
+        self.get_is_global(id).map(|(t, _)| t)
     }
 
     pub fn get_def(&self, id: &str) -> Option<&Type> {
@@ -157,6 +161,44 @@ mod stack_tests {
         assert_eq!(stack.get(&"z"), None);
         assert_eq!(stack.get(&"bar"), None);
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
+    }
+
+    #[test]
+    fn stack_gets_closer_bindings_first() {
+        let mut stack = Stack::new();
+        stack.push("foo".to_string(), Type::I32, false).unwrap();
+        stack.new_level();
+        stack.push("foo".to_string(), Type::I64, false).unwrap();
+        stack.new_level();
+        stack.push("foo".to_string(), Type::F32, false).unwrap();
+
+        assert_eq!(stack.get(&"foo"), Some(&Type::F32));
+        stack.drop_level();
+        assert_eq!(stack.get(&"foo"), Some(&Type::I64));
+        stack.drop_level();
+        assert_eq!(stack.get(&"foo"), Some(&Type::I32));
+    }
+
+    #[test]
+    fn stack_knows_globals_and_locals() {
+        let mut stack = Stack::new();
+        stack.push("foo".to_string(), Type::I32, false).unwrap();
+        stack.push("bar".to_string(), Type::I32, false).unwrap();
+        stack.new_level();
+        stack.push("foo".to_string(), Type::I64, false).unwrap();
+        stack.new_level();
+        stack.push("zort".to_string(), Type::F64, false).unwrap();
+
+        assert_eq!(stack.get_is_global(&"foo"), Some((&Type::I64, false)));
+        assert_eq!(stack.get_is_global(&"bar"), Some((&Type::I32, true)));
+        assert_eq!(stack.get_is_global(&"zort"), Some((&Type::F64, false)));
+        stack.drop_level();
+        assert_eq!(stack.get_is_global(&"foo"), Some((&Type::I64, false)));
+        assert_eq!(stack.get_is_global(&"bar"), Some((&Type::I32, true)));
+        assert_eq!(stack.get_is_global(&"zort"), None);
+        stack.drop_level();
+        assert_eq!(stack.get_is_global(&"foo"), Some((&Type::I32, true)));
+        assert_eq!(stack.get_is_global(&"bar"), Some((&Type::I32, true)));
     }
 
     #[test]

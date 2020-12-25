@@ -24,7 +24,7 @@ pub enum Type {
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
-pub enum Kind { Const, Var }
+pub enum Kind { Const, Local, Global }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct TypedElement {

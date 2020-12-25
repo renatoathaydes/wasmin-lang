@@ -85,14 +85,14 @@ fn test_type_of_empty() {
 
 #[test]
 fn test_type_of_var() {
-    assert_eq!(type_of!("foo", "foo" => F32), Ok((F32, Kind::Var)));
+    assert_eq!(type_of!("foo", "foo" => F32), Ok((F32, Kind::Global)));
     assert_eq!(type_of!("bar", "foo" => F32),
-               Err("variable \'bar\' does not exist".to_string()));
-    assert_eq!(type_of!("bar", "foo" => F32, "bar" => I64), Ok((I64, Kind::Var)));
+               Err("\'bar\' does not exist in this scope".to_string()));
+    assert_eq!(type_of!("bar", "foo" => F32, "bar" => I64), Ok((I64, Kind::Global)));
 
     // funny variable names
-    assert_eq!(type_of!("--", "++" => F32, "--" => I64), Ok((I64, Kind::Var)));
-    assert_eq!(type_of!("++", "++" => F32, "--" => I64), Ok((F32, Kind::Var)));
+    assert_eq!(type_of!("--", "++" => F32, "--" => I64), Ok((I64, Kind::Global)));
+    assert_eq!(type_of!("++", "++" => F32, "--" => I64), Ok((F32, Kind::Global)));
 }
 
 #[test]
@@ -199,11 +199,11 @@ fn test_expr_single_item_nested() {
 }
 
 #[test]
-fn test_var() {
-    assert_eq!(parse_expr!("bar", "bar" => I32), Var(String::from("bar"), I32));
-    assert_eq!(parse_expr!("(foo)", "foo" => I64), Var(String::from("foo"), I64));
+fn test_global() {
+    assert_eq!(parse_expr!("bar", "bar" => I32), Global(String::from("bar"), I32));
+    assert_eq!(parse_expr!("(foo)", "foo" => I64), Global(String::from("foo"), I64));
     assert_eq!(parse_expr!("zort"), ExprError(TypeError {
-        reason: "variable 'zort' does not exist".to_string(),
+        reason: "'zort' does not exist in this scope".to_string(),
         pos: (0, 4),
     }));
 }
@@ -225,7 +225,7 @@ fn test_fn_call_basic() {
 
     // function without args: only invoke the function if it's alone within parens
     assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
-               Var(String::from("no-args"), Fn(vec![FnType { ins: vec![], outs: vec![I32] }])));
+               Global(String::from("no-args"), Fn(vec![FnType { ins: vec![], outs: vec![I32] }])));
 
     assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
                fn_call!("no-args" => [] I32));

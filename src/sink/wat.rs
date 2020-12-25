@@ -62,7 +62,12 @@ impl Wat {
                 w.write_all(id.as_bytes())?;
                 w.write_all(b")")
             }
-            Expression::Var(id, _) => {
+            Expression::Global(id, _) => {
+                w.write_all(b"(global.get $")?;
+                w.write_all(id.as_bytes())?;
+                w.write_all(b")")
+            }
+            Expression::Local(id, _) => {
                 w.write_all(b"(local.get $")?;
                 w.write_all(id.as_bytes())?;
                 w.write_all(b")")

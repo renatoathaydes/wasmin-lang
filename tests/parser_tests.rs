@@ -18,7 +18,7 @@ fn test_let() {
 
         assert_eq!(rcv.iter().next().unwrap(), texpr_let!("x" = expr_const!("1" I32)));
         assert_eq!(rcv.iter().next().unwrap(), texpr_let!("y" =
-        expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_var!("z" I32))));
+        expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_local!("z" I32))));
         assert_eq!(rcv.iter().next().unwrap(), texpr_let!(p "PI" = expr_const!("3.14" F32)));
     }
 
@@ -93,7 +93,7 @@ fn test_fun_1_arg() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    texpr_fun!(def fun_type!([I32](I32));
-                              fun "f" "x" = expr_var!("x" I32)));
+                              fun "f" "x" = expr_local!("x" I32)));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -111,7 +111,7 @@ fn test_fun_2_arg_multi_value() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    texpr_fun!(def fun_type!([I32 I64](I64 I32));
-                              p fun "swap" "x" "y" = expr_multi!(expr_var!("y" I64), expr_var!("x" I32))));
+                              p fun "swap" "x" "y" = expr_multi!(expr_local!("y" I64), expr_local!("x" I32))));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -133,7 +133,7 @@ fn test_def_multi_fun() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    texpr_fun!(def fun_type!([I32](I32));
-                              fun "foo" "n" = expr_var!("n" I32)));
+                              fun "foo" "n" = expr_local!("n" I32)));
     }
 
     assert_eq!(rcv.iter().next(), None);

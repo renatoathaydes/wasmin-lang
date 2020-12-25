@@ -166,7 +166,7 @@ fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>
 
     for typ in fn_types {
         if typ.ins.is_empty() && arg_types.is_empty() {
-            return Ok(typ.clone())
+            return Ok(typ.clone());
         }
         if typ.ins.len() == arg_types.len() {
             let matching_fun = typ.ins.iter().zip(arg_types.iter())
@@ -194,7 +194,8 @@ fn expr(parser: &mut Parser, word: String, typ: Result<TypedElement, String>) ->
     match typ {
         Ok(t) => match t.kind {
             Kind::Const => Expression::Const(word, t.typ),
-            Kind::Var => Expression::Var(word, t.typ),
+            Kind::Global => Expression::Global(word, t.typ),
+            Kind::Local => Expression::Local(word, t.typ),
         }
         Err(e) => ExprError(TypeError { reason: e, pos: parser.pos() })
     }
@@ -223,8 +224,9 @@ fn type_of_with_sign(
 }
 
 fn type_of_var(str: &str, stack: &Stack) -> Result<TypedElement, String> {
-    stack.get(str).map(|t| Ok(TypedElement { typ: t.to_owned(), kind: Kind::Var }))
-        .unwrap_or_else(|| Err(format!("variable '{}' does not exist", str)))
+    stack.get_is_global(str).map(|(t, is_global)|
+        Ok(TypedElement { typ: t.to_owned(), kind: if is_global { Kind::Global } else { Kind::Local } })
+    ).unwrap_or_else(|| Err(format!("'{}' does not exist in this scope", str)))
 }
 
 fn type_of_num(first_digit: char, chars: &mut Chars) -> Result<Type, String> {
