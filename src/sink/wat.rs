@@ -31,18 +31,18 @@ impl Wat {
         id: &String,
         expr: &Expression,
         vis: &Visibility,
-        is_mut: bool,
         is_global: bool,
     ) -> Result<()> {
-        w.write_all(if is_global { b"(global.set $" } else { b"(local.set $" })?;
-        w.write_all(id.as_bytes())?;
+        let def = if is_global {
+            format!("(global ${} {} ", id, expr.get_type().get(0).unwrap().to_string())
+        } else {
+            format!("(local.set ${} ", id)
+        };
+        w.write_all(def.as_bytes())?;
         if vis == &Visibility::Public {
-            w.write_all(b" (export \"")?;
+            w.write_all(b"(export \"")?;
             w.write_all(id.as_bytes())?;
-            w.write_all(b"\")")?;
-        }
-        for typ in expr.get_type() {
-            w.write_all(format!(" ({}{}) ", if is_mut { "mut " } else { "" }, typ).as_bytes())?;
+            w.write_all(b"\") ")?;
         }
         self.write_expr(&mut w, &expr)?;
         w.write_all(b")")
@@ -76,14 +76,14 @@ impl Wat {
                 let use_new_lines = !assign.0.is_empty();
                 for_each_assignment(&mut w, assign, |mut w2, id, expr, is_first| {
                     if !is_first && use_new_lines { self.start_expr(w2)?; }
-                    self.write_assignment(&mut w2, &id, &expr, &Visibility::Private, false, false)
+                    self.write_assignment(&mut w2, &id, &expr, &Visibility::Private, false)
                 })
             }
             Expression::Mut(assign) => {
                 let use_new_lines = !assign.0.is_empty();
                 for_each_assignment(&mut w, assign, |mut w2, id, expr, is_first| {
                     if !is_first && use_new_lines { self.start_expr(w2)?; }
-                    self.write_assignment(&mut w2, &id, &expr, &Visibility::Private, true, false)
+                    self.write_assignment(&mut w2, &id, &expr, &Visibility::Private, false)
                 })
             }
             Expression::Multi(exprs) | Expression::Group(exprs) => {
@@ -135,13 +135,13 @@ impl WasminSink for Wat {
         match expr {
             TopLevelExpression::Let(assign, vis) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
-                    self.write_assignment(&mut w2, &id, &expr, &vis, true, true)?;
+                    self.write_assignment(&mut w2, &id, &expr, &vis, true)?;
                     w2.write_all(b"\n")
                 })
             }
             TopLevelExpression::Mut(assign, vis) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
-                    self.write_assignment(&mut w2, &id, &expr, &vis, true, true)?;
+                    self.write_assignment(&mut w2, &id, &expr, &vis, true)?;
                     w2.write_all(b"\n")
                 })
             }
