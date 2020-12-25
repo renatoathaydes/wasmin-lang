@@ -7,13 +7,20 @@ use std::thread;
 use structopt::{*};
 
 use wasmin::parse::new_parser;
-use wasmin::sink::{DebugSink, ErrorCode, Wasm, WasminSink, Wat};
+use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
 
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
     match opts {
-        CliOptions::Build { output_format, file } =>
-            compile(&output_format, file),
+        CliOptions::Build { output_format, file } => {
+            match compile(&output_format, file) {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("ERROR: {}", e);
+                    exit(-1);
+                }
+            }
+        }
         CliOptions::Run => {
             println!("ERROR: the 'run' sub-command is not supported yet!");
             exit(-1);
@@ -21,7 +28,7 @@ fn main() {
     }
 }
 
-fn compile(output_format: &FormatType, file: Option<String>) {
+fn compile(output_format: &FormatType, file: Option<String>) -> Result<(), String> {
     let (sender, rcvr) = mpsc::channel();
 
     let file_name = file.clone();
@@ -39,40 +46,24 @@ fn compile(output_format: &FormatType, file: Option<String>) {
             FormatType::WASM => Box::new(Wasm {}),
         };
 
+        let mut writer: Box<dyn Write> = Box::new(stdout());
+
         {
             let mod_name = file.map(|n|
                 n[0..n.rfind(".").unwrap_or(n.len())].to_owned()
             ).unwrap_or("std_module".to_owned());
 
-            let bytes = sink.start(mod_name);
-            write_to_stdout(&bytes);
+            sink.start(mod_name, &mut writer).map_err(|e| e.to_string())?
         }
 
         for expr in rcvr {
-            try_write_to_stdout(sink.receive(expr));
+            sink.receive(expr, &mut writer).map_err(|e| e.to_string())?
         }
-        try_write_to_stdout(sink.flush());
+        sink.flush(&mut writer).map_err(|e| e.to_string())?
     }
 
-    parser_handle.join().expect("ERROR in Wasmin parser thread");
-}
-
-fn write_to_stdout(bytes: &Vec<u8>) {
-    let stdout = stdout();
-    let mut h = stdout.lock();
-    h.write_all(&bytes).expect("could not write to stdout");
-}
-
-fn try_write_to_stdout(result: Result<Vec<u8>, ErrorCode>) {
-    match result {
-        Ok(bytes) => {
-            write_to_stdout(&bytes);
-        }
-        Err(code) => {
-            println!("ERROR: An error has occurred, aborting!");
-            exit(code);
-        }
-    }
+    parser_handle.join().expect("ERROR: parser thread error.");
+    Ok(())
 }
 
 fn read_program(file: Option<String>) -> String {

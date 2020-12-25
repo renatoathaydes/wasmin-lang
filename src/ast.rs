@@ -12,6 +12,7 @@ pub type Fun = (String, Vec<String>, Expression, FnType);
 pub enum Expression {
     Empty,
     Const(String, Type),
+    // FIXME is this local or global
     Var(String, Type),
     Let(Assignment),
     Mut(Assignment),

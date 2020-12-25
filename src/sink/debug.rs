@@ -1,18 +1,23 @@
+use std::io::{Result, Write};
+
 use crate::ast::TopLevelExpression;
 use crate::sink::WasminSink;
 
+#[derive(Default)]
 pub struct DebugSink;
 
 impl WasminSink for DebugSink {
-    fn start(&mut self, module_name: String) -> Vec<u8> {
-        format!("({}\n", module_name).into_bytes()
+    fn start(&mut self, module_name: String, w: &mut Box<dyn Write>) -> Result<()> {
+        w.write_all(b"(")?;
+        w.write_all(module_name.as_bytes())?;
+        w.write_all(b"\n")
     }
 
-    fn receive(&mut self, expr: TopLevelExpression) -> Result<Vec<u8>, i32> {
-        Ok(format!("{:?}\n", expr).into_bytes())
+    fn receive(&mut self, expr: TopLevelExpression, w: &mut Box<dyn Write>) -> Result<()> {
+        w.write_all(format!("  {:?}\n", expr).as_bytes())
     }
 
-    fn flush(&mut self) -> Result<Vec<u8>, i32> {
-        Ok(format!(")\n").into_bytes())
+    fn flush(&mut self, w: &mut Box<dyn Write>) -> Result<()> {
+        w.write_all(b")")
     }
 }
