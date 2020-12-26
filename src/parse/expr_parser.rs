@@ -48,7 +48,7 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                             let args = vec![];
                             let typ = type_of_fn_call(id, types, &args)
                                 .map_err(|reason| TypeError { pos: parser.pos(), reason });
-                            exprs.push(Expression::FunCall { name: words.remove(0), args, typ });
+                            exprs.push(Expression::FunCall { name: words.remove(0), args, typ, is_wasm_fun: false });
                         }
                     }
                     break;
@@ -144,13 +144,17 @@ fn create_expr(parser: &mut Parser, words: &mut Vec<String>) -> Expression {
         }).collect();
         let t = parser.stack().get(&name).cloned()
             .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown function: '{}'", &name))));
-        let typ: Result<FnType, TypeError> = match t {
-            Type::Error(e) => Err(e),
-            Type::Fn(types) => type_of_fn_call(&name, &types, &args)
-                .map_err(|reason| TypeError { pos: parser.pos(), reason }),
-            _ => Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t)))
+        let (typ, is_wasm_fun): (Result<FnType, TypeError>, bool) = match t {
+            Type::Error(e) => (Err(e), false),
+            Type::Fn(types) =>
+                (type_of_fn_call(&name, &types, &args)
+                     .map_err(|reason| TypeError { pos: parser.pos(), reason }), false),
+            Type::WasmFn(types) =>
+                (type_of_fn_call(&name, &types, &args)
+                     .map_err(|reason| TypeError { pos: parser.pos(), reason }), true),
+            _ => (Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t))), false)
         };
-        Expression::FunCall { name, args, typ }
+        Expression::FunCall { name, args, typ, is_wasm_fun }
     }
 }
 

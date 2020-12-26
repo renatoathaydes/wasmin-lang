@@ -150,15 +150,15 @@ fn test_use_std_wasm_arithmetics() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("x" = expr_fun_call!("add" expr_const!("2" I32) expr_const!("2" I32);
+                   texpr_let!("x" = expr_fun_call!(wasm "add" expr_const!("2" I32) expr_const!("2" I32);
                         fun_type!([I32 I32](I32)))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("y" = expr_fun_call!("mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
+                   texpr_let!("y" = expr_fun_call!(wasm "mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
                         fun_type!([I64 I64](I64)))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("z" = expr_fun_call!("sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
+                   texpr_let!("z" = expr_fun_call!(wasm "sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
                         fun_type!([F32 F32](F32)))));
     }
 

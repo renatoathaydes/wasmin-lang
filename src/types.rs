@@ -20,6 +20,7 @@ pub enum Type {
     F32,
     Empty,
     Fn(Vec<FnType>),
+    WasmFn(Vec<FnType>),
     Error(TypeError),
 }
 
@@ -85,7 +86,7 @@ impl fmt::Display for Type {
             Type::F64 => write!(f, "f64")?,
             Type::F32 => write!(f, "f32")?,
             Type::Empty => write!(f, "()")?,
-            Type::Fn(types) => {
+            Type::Fn(types) | Type::WasmFn(types) => {
                 write!(f, "(")?;
                 let text = types.iter().map(|t| format!("{}", t))
                     .collect::<Vec<_>>().join(" | ");

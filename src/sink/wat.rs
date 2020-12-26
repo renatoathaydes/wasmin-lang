@@ -95,7 +95,10 @@ impl Wat {
                 }
                 Ok(())
             }
-            Expression::FunCall { name, args, .. } => {
+            Expression::FunCall { name, args, is_wasm_fun, typ } => {
+                if let Err(e) = typ {
+                    return self.error(e.reason.as_str(), e.pos);
+                }
                 let mut is_first = true;
                 for arg in args {
                     if !is_first { self.start_expr(w)?; }
@@ -105,11 +108,19 @@ impl Wat {
                 if !args.is_empty() {
                     self.start_expr(w)?;
                 }
-                w.write_all(b"(call $")?;
-                w.write_all(name.as_bytes())?;
-                w.write_all(b")")
+                if *is_wasm_fun {
+                    // this is safe because we checked for errors above and
+                    // WASM functions always have at least one argument.
+                    let t = typ.as_ref().unwrap().ins.get(0).unwrap();
+                    w.write_all(format!("({}.{})", t, name).as_bytes())
+                } else {
+                    w.write_all(b"(call $")?;
+                    w.write_all(name.as_bytes())?;
+                    w.write_all(b")")
+                }
             }
-            Expression::ExprError(_) => Ok(()),
+            Expression::ExprError(e) =>
+                self.error(e.reason.as_str(), e.pos),
         }
     }
 
@@ -121,6 +132,13 @@ impl Wat {
     fn start_texpr(w: &mut Box<dyn Write>) -> Result<()> {
         w.write_all(b"\n")?;
         w.write_all(ONE_IDENT.as_bytes())
+    }
+
+    fn error(&self, msg: &str, pos: (usize, usize)) -> Result<()> {
+        let (row, col) = pos;
+        Err(std::io::Error::new(
+            ErrorKind::Other,
+            format!("ERROR: {}[{},{}]: {}\n", self.mod_name, row, col, msg)))
     }
 }
 
@@ -180,10 +198,8 @@ impl WasminSink for Wat {
                 w.write_all(self.ident.as_bytes())?;
                 w.write_all(b")\n")
             }
-            TopLevelExpression::Error(e, (row, col)) =>
-                Err(std::io::Error::new(
-                    ErrorKind::Other,
-                    format!("ERROR: {}[{},{}]: {}\n", self.mod_name, row, col, e)))
+            TopLevelExpression::Error(e, pos) =>
+                self.error(e.as_str(), pos)
         }
     }
 

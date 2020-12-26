@@ -18,7 +18,12 @@ pub enum Expression {
     Mut(Assignment),
     Group(Vec<Expression>),
     Multi(Vec<Expression>),
-    FunCall { name: String, args: Vec<Expression>, typ: Result<FnType, TypeError> },
+    FunCall {
+        name: String,
+        args: Vec<Expression>,
+        typ: Result<FnType, TypeError>,
+        is_wasm_fun: bool,
+    },
     ExprError(TypeError),
 }
 
@@ -38,10 +43,6 @@ pub enum TopLevelExpression {
 }
 
 impl Expression {
-    pub fn fn_call(name: &str, args: Vec<Expression>, typ: Result<FnType, TypeError>) -> Expression {
-        FunCall { name: name.to_string(), args, typ }
-    }
-
     pub fn get_type(&self) -> Vec<Type> {
         match self {
             Expression::Empty | Let(..) | Mut(..) => Vec::new(),
@@ -165,7 +166,14 @@ macro_rules! expr_fun_call {
         let name = $id.to_owned();
         let mut args = Vec::new();
         $(args.push($arg);)*
-        Expression::FunCall {name, args, typ: Ok($typ)}
+        Expression::FunCall {name, args, typ: Ok($typ), is_wasm_fun: false}
+    }};
+    (wasm $id:literal $($arg:expr)* ; $typ:expr) => {{
+        use crate::ast::Expression;
+        let name = $id.to_owned();
+        let mut args = Vec::new();
+        $(args.push($arg);)*
+        Expression::FunCall {name, args, typ: Ok($typ), is_wasm_fun: true}
     }};
 }
 

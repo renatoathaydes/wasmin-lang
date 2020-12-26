@@ -33,6 +33,17 @@ impl Stack {
         let symbols = self.items.get_mut(last_index).unwrap();
         if let Some(mut entry) = symbols.get_mut(&id) {
             match (entry.is_def, is_def, &mut entry.typ) {
+                (true, true, &mut Type::WasmFn(ref mut current_types)) => {
+                    match typ {
+                        Type::WasmFn(mut t) => {
+                            current_types.push(t.remove(0));
+                        }
+                        _ => {
+                            return Err(format!("Cannot re-define WASM native function '{}'", &id));
+                        }
+                    }
+                    Ok(None)
+                }
                 // was def, is def
                 (true, false, _) => {
                     if !typ.is_assignable_to(&entry.typ) {
