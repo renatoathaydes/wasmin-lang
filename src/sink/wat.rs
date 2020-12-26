@@ -138,7 +138,7 @@ impl Wat {
         let (row, col) = pos;
         Err(std::io::Error::new(
             ErrorKind::Other,
-            format!("ERROR: {}[{},{}]: {}\n", self.mod_name, row, col, msg)))
+            format!("{}[{},{}]: {}\n", self.mod_name, row, col, msg)))
     }
 }
 

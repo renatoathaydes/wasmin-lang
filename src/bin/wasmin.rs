@@ -1,4 +1,5 @@
 use std::io::{Read, stdin, stdout, Write};
+use std::io::stderr;
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -16,7 +17,8 @@ fn main() {
             match compile(&output_format, file) {
                 Ok(_) => {}
                 Err(e) => {
-                    println!("ERROR: {}", e);
+                    stderr().lock().write_all(format!("ERROR: {}", e).as_bytes())
+                        .expect("cannot write to stderr");
                     exit(-1);
                 }
             }
