@@ -61,73 +61,116 @@ Because it only contains primitives that can be mapped easily to WASM, it should
 as hand-written WASM programs on any platform.
 
 Wasmin is statically typed, non-garbage-collected
-(but requires no memory management thanks to [linear types](http://home.pipeline.com/~hbaker1/ForthStack.html),
-which do not generate garbage) and supports the procedural and concatenative programming paradigms.
+(but requires no memory management thanks to [linear types](http://home.pipeline.com/~hbaker1/ForthStack.html), which do
+not generate garbage) and supports the procedural and concatenative programming paradigms.
 
-### Basics
+## Tour of Wasmin
 
 The basic constructs of a Wasmin program are **expressions**.
 
-Expressions are simply arrangements of symbols, constants and other expressions which evaluate to a value or perform some
-side-effect.
+Expressions are arrangements of symbols, constants and other expressions which evaluate to zero or more values.
 
-An expression may consist of several sub-expressions that are evaluated in sequence within a parenthesis-demarked
-group. Its value is that of the last sub-expression. To separate each sub-expression, either group each of them within
-parenthesis, or add a semi-colon `;` between them.
+Expressions have the following forms:
+
+- `()` empty expression.
+- `1`, `0.1`, `1i64`, `0.1f64` (constants).
+- `let name = expr;` (single let expression, used for immutable assignments).
+- `let name1, name2 = expr1, expr2` (multi-value let expression).
+- `mut name = expr;` (`mut` is like let, but for mutable assignments).
+- `set name = expr;` (`set` is used to re-assign a `mut` variable).
+- `function arg1 arg2;` (function call).
+- `(function arg1 arg2)` (alternative function call syntax).
+- `function(arg1, arg2);` (same as previous two examples, uses multi-values to mimic C-like function call).
+- `(expr1; expr2)` (group of expressions, evaluates to the value of the last one).
+- `expr1 > expr2 > function;` (concatenative style, each expression is pushed to the stack)
 
 For example, these are all expressions:
 
 - `0` (the constant `0`, of type `i64`, or 64-bit integer).
 - `(0)` (same as previous).
-- `add 1 2` (calls function<sup><a href="#footnote-1">[1]</a></sup> `add` with arguments `1` and `2`).
-- `(let n = 1; add n 3)` (one expression grouping two others<sup><a href="#footnote-2">[2]</a></sup> - evaluates to the result of the last one).
+- `add 1 2` (calls the native WASM `i32.add` function with arguments `1` and `2`, which have type `i32`).
+- `(let n = 1; add n 3)` (assigns `1` to the variable `n`, then calls `add` with `n` and `3` as arguments).
 - `1 > 2 > add` (same as `add 1 2`, using concatenative style).
+- `1 >add 2` (same as previous example).
+
+The last example shows that the concatenative style allows certain expressions to be written in a more natural way, in
+this case using what looks like the familiar "infix operator" syntax.
+
+Notice that expressions within parenthesis are self-contained. You cannot do this for example:
+
+```rust
+# wrong!
+let x = (add 2) 3;
+```
+
+The above example would try to assign the result of `add 2` to `x` (which wont' work because `add` takes two arguments),
+then the expression `3` appears outside of the previous `let` expression, in an illegal location
+(only `let`, `mut` and as we'll see below, `def` and `fun` can appear as top-level elements).
+
+These, however, would be fine:
+
+```rust
+# ok!
+let x = add (2) (3);
+let y = (add 2 3)
+let z = add (2, 3);
+```
+
+Basically, if an expression does not start with `(`, it must end with `;`.
+
+Multi-value expressions are separated by `,`.
+
+In the example above, `add (2, 3)` actually creates an expression whose second term evalutes to two values, `2` and `3`,
+which then are passed as arguments to the first term, the `add`
+function, and hence is equivalent to just `(add 2 3)` (but _accidentally_ looks like a C-like function call).
 
 > Wasmin source code must always be encoded using UTF-8.
 
-### Let expressions
+To complete the description of the Wasmin syntax, there are just a couple more concepts to learn:
 
-In order to bind the value of an expression to an identifier, a `let` expression can be used.
+- `def` defines the type of a term.
+- `fun` is used to implement a function.
 
-Let expressions always evaluate to `empty`, or `()` (which cannot be assigned or returned) and have the form:
+`def`s are optional for `let` and `mut` bindings (it is always possible to infer their types), but mandatory for `fun`.
 
-```
-let <identifiers>,* = <expressions>,*
-```
+To make a `fun` or `let` visible outside the module (i.e. add them to the WASM module's exports), declare them
+with `pub`. For example, `pub let PI = 3.1415;`.
 
-For example:
+> Notice that `mut` bindings cannot be exported. This is a WASM restriction.
 
-```rust
-let constant-ten = 10;
+Types have a simple syntax:
 
-let one, two = 1, 2;
+- `i32`, `i64`, `f32`, `f64` - native WASM types.
+- `[i32]i32` - function from one `i32` to another `i32` value.
+- `[i32 i32] f32 f32` - function from two `i32` values, to two `f32` values.
 
-let three, four = (
-    let t = 3;
-    let f = 4;
-    t, f
-)
-```
-
-Optionally, the type of an identifier can be defined with the `def` keyword before it's assigned:
+In this example, we define and implement a simple identity function:
 
 ```rust
-def ten i32;
-let ten = 10;
+def identity [i32] i32;
+fun identity n = n;
 ```
 
-This is mostly useful when exporting an identifier, as we'll see later.
-
-### Mut expressions
-
-Mut expressions are almost exactly like `let` expressions, but allow the declared variable
-to be both re-assigned and mutated (in the case of arrays and record types, as we'll see later).
-
-For example:
+The return value(s) can be declared within parenthesis in order to declare more complicated types:
 
 ```rust
-mut counter = 0;
+# function from two functions, both taking one `i32` and returning one `i32`, to a single `i32` value
+def complex-function [ [i32](i32) [i32](i32) ] (i32)
+```
 
-# increment the counter
-set counter = counter > add 1;
+This completes the Wasmin syntax! I hope you will agree it really is a minimalistic syntax for WASM
+(get it? Wasm-min!).
+
+## Examples
+
+### Counter
+
+```rust
+mut count = 0;
+
+pub def increment [] i32;
+fun increment = (set count = add count 1; count)
+
+pub def decrement [] i32;
+fun decrement = (set count = sub count 1; count)
 ```
