@@ -103,7 +103,7 @@ Notice that expressions within parenthesis are self-contained. You cannot do thi
 let x = (add 2) 3;
 ```
 
-The above example would try to assign the result of `add 2` to `x` (which wont' work because `add` takes two arguments),
+The above example would try to assign the result of `add 2` to `x` (which won't work because `add` takes two arguments),
 then the expression `3` appears outside of the previous `let` expression, in an illegal location
 (only `let`, `mut` and as we'll see below, `def` and `fun` can appear as top-level elements).
 
@@ -159,7 +159,7 @@ def complex-function [ [i32](i32) [i32](i32) ] (i32)
 ```
 
 This completes the Wasmin syntax! I hope you will agree it really is a minimalistic syntax for WASM
-(get it? Wasm-min!).
+(get it? Was-min!).
 
 ## Examples
 
@@ -168,9 +168,9 @@ This completes the Wasmin syntax! I hope you will agree it really is a minimalis
 ```rust
 mut count = 0;
 
-pub def increment [] i32;
-fun increment = (set count = add count 1; count)
+def increment [] i32;
+pub fun increment = (set count = add count 1; count)
 
-pub def decrement [] i32;
-fun decrement = (set count = sub count 1; count)
+def decrement [] i32;
+pub fun decrement = (set count = sub count 1; count)
 ```
