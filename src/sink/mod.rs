@@ -62,3 +62,12 @@ fn for_each_assignment<F>(
         err.remove(0)
     }
 }
+
+pub(crate) fn number_without_type(text: &String) -> &str {
+    if text.ends_with("i32") || text.ends_with("i64") ||
+        text.ends_with("f32") || text.ends_with("f64") {
+        &text[0..text.len() - 3]
+    } else {
+        text
+    }
+}

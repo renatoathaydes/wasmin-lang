@@ -1,7 +1,7 @@
 use std::io::{ErrorKind, Result, Write};
 
 use crate::ast::{Expression, TopLevelExpression, Visibility};
-use crate::sink::{for_each_assignment, WasminSink};
+use crate::sink::{for_each_assignment, WasminSink, number_without_type};
 
 const ONE_IDENT: &str = "  ";
 
@@ -59,7 +59,7 @@ impl Wat {
                 w.write_all(b"(")?;
                 w.write_all(typ.to_string().as_bytes())?;
                 w.write_all(b".const ")?;
-                w.write_all(id.as_bytes())?;
+                w.write_all(number_without_type(id).as_bytes())?;
                 w.write_all(b")")
             }
             Expression::Global(id, _) => {
