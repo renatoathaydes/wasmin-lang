@@ -1,7 +1,7 @@
 use std::io::{ErrorKind, Result, Write};
 
 use crate::ast::{Expression, TopLevelExpression, Visibility};
-use crate::sink::{for_each_assignment, WasminSink, number_without_type};
+use crate::sink::{for_each_assignment, number_without_type, WasminSink};
 
 const ONE_IDENT: &str = "  ";
 
@@ -46,6 +46,32 @@ impl Wat {
         }
         self.write_expr(&mut w, &expr)?;
         w.write_all(b")")
+    }
+
+    fn write_variables(
+        &mut self,
+        mut w: &mut Box<dyn Write>,
+        expr: &Expression,
+    ) -> Result<()> {
+        match expr {
+            Expression::Let(assign) | Expression::Mut(assign) => {
+                for_each_assignment(&mut w, assign, |mut w2, id, expr, _| {
+                    self.start_expr(&mut w2)?;
+                    w2.write_all(b"(local $")?;
+                    w2.write_all(id.as_bytes())?;
+                    w2.write_all(b" ")?;
+                    w2.write_all(expr.get_type()[0].to_string().as_bytes())?;
+                    w2.write_all(b")")
+                })?;
+            }
+            Expression::Multi(exprs) | Expression::Group(exprs) => {
+                for expr in exprs {
+                    self.write_variables(&mut w, expr)?;
+                }
+            }
+            _ => {}
+        };
+        Ok(())
     }
 
     fn write_expr(
@@ -191,6 +217,7 @@ impl WasminSink for Wat {
                     w.write_all(b")")?;
                 }
                 self.increase_ident();
+                self.write_variables(w, &body)?;
                 self.start_expr(w)?;
                 self.write_expr(w, &body)?;
                 self.decrease_ident();
