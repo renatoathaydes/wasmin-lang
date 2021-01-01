@@ -38,6 +38,8 @@ impl Type {
         match (self, other) {
             (a, b) if *a == *b => true,
             (&Type::I32, &Type::I64) => true,
+            (&Type::I32, &Type::F32) => true,
+            (&Type::I64, &Type::F64) => true,
             (&Type::F32, &Type::F64) => true,
             (&Type::Fn(ref v), &Type::Fn(ref w)) => {
                 if v.len() == 1 {
@@ -142,6 +144,9 @@ mod tests {
         assert!(I32.is_assignable_to(&I32));
         assert!(I64.is_assignable_to(&I64));
 
+        assert!(I32.is_assignable_to(&F32));
+        assert!(I64.is_assignable_to(&F64));
+
         // cannot truncate
         assert!(!I64.is_assignable_to(&I32));
         assert!(!F64.is_assignable_to(&F32));
@@ -151,10 +156,8 @@ mod tests {
         assert!(!F32.is_assignable_to(&I64));
         assert!(!F64.is_assignable_to(&I32));
         assert!(!F64.is_assignable_to(&I64));
-        assert!(!I32.is_assignable_to(&F32));
         assert!(!I32.is_assignable_to(&F64));
         assert!(!I64.is_assignable_to(&F32));
-        assert!(!I64.is_assignable_to(&F64));
 
         // widening conversion
         assert!(I32.is_assignable_to(&I64));

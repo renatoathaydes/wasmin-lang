@@ -209,7 +209,7 @@ fn test_global() {
 }
 
 #[test]
-fn test_fn_call_basic() {
+fn test_fun_call_basic() {
     assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![FnType { ins: vec![I32], outs: vec![] }])),
                fn_call!("do-it" expr_const!("2" I32) => [I32] ));
 
@@ -223,12 +223,17 @@ fn test_fn_call_basic() {
                fn_call!("print" expr_const!("0.0" F32) =>
                TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
 
-    // function without args: only invoke the function if it's alone within parens
     assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
-               Global(String::from("no-args"), Fn(vec![FnType { ins: vec![], outs: vec![I32] }])));
+               fn_call!("no-args" => [] I32));
 
     assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
                fn_call!("no-args" => [] I32));
+}
+
+#[test]
+fn test_fun_call_complex() {
+    assert_eq!(parse_expr!("do-it(do-it 2);", "do-it" => Fn(vec![FnType { ins: vec![I32], outs: vec![I32] }])),
+               fn_call!("do-it" fn_call!("do-it" expr_const!("2" I32) => [I32] I32) => [I32] I32));
 }
 
 #[test]
@@ -236,16 +241,24 @@ fn test_expr_multi_value() {
     assert_eq!(parse_expr!("0,1"), Multi(vec![Const(
         String::from("0"), I32), Const(String::from("1"), I32)]));
     assert_eq!(parse_expr!("(1, 2, 3.0)"), Multi(vec![
-        Const(String::from("1"), I32), Const(String::from("2"), I32), Const(String::from("3.0"), F32)]));
+        Const(String::from("1"), I32),
+        Const(String::from("2"), I32),
+        Const(String::from("3.0"), F32)
+    ]));
     assert_eq!(parse_expr!("1, (2, 3)"), Multi(vec![
-        Const(String::from("1"), I32), Multi(vec![
-            Const(String::from("2"), I32), Const(String::from("3"), I32)])]));
-    assert_eq!(parse_expr!("((1, 2), 3)"), Multi(vec![Multi(vec![
-        Const(String::from("1"), I32), Const(String::from("2"), I32)]),
-                                                      Const(String::from("3"), I32)]));
-    assert_eq!(parse_expr!("((1, 2) 3)"), Group(vec![Multi(vec![
-        Const(String::from("1"), I32), Const(String::from("2"), I32)]),
-                                                     Const(String::from("3"), I32)]));
+        Const(String::from("1"), I32),
+        Const(String::from("2"), I32),
+        Const(String::from("3"), I32)
+    ]));
+    assert_eq!(parse_expr!("((1, 2), 3)"), Multi(vec![
+        Const(String::from("1"), I32),
+        Const(String::from("2"), I32),
+        Const(String::from("3"), I32)
+    ]));
+    assert_eq!(parse_expr!("((1, 2) 3)"), ExprError(TypeError {
+        reason: "fun call via expression not supported yet".to_string(),
+        pos: (0, 10),
+    }));
 }
 
 #[test]
@@ -448,13 +461,29 @@ fn test_let() {
 
 #[test]
 fn test_def_then_assign() {
-    let mut chars = "foo i64; foo = 1; bar f32; bar = 1; zed i32; zed = 0.1;".chars();
+    let mut chars = "foo i64; foo = 1; bar f32; bar = 2; zed i32; zed = 0.1;".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "foo" => I64);
 
     assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32); Some(I64))));
+
+    assert_eq!(parser.parse_def(), Ok(()));
+    assert_symbols_contains!(parser, "bar" => F32);
+    assert_symbols_contains!(parser, "foo" => I64);
+
+    assert_eq!(parser.parse_assignment(), Ok(assign!("bar" = expr_const!("2" I32); Some(F32))));
+
+    assert_eq!(parser.parse_def(), Ok(()));
+    assert_symbols_contains!(parser, "zed" => I32);
+    assert_symbols_contains!(parser, "bar" => F32);
+    assert_symbols_contains!(parser, "foo" => I64);
+
+    assert_eq!(parser.parse_assignment(), Err(ParserError {
+        pos: (0, 51),
+        msg: "Cannot implement 'zed' with type 'f32' because its defined type 'i32' does not match".to_owned(),
+    }));
 }
 
 #[test]
