@@ -1,0 +1,5 @@
+def numbers [] i32 i32;
+fun numbers = 42, 53;
+
+def _start [] i32;
+pub fun _start = add (numbers);
