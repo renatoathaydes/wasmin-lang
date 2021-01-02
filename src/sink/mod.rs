@@ -63,11 +63,12 @@ fn for_each_assignment<F>(
     }
 }
 
-pub(crate) fn number_without_type(text: &String) -> &str {
-    if text.ends_with("i32") || text.ends_with("i64") ||
+pub(crate) fn sanitize_number(text: &String) -> String {
+    let without_type = if text.ends_with("i32") || text.ends_with("i64") ||
         text.ends_with("f32") || text.ends_with("f64") {
         &text[0..text.len() - 3]
     } else {
         text
-    }
+    };
+    without_type.replace("_", "")
 }
