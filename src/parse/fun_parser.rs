@@ -33,7 +33,8 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
             parser.stack_mut().drop_level();
             match bind_result {
                 Ok(typ) => {
-                    parser.stack_mut().push(name.clone(), Type::Fn(vec![typ.clone()]), false).unwrap();
+                    parser.stack_mut().push(name.clone(), Type::Fn(vec![typ.clone()]), false, false)
+                        .map_err(|msg| ParserError { pos: parser.pos(), msg })?;
                     if typ.ins.len() == left.len() {
                         let actual_type = expr.get_type();
                         if typ.outs.len() == actual_type.len() {
@@ -69,7 +70,7 @@ fn bind_args<'s>(parser: &mut Parser, types: &'s Vec<FnType>, names: &Vec<String
     let typ = types.get(types.len() - 1).expect("types must not be empty");
     // do not check lengths match here... bind all args we can, an error will happen later if necessary
     for (t, name) in typ.ins.iter().zip(names.iter()) {
-        parser.stack_mut().push(name.clone(), t.clone(), false)?;
+        parser.stack_mut().push(name.clone(), t.clone(), false, false)?;
     }
     Ok(typ)
 }

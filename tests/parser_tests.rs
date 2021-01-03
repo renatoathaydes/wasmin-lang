@@ -164,3 +164,27 @@ fn test_use_std_wasm_arithmetics() {
 
     assert_eq!(rcv.iter().next(), None);
 }
+
+#[test]
+fn test_global_mut_set() {
+    let mut chars = "mut i = 0; def f []i32; fun f = (set i = add i 1; i)".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_mut!("i" = expr_const!("0" I32)));
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_fun!(def fun_type!([](I32)); fun "f" = expr_group!(
+                       expr_set!("i" = expr_fun_call!(wasm "add"
+                            expr_global!("i" I32) expr_const!("1" I32); fun_type!([I32 I32](I32))); true)
+                       expr_global!("i" I32)
+                   )));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}

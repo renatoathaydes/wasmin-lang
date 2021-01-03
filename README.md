@@ -20,13 +20,14 @@ Feature Checklist:
 - [ ] generic type declarations.
 - [x] let assignments.
 - [x] mut assignments.
+- [x] set assignments.
 - [ ] math operators.
 - [x] function calls.
 - [x] function implementations.
 - [ ] generic functions.
 - [ ] single-line comments.
 - [ ] multi-line comments.
-- [ ] global constants.
+- [x] global constants.
 - [ ] import from other Wasmin files.
 - [ ] import external functions.
 - [ ] export functions and constants.
@@ -38,8 +39,8 @@ Feature Checklist:
 - [ ] arrays.
 - [ ] records.
 - [ ] generic records.
-- [ ] special functions (`get`, `set`, `remove`, `size`, `copy`).
 - [ ] `typeof` special function.
+- [ ] traits.
 
 Not yet designed features (may never be added):
 

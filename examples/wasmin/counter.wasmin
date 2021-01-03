@@ -1,0 +1,7 @@
+mut count = 0;
+
+def increment [] i32;
+pub fun increment = (set count = add count 1; count)
+
+def decrement [] i32;
+pub fun decrement = (set count = sub count 1; count)

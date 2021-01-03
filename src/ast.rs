@@ -6,6 +6,12 @@ use crate::types::{FnType, Type, TypeError};
 
 pub type Assignment = (Vec<String>, Vec<Expression>, Vec<Option<Type>>);
 
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct ReAssignment {
+    pub assignment: Assignment,
+    pub globals: Vec<bool>,
+}
+
 pub type Fun = (String, Vec<String>, Expression, FnType);
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -16,6 +22,7 @@ pub enum Expression {
     Global(String, Type),
     Let(Assignment),
     Mut(Assignment),
+    Set(ReAssignment),
     Group(Vec<Expression>),
     Multi(Vec<Expression>),
     FunCall {
@@ -45,7 +52,7 @@ pub enum TopLevelExpression {
 impl Expression {
     pub fn get_type(&self) -> Vec<Type> {
         match self {
-            Expression::Empty | Let(..) | Mut(..) => Vec::new(),
+            Expression::Empty | Let(..) | Mut(..) | Set(..) => Vec::new(),
             Const(.., typ) | Local(.., typ) | Global(.., typ) => vec![typ.clone()],
             Group(es) => es.last()
                 .map_or(Vec::new(), |e| e.get_type()),
@@ -62,7 +69,8 @@ impl Expression {
     pub fn is_empty(&self) -> bool {
         match self {
             Expression::Empty => true,
-            Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Multi(_) | FunCall { .. } | ExprError(..) => false,
+            Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Set(..)
+            | Multi(_) | FunCall { .. } | ExprError(..) => false,
             Group(es) => es.last()
                 .map_or(true, |e| e.is_empty()),
         }
@@ -71,7 +79,8 @@ impl Expression {
     pub fn into_multi(self) -> Vec<Expression> {
         match self {
             Expression::Empty => vec![],
-            Let(..) | Mut(..) | Const(..) | Local(..) | Global(..) | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
+            Let(..) | Mut(..) | Set(..) | Const(..) | Local(..) | Global(..)
+            | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
             Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
@@ -85,7 +94,7 @@ impl TryInto<TopLevelExpression> for Expression {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
             Let(l) => Ok(TopLevelExpression::Let(l, Visibility::Private)),
             Mut(m) => Ok(TopLevelExpression::Mut(m, Visibility::Private)),
-            Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
+            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
         }
@@ -160,6 +169,56 @@ macro_rules! expr_let {
 }
 
 #[macro_export]
+macro_rules! expr_mut {
+    ($($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::Expression;
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        Expression::Mut((ids, exprs, replacements))
+    }};
+    ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
+        use crate::ast::Expression;
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string());)*
+        $(exprs.push($e);)*
+        $(replacements.push($rep);)*
+        Expression::Mut((ids, exprs, replacements))
+    }};
+}
+
+#[macro_export]
+macro_rules! expr_set {
+    ($($id:literal),+ = $($e:expr),+ ; $($global:literal)*) => {{
+        use crate::ast::{Expression, ReAssignment};
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut globals = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        $(globals.push($global);)*
+        Expression::Set(ReAssignment{assignment: (ids, exprs, replacements), globals})
+    }};
+    ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+ ; $($global:literal)*) => {{
+        use crate::ast::{Expression, ReAssignment};
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut globals = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string());)*
+        $(exprs.push($e);)*
+        $(replacements.push($rep);)*
+        $(globals.push($global);)*
+        Expression::Set(ReAssignment{assignment: (ids, exprs, replacements), globals})
+    }};
+}
+
+#[macro_export]
 macro_rules! expr_fun_call {
     ($id:literal $($arg:expr)* ; $typ:expr) => {{
         use crate::ast::Expression;
@@ -208,6 +267,28 @@ macro_rules! texpr_let {
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
         TopLevelExpression::Let((ids, exprs, replacements), Visibility::Public)
+    }};
+}
+
+#[macro_export]
+macro_rules! texpr_mut {
+    ($($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        TopLevelExpression::Mut((ids, exprs, replacements), Visibility::Private)
+    }};
+    (p $($id:literal),+ = $($e:expr),+) => {{
+        use crate::ast::{TopLevelExpression, Visibility};
+        let mut ids = Vec::new();
+        let mut exprs = Vec::new();
+        let mut replacements = Vec::new();
+        $(ids.push($id.to_string()); replacements.push(None);)*
+        $(exprs.push($e);)*
+        TopLevelExpression::Mut((ids, exprs, replacements), Visibility::Public)
     }};
 }
 

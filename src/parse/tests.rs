@@ -12,7 +12,7 @@ macro_rules! parse_expr {
     ($e:expr, $($id:expr => $typ:expr),+) => {{
         let mut chars = $e.chars();
         let mut stack = Stack::new();
-        $(stack.push($id.to_string(), $typ, false).unwrap();)*
+        $(stack.push($id.to_string(), $typ, false, false).unwrap();)*
         let mut parser = new_parser_with_stack(&mut chars, stack);
         parser.parse_expr()
     }};
@@ -25,7 +25,7 @@ macro_rules! type_of {
     }};
     ($e:expr, $($id:expr => $typ:expr),+) => {{
         let mut stack = Stack::new();
-        $(stack.push($id.to_string(), $typ, false).unwrap();)*
+        $(stack.push($id.to_string(), $typ, false, false).unwrap();)*
         expr_parser::type_of($e, &stack).map(|t| (t.typ, t.kind))
     }};
 }
@@ -442,21 +442,61 @@ fn test_let() {
     let mut chars = "foo = 1; blah=2.0   ; z=(2) wrong:".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("foo" = expr_const!("1" I32))));
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_assignment(), Ok(assign!("blah" = expr_const!("2.0" F32))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("blah" = expr_const!("2.0" F32))));
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_assignment(), Ok(assign!("z" = expr_const!("2" I32))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("z" = expr_const!("2" I32))));
     assert_symbols_contains!(parser, "z" => I32);
     assert_symbols_contains!(parser, "blah" => F32);
     assert_symbols_contains!(parser, "foo" => I32);
     // assert_eq!(parser.stack().len(), 3);
-    assert_eq!(parser.parse_assignment(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(false), Err(ParserError {
         pos: (0, 34),
         msg: "Expected '=' in let expression, but got ':'".to_string(),
     }));
     assert_eq!(parser.curr_char(), Some(':'));
+}
+
+#[test]
+fn test_mut_then_set() {
+    let mut chars = "foo = 1; foo=2".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_assignment(true), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.parse_assignment(true), Ok(assign!("foo" = expr_const!("2" I32))));
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.curr_char(), None);
+}
+
+#[test]
+fn test_cannot_reassign_let() {
+    let mut chars = "foo = 1; foo = 2".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.parse_assignment(false), Err(ParserError {
+        pos: (0, 15),
+        msg: "Cannot re-implement 'foo'".to_owned(),
+    }));
+    assert_eq!(parser.curr_char(), None);
+}
+
+#[test]
+fn test_cannot_make_let_mutable() {
+    let mut chars = "foo = 1; foo = 2".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("foo" = expr_const!("1" I32))));
+    assert_symbols_contains!(parser, "foo" => I32);
+    assert_eq!(parser.parse_assignment(true), Err(ParserError {
+        pos: (0, 15),
+        msg: "Cannot change mutability of 'foo'".to_owned(),
+    }));
+    assert_eq!(parser.curr_char(), None);
 }
 
 #[test]
@@ -467,20 +507,20 @@ fn test_def_then_assign() {
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "foo" => I64);
 
-    assert_eq!(parser.parse_assignment(), Ok(assign!("foo" = expr_const!("1" I32); Some(I64))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("foo" = expr_const!("1" I32); Some(I64))));
 
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "bar" => F32);
     assert_symbols_contains!(parser, "foo" => I64);
 
-    assert_eq!(parser.parse_assignment(), Ok(assign!("bar" = expr_const!("2" I32); Some(F32))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("bar" = expr_const!("2" I32); Some(F32))));
 
     assert_eq!(parser.parse_def(), Ok(()));
     assert_symbols_contains!(parser, "zed" => I32);
     assert_symbols_contains!(parser, "bar" => F32);
     assert_symbols_contains!(parser, "foo" => I64);
 
-    assert_eq!(parser.parse_assignment(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(false), Err(ParserError {
         pos: (0, 51),
         msg: "Cannot implement 'zed' with type 'f32' because its defined type 'i32' does not match".to_owned(),
     }));
@@ -491,21 +531,21 @@ fn test_let_multi_value() {
     let mut stack = Stack::new();
     stack.push(
         "func".to_string(),
-        Fn(vec![FnType { ins: vec![], outs: vec![I64, F32, F64] }]), false).unwrap();
+        Fn(vec![FnType { ins: vec![], outs: vec![I64, F32, F64] }]), false, false).unwrap();
 
     let stack2 = stack.clone();
 
     let mut chars = "foo, bar = 1, 2; b,c=(2.0,4i64)  e ,f,g=(func); end".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
-    assert_eq!(parser.parse_assignment(), Ok(assign!("foo", "bar" = expr_const!("1" I32), expr_const!("2" I32))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("foo", "bar" = expr_const!("1" I32), expr_const!("2" I32))));
     assert_symbols_contains!(parser, "foo" => I32);
     assert_symbols_contains!(parser, "bar" => I32);
-    assert_eq!(parser.parse_assignment(), Ok(assign!("b", "c" = expr_const!("2.0" F32), expr_const!("4i64" I64))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("b", "c" = expr_const!("2.0" F32), expr_const!("4i64" I64))));
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_assignment(), Ok(assign!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64))));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);
@@ -513,7 +553,7 @@ fn test_let_multi_value() {
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
     // assert_eq!(parser.stack().len(), 3);
-    assert_eq!(parser.parse_assignment(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(false), Err(ParserError {
         pos: (0, 51),
         msg: "Expected '=' in let expression, but got EOF".to_string(),
     }));
@@ -522,7 +562,7 @@ fn test_let_multi_value() {
     let mut chars = " ee, ff = (func) ".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack2);
 
-    assert_eq!(parser.parse_assignment(), Err(ParserError {
+    assert_eq!(parser.parse_assignment(false), Err(ParserError {
         msg: "multi-value assignment mismatch: 2 identifiers but 3 expressions of types \
         'i64 f32 f64' found".to_string(),
         pos: (0, 17),

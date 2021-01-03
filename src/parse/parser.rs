@@ -174,7 +174,7 @@ impl Parser<'_> {
     pub fn parse_def(&mut self) -> Result<(), ParserError> {
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
-            if let Err(msg) = self.stack.push(id, typ, true) {
+            if let Err(msg) = self.stack.push(id, typ, true, false) {
                 self.parser_err(msg)
             } else {
                 Result::Ok(())
@@ -185,7 +185,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_assignment(&mut self) -> Result<Assignment, ParserError> {
+    pub fn parse_assignment(&mut self, is_mut: bool) -> Result<Assignment, ParserError> {
         let mut ids = Vec::new();
         while let Some(id) = self.parse_word() {
             ids.push(id);
@@ -203,8 +203,7 @@ impl Parser<'_> {
             if ids.len() == typ.len() {
                 let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
                     .map(move |(id, t)| {
-                        self.stack.push(id.clone(), t, false)
-                        // .map_err(|msg| self.parser_err::<Assignment>(msg).unwrap_err())
+                        self.stack.push(id.clone(), t, false, is_mut)
                     }).partition(|r| r.is_ok());
                 if errors.is_empty() {
                     let type_replacements = results.drain(..)

@@ -28,7 +28,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "let" | "mut" => {
-            match parser.parse_assignment() {
+            match parser.parse_assignment(word.starts_with('m')) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
                     if word.starts_with("m") {

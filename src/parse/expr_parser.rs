@@ -1,7 +1,7 @@
 use std::str::Chars;
 
-use crate::ast::Expression;
-use crate::ast::Expression::{ExprError, Let, Mut};
+use crate::ast::{Assignment, Expression, ReAssignment};
+use crate::ast::Expression::{ExprError, Let, Mut, Set};
 use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
 use crate::parse::parser::GroupingSymbol::Parens;
 use crate::types::{*};
@@ -70,10 +70,12 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                     if first_item.is_some() {
                         push_if_non_empty(&mut args, expr(parser, word));
                     } else {
-                        match word.as_str() {
-                            "let" | "mut" => {
-                                let expr = match parser.parse_assignment() {
-                                    Ok(e) => if word.starts_with('l') { Let(e) } else { Mut(e) },
+                        let word_str = word.as_str();
+                        match word_str {
+                            "let" | "mut" | "set" => {
+                                let is_mut = !word_str.starts_with('l');
+                                let expr = match parser.parse_assignment(is_mut) {
+                                    Ok(e) => assignment_expr(parser, word_str, e),
                                     Err(e) => ExprError(e.into())
                                 };
                                 exprs.push(expr);
@@ -108,6 +110,21 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
     }
 
     consume_all(&mut exprs).unwrap_or(Expression::Empty)
+}
+
+fn assignment_expr(parser: &Parser, word: &str, assignment: Assignment) -> Expression {
+    if word.starts_with('l') {
+        Let(assignment)
+    } else if word.starts_with('m') {
+        Mut(assignment)
+    } else {
+        let (ids, ..) = &assignment;
+        let globals = ids.iter().map(|id|
+            parser.stack().get_is_global(id.as_str())
+                .map(|(_, global)| global))
+            .map(|global| global.unwrap_or(false)).collect();
+        Set(ReAssignment { assignment, globals })
+    }
 }
 
 fn consume_optional_semi_colon(parser: &mut Parser) {
