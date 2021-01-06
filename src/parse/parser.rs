@@ -3,8 +3,8 @@ use std::fmt::Result as FmtResult;
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::{Assignment, Expression, Fun, TopLevelExpression};
-use crate::parse::{expr_parser, fun_parser, top_level_parser, type_parser};
+use crate::ast::{Assignment, Expression, Fun, TopLevelExpression, ExtDef};
+use crate::parse::{expr_parser, ext_parser, fun_parser, top_level_parser, type_parser};
 pub use crate::parse::stack::{*};
 use crate::types::{*};
 
@@ -239,6 +239,10 @@ impl Parser<'_> {
 
     pub fn parse_expr(&mut self) -> Expression {
         expr_parser::parse_expr(self)
+    }
+
+    pub fn parse_ext(&mut self) -> Result<(String, Vec<ExtDef>), ParserError> {
+        ext_parser::parse_ext(self)
     }
 
     pub fn parse(&mut self) {

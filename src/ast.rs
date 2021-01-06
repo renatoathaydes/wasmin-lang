@@ -15,6 +15,12 @@ pub struct ReAssignment {
 pub type Fun = (String, Vec<String>, Expression, FnType);
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct ExtDef {
+    pub def_name: String,
+    pub typ: Type,
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
     Empty,
     Const(String, Type),
@@ -45,6 +51,7 @@ pub enum Visibility {
 pub enum TopLevelExpression {
     Let(Assignment, Visibility),
     Mut(Assignment, Visibility),
+    Ext(String, Vec<ExtDef>, Visibility),
     Fn(Fun, Visibility),
     Error(String, (usize, usize)),
 }
@@ -305,5 +312,25 @@ macro_rules! texpr_fun {
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
         TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)
+    }}
+}
+
+#[macro_export]
+macro_rules! texpr_ext {
+    ($name: literal => $($id:literal $typ:expr);*) => {{
+        use crate::ast::{TopLevelExpression, Visibility, ExtDef};
+        let mut defs = Vec::new();
+        $(
+            defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
+        )*
+        TopLevelExpression::Ext($name.to_owned(), defs, Visibility::Private)
+    }};
+    (p $name: literal => $($id:literal $typ:expr);*) => {{
+        use crate::ast::{TopLevelExpression, Visibility, ExtDef};
+        let mut defs = Vec::new();
+        $(
+            defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
+        )*
+        TopLevelExpression::Ext($name.to_owned(), defs, Visibility::Public)
     }}
 }

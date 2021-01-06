@@ -47,6 +47,14 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                 Err(e) => Some(e.into())
             }
         }
+        "ext" => {
+            let visibility = if is_pub { Public } else { Private };
+            match parser.parse_ext() {
+                Ok((mod_name, defs)) =>
+                    Some(TopLevelExpression::Ext(mod_name, defs, visibility)),
+                Err(e) => Some(e.into())
+            }
+        }
         _ => {
             let allowed = format!("{}let, mut or fun", if is_pub { "" } else { "pub, def, " });
             Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \

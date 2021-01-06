@@ -4,7 +4,7 @@ use std::sync::mpsc::channel;
 use wasmin::{*};
 use wasmin::ast::{*};
 use wasmin::parse::new_parser;
-use wasmin::types::Type::{*};
+use wasmin::types::{Type, Type::*};
 
 #[test]
 fn test_let() {
@@ -184,6 +184,34 @@ fn test_global_mut_set() {
                             expr_global!("i" I32) expr_const!("1" I32); fun_type!([I32 I32](I32))); true)
                        expr_global!("i" I32)
                    )));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_ext_module() {
+    let mut chars = "\
+        ext console {
+            log [i32];
+            log [f32];
+            warn [i32 i32];
+            a_number i32;
+        }
+    ".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   texpr_ext!("console" =>
+                     "log" Type::Fn(vec![fun_type!([I32]()), fun_type!([F32]())]);
+                     "warn" Type::Fn(vec![fun_type!([I32 I32]())]);
+                     "a_number" I32
+                   ));
     }
 
     assert_eq!(rcv.iter().next(), None);

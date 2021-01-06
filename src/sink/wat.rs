@@ -1,7 +1,8 @@
 use std::io::{ErrorKind, Result, Write};
 
-use crate::ast::{Expression, ReAssignment, TopLevelExpression, Visibility};
+use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelExpression, Visibility};
 use crate::sink::{for_each_assignment, sanitize_number, WasminSink};
+use crate::types::{FnType, Type};
 
 const ONE_IDENT: &str = "  ";
 
@@ -179,6 +180,93 @@ impl Wat {
         }
     }
 
+    fn write_fun(&mut self,
+                 w: &mut Box<dyn Write>,
+                 id: &str,
+                 args: Option<Vec<String>>,
+                 body: Option<Expression>,
+                 typ: FnType,
+                 vis: Visibility,
+    ) -> Result<()> {
+        w.write_all(b"(func $")?;
+        w.write_all(id.as_bytes())?;
+        if vis == Visibility::Public {
+            w.write_all(b" (export \"")?;
+            w.write_all(id.as_bytes())?;
+            w.write_all(b"\")")?;
+        }
+        let mut err: Vec<_> = if let Some(a) = args {
+            a.iter().zip(typ.ins).map(|(name, t)| {
+                w.write_all(b" (param $")?;
+                w.write_all(name.as_bytes())?;
+                w.write_all(b" ")?;
+                w.write_all(t.to_string().as_bytes())?;
+                w.write_all(b")")
+            }).filter(|r| r.is_err())
+                .take(1).collect()
+        } else {
+            w.write_all(b" (param ")?;
+            let types = typ.ins.iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            w.write_all(types.as_bytes())?;
+            w.write_all(b")")?;
+            vec![]
+        };
+        if !err.is_empty() {
+            return err.remove(0);
+        }
+        if !typ.outs.is_empty() {
+            w.write_all(b" (result")?;
+            for out in typ.outs {
+                w.write_all(b" ")?;
+                w.write_all(out.to_string().as_bytes())?;
+            }
+            w.write_all(b")")?;
+        }
+        if let Some(b) = body {
+            self.increase_ident();
+            self.write_variables(w, &b)?;
+            self.start_expr(w)?;
+            self.write_expr(w, &b)?;
+            self.decrease_ident();
+            w.write_all(b"\n")?;
+            w.write_all(self.ident.as_bytes())?;
+        }
+        w.write_all(b")\n")
+    }
+
+    fn write_ext(&mut self,
+                 w: &mut Box<dyn Write>,
+                 mod_name: &str,
+                 defs: Vec<ExtDef>,
+    ) -> Result<()> {
+        let mut is_first = true;
+        for def in defs {
+            if !is_first {
+                self.start_expr(w)?;
+            }
+            is_first = false;
+            w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.def_name).as_bytes())?;
+            match def.typ {
+                Type::Empty | Type::WasmFn(_) => {}
+                Type::Fn(fn_types) => {
+                    for fn_type in fn_types {
+                        self.write_fun(w, &def.def_name, None, None, fn_type, Visibility::Private)?;
+                    }
+                }
+                Type::I64 => { w.write_all(b"i64")?; }
+                Type::I32 => { w.write_all(b"i32")?; }
+                Type::F64 => { w.write_all(b"f64")?; }
+                Type::F32 => { w.write_all(b"f32")?; }
+                Type::Error(e) => { return self.error(e.reason.as_str(), e.pos); }
+            };
+            w.write_all(b")")?;
+        }
+        Ok(())
+    }
+
     fn start_expr(&self, w: &mut Box<dyn Write>) -> Result<()> {
         w.write_all(b"\n")?;
         w.write_all(self.ident.as_bytes())
@@ -219,40 +307,10 @@ impl WasminSink for Wat {
                 })
             }
             TopLevelExpression::Fn((id, args, body, typ), vis) => {
-                w.write_all(b"(func $")?;
-                w.write_all(id.as_bytes())?;
-                if vis == Visibility::Public {
-                    w.write_all(b" (export \"")?;
-                    w.write_all(id.as_bytes())?;
-                    w.write_all(b"\")")?;
-                }
-                let mut err: Vec<_> = args.iter().zip(typ.ins).map(|(name, t)| {
-                    w.write_all(b" (param $")?;
-                    w.write_all(name.as_bytes())?;
-                    w.write_all(b" ")?;
-                    w.write_all(t.to_string().as_bytes())?;
-                    w.write_all(b")")
-                }).filter(|r| r.is_err())
-                    .take(1).collect();
-                if !err.is_empty() {
-                    return err.remove(0);
-                }
-                if !typ.outs.is_empty() {
-                    w.write_all(b" (result")?;
-                    for out in typ.outs {
-                        w.write_all(b" ")?;
-                        w.write_all(out.to_string().as_bytes())?;
-                    }
-                    w.write_all(b")")?;
-                }
-                self.increase_ident();
-                self.write_variables(w, &body)?;
-                self.start_expr(w)?;
-                self.write_expr(w, &body)?;
-                self.decrease_ident();
-                w.write_all(b"\n")?;
-                w.write_all(self.ident.as_bytes())?;
-                w.write_all(b")\n")
+                self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)
+            }
+            TopLevelExpression::Ext(mod_name, defs, ..) => {
+                self.write_ext(w, mod_name.as_str(), defs)
             }
             TopLevelExpression::Error(e, pos) =>
                 self.error(e.as_str(), pos)

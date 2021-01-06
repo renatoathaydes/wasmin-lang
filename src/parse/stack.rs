@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
-use crate::types::Type;
+use crate::types::{FnType, Type};
 use crate::wasm_funs::wasm_std_funs;
 
 #[derive(Debug, Clone)]
 pub struct Stack {
-    items: Vec<HashMap<String, StackEntry>>
+    items: Vec<HashMap<String, StackEntry>>,
+    namespaces: HashMap<String, Namespace>,
+    def_only_level: bool,
 }
+
+pub type Namespace = HashMap<String, Type>;
 
 #[derive(Debug, Clone)]
 struct StackEntry {
@@ -17,7 +21,11 @@ struct StackEntry {
 
 impl Stack {
     pub fn new() -> Stack {
-        let mut s = Stack { items: Vec::with_capacity(4) };
+        let mut s = Stack {
+            items: Vec::with_capacity(4),
+            namespaces: HashMap::new(),
+            def_only_level: false,
+        };
         s.new_level();
         s
     }
@@ -44,6 +52,7 @@ impl Stack {
                 is_def: bool,
                 is_mut: bool,
     ) -> Result<Option<Type>, String> {
+        let is_def_only_level = self.def_only_level;
         if let Some(mut entry) = self.get_entry(&id) {
             if entry.is_def {
                 entry.is_mut = is_mut;
@@ -78,19 +87,13 @@ impl Stack {
                 }
                 // was def, is def, is mut, ...
                 (false, true, _, &mut Type::Fn(ref mut current_types)) => {
-                    let t = match typ {
-                        Type::Fn(mut new_type) => {
-                            if current_types.iter().any(|t| new_type.contains(t)) {
-                                return Err(format!("Cannot re-define '{}' with the same type", &id));
-                            }
-                            assert_eq!(new_type.len(), 1);
-                            new_type.remove(0)
-                        }
-                        _ => return Err(format!("Cannot re-implement '{}' as a non-function", &id))
-                    };
                     entry.is_def = true;
-                    current_types.push(t);
-                    Ok(None)
+                    add_function_overload(id.as_str(), current_types, typ)
+                }
+                // was def, is def, is mut, ...
+                (true, true, _, &mut Type::Fn(ref mut current_types))
+                if is_def_only_level => {
+                    add_function_overload(id.as_str(), current_types, typ)
                 }
                 // was def, is def, is mut, ...
                 (true, true, _, _) => Err(format!("Cannot re-define '{}'. Try implementing it first, \
@@ -125,10 +128,22 @@ impl Stack {
     }
 
     pub fn new_level(&mut self) {
+        if self.def_only_level {
+            panic!("attempting to create new level inside def-only stack level");
+        }
         self.items.push(HashMap::new());
+        self.def_only_level = false;
+    }
+
+    pub fn new_def_only_level(&mut self) {
+        self.items.push(HashMap::new());
+        self.def_only_level = true;
     }
 
     pub fn drop_level(&mut self) {
+        if self.def_only_level {
+            panic!("attempting to drop level inside def-only stack level");
+        }
         let len = self.items.len();
         if len > 1 {
             self.items.remove(len - 1);
@@ -136,6 +151,48 @@ impl Stack {
             panic!("attempt to drop single stack level");
         }
     }
+
+    pub fn get_namespace(&self, namespace: &str) -> Option<&Namespace> {
+        self.namespaces.get(namespace)
+    }
+
+    pub fn push_namespace(&mut self, namespace: String, mut entries: Vec<(String, Type)>) -> Result<(), String> {
+        if self.namespaces.contains_key(namespace.as_str()) {
+            return Err(format!("namespace '{}' already exists", &namespace));
+        }
+        let mut value = HashMap::with_capacity(entries.len());
+        for (id, typ) in entries.drain(..) {
+            value.insert(id, typ);
+        }
+        self.namespaces.insert(namespace, value);
+        Ok(())
+    }
+
+    pub fn drop_level_and_get_its_defs(&mut self) -> Vec<(String, Type)> {
+        self.def_only_level = false;
+        self.items.remove(self.items.len() - 1).drain()
+            .filter(|(_, entry)| entry.is_def)
+            .map(|(id, entry)| (id, entry.typ))
+            .collect()
+    }
+}
+
+fn add_function_overload(id: &str,
+                         current_types: &mut Vec<FnType>,
+                         typ: Type,
+) -> Result<Option<Type>, String> {
+    let t = match typ {
+        Type::Fn(mut new_type) => {
+            if current_types.iter().any(|t| new_type.contains(t)) {
+                return Err(format!("Cannot re-define '{}' with the same type", id));
+            }
+            assert_eq!(new_type.len(), 1);
+            new_type.remove(0)
+        }
+        _ => return Err(format!("Cannot re-implement '{}' as a non-function", id))
+    };
+    current_types.push(t);
+    Ok(None)
 }
 
 impl Default for Stack {
@@ -146,7 +203,7 @@ impl Default for Stack {
 
 #[cfg(test)]
 mod stack_tests {
-    use crate::types::FnType;
+    use crate::types::{FnType, Type::{*}};
 
     use super::*;
 
@@ -257,5 +314,25 @@ mod stack_tests {
             FnType { ins: vec![], outs: vec![] },
             FnType { ins: vec![Type::I32], outs: vec![] },
         ])));
+    }
+
+    #[test]
+    fn stack_can_have_namespaces() {
+        let mut stack = Stack::new();
+        let entries = vec![
+            ("number".to_owned(), Type::I32),
+            ("function".to_owned(), Type::Fn(vec![fun_type!([I64 I32](I64)), fun_type!([I64](I64))])),
+        ];
+        stack.push_namespace("env".to_owned(), entries).unwrap();
+
+        let ns = stack.get_namespace("env").unwrap();
+        assert_eq!(ns.get("number"), Some(Type::I32).as_ref());
+        assert_eq!(ns.get("function"), Some(Type::Fn(vec![
+            fun_type!([I64 I32](I64)),
+            fun_type!([I64](I64))
+        ])).as_ref());
+        assert_eq!(ns.get("func"), None.as_ref());
+        assert_eq!(ns.get("other"), None.as_ref());
+        assert_eq!(stack.get_namespace("other"), None.as_ref());
     }
 }

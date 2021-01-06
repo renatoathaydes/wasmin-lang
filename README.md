@@ -15,8 +15,9 @@ Feature Checklist:
 - [x] primitive values.
 - [x] parenthesis-grouped expressions.
 - [x] ungrouped expressions.
-- [x] multi-expressions.
+- [x] multi-value expressions.
 - [x] type declarations.
+- [ ] comments.
 - [ ] generic type declarations.
 - [x] let assignments.
 - [x] mut assignments.
@@ -25,12 +26,12 @@ Feature Checklist:
 - [x] function calls.
 - [x] function implementations.
 - [ ] generic functions.
-- [ ] single-line comments.
-- [ ] multi-line comments.
+- [ ] function pointers.
+- [ ] lambdas.
 - [x] global constants.
-- [ ] import from other Wasmin files.
-- [ ] import external functions.
-- [ ] export functions and constants.
+- [ ] import from other Wasmin files with `use`.
+- [x] import external declarations with `ext`.
+- [x] export functions and constants.
 - [ ] if/else blocks.
 - [ ] loops.
 - [ ] stack operator `>`.
@@ -112,9 +113,10 @@ These, however, would be fine:
 
 ```rust
 # ok!
-let x = add (2) (3);
-let y = (add 2 3)
-let z = add (2, 3);
+let x = add 2 3;
+let y = add (2) (3);
+let z = (add 2 3)
+let w = add (2, 3);
 ```
 
 Basically, if an expression does not start with `(`, it must end with `;`.
@@ -127,10 +129,8 @@ function, and hence is equivalent to just `(add 2 3)` (but _accidentally_ looks 
 
 > Wasmin source code must always be encoded using UTF-8.
 
-To complete the description of the Wasmin syntax, there are just a couple more concepts to learn:
-
-- `def` defines the type of a term.
-- `fun` is used to implement a function.
+The type of a variable or function can be declared explicitly with a `def` statement. To implement a function, the `fun`
+keyword is used.
 
 `def`s are optional for `let` and `mut` bindings (it is always possible to infer their types), but mandatory for `fun`.
 
@@ -159,8 +159,73 @@ The return value(s) can be declared within parenthesis in order to declare more 
 def complex-function [ [i32](i32) [i32](i32) ] (i32)
 ```
 
-This completes the Wasmin syntax! I hope you will agree it really is a minimalistic syntax for WASM
-(get it? Was-min!).
+Finally, to be able to use functions provided by the host environment (so you can actually print something, for example)
+, you can use `ext` (external module):
+
+```rust
+ext console {
+    log [i32];
+    log [f32];
+    warn [i32];
+    warn [f32];
+}
+```
+
+> Notice that, for obvious reasons, you cannot implement values or functions in `ext`, only define their types,
+> hence the only allowed elements inside an `ext` block are `def`s, and as the `def` keyword would be redundant, it is
+> omitted entirely.
+
+To call functions defined in an `ext` module, employ the familiar `module_name.fun_name` syntax:
+
+```rust
+ext console { # omitted definitions # }
+
+def _start [];
+fun _start = console.log 10;
+```
+
+> TODO support Strings, so we can finally print "hello world"!
+
+You can split up Wasmin programs in several files. To do that, just import other files as shown below.
+
+`factorial.wasmin`
+
+```rust
+def fact [i32]i64;
+pub fun fact n = if gt n 1; n * (fact (sub n 1)); n;
+```
+
+`main.wasmin`
+
+```rust
+# the file extension is always implied to be .wasmin,
+# so this will import all `pub` definitions from "./factorial.wasmin".
+use * from "./factorial";
+
+def _start [];
+fun _start = fact 5;
+```
+
+`use` statements may also list which definitions to import:
+
+```rust
+use { fact } from "./factorial";
+
+def _start [];
+fun _start = fact 5;
+```
+
+If another file defines an `ext` module, then the `ext` module can be used as any other definition in that file:
+
+```rust
+# assume that "ext console" was defined inside "./factorial.wasmin"
+use { fact console } from "./factorial";
+
+def _start [];
+fun _start = console.log (fact 5);
+```
+
+This completes the description of the Wasmin syntax (a minimalistic syntax for WASM, hence the name ;))!
 
 ## Examples
 
