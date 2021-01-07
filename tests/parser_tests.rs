@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::sync::mpsc::channel;
 
 use wasmin::{*};
 use wasmin::ast::{*};
 use wasmin::parse::new_parser;
-use wasmin::types::{Type, Type::*};
+use wasmin::types::{Type::*};
 
 #[test]
 fn test_let() {
@@ -206,12 +207,33 @@ fn test_ext_module() {
         let mut parser = new_parser(&mut chars, sender);
         parser.parse();
 
-        assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_ext!("console" =>
-                     "log" Type::Fn(vec![fun_type!([I32]()), fun_type!([F32]())]);
-                     "warn" Type::Fn(vec![fun_type!([I32 I32]())]);
-                     "a_number" I32
-                   ));
+        match rcv.iter().next().unwrap() {
+            TopLevelExpression::Ext(mod_name, mut defs, _) => {
+                assert_eq!(mod_name, "console");
+                assert_eq!(defs.len(), 3);
+                let actual_defs: HashSet<_> = defs.drain(..).collect();
+
+                let mut expected_defs = HashSet::new();
+
+                expected_defs.insert(ExtDef {
+                    def_name: "log".to_owned(),
+                    typ: Fn(vec![fun_type!([I32]()), fun_type!([F32]())]),
+                });
+                expected_defs.insert(ExtDef {
+                    def_name: "warn".to_owned(),
+                    typ: Fn(vec![fun_type!([I32 I32]())]),
+                });
+                expected_defs.insert(ExtDef {
+                    def_name: "a_number".to_owned(),
+                    typ: I32,
+                });
+
+                assert_eq!(actual_defs, expected_defs);
+            }
+            e => {
+                panic!(format!("Did not get Ext, got {:?}", e));
+            }
+        }
     }
 
     assert_eq!(rcv.iter().next(), None);
