@@ -237,6 +237,17 @@ fn test_fun_call_complex() {
 }
 
 #[test]
+fn test_fun_call_namespace() {
+    let mut chars = "console.log 10".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+    parser.stack_mut().push_namespace("console".to_owned(), vec![
+        ("log".to_owned(), Fn(vec![fun_type!([I32]())]))
+    ]).unwrap();
+    assert_eq!(parser.parse_expr(),
+               fn_call!("console.log" expr_const!("10" I32) => [I32] ));
+}
+
+#[test]
 fn test_expr_multi_value() {
     assert_eq!(parse_expr!("0,1"), Multi(vec![Const(
         String::from("0"), I32), Const(String::from("1"), I32)]));

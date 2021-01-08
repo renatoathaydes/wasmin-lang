@@ -111,6 +111,13 @@ impl Stack {
 
     pub fn get_is_global(&self, id: &str) -> Option<(&Type, bool)> {
         (0..self.items.len()).rev().find_map(|i| {
+            if let Some(idx) = id.find('.') {
+                let (mod_name, elem) = id.split_at(idx);
+                let elem = &elem[1..];
+                return if let Some(ns) = self.namespaces.get(mod_name) {
+                    ns.get(elem).map(|e| (e, false))
+                } else { None };
+            }
             let symbols = self.items.get(i).unwrap();
             if let Some(entry) = symbols.get(id) {
                 Some((&entry.typ, i == 0))

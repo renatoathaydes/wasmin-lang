@@ -177,6 +177,10 @@ ext console {
 
 To call functions defined in an `ext` module, employ the familiar `module_name.fun_name` syntax:
 
+> Unlike in most languages, in Wasmin, the `.` in a namespaced function call becomes part of the identifier,
+> so you cannot have spaces or new-line between the module and function names. As identifiers cannot contain
+> dots, a dot always indicates a namespaced reference.
+
 ```rust
 ext console { # omitted definitions # }
 

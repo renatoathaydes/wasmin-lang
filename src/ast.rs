@@ -14,9 +14,14 @@ pub struct ReAssignment {
 
 pub type Fun = (String, Vec<String>, Expression, FnType);
 
+/// ExtDef is an external definition that a Wasmin program requires.
+///
+/// It translates to a WASM import.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ExtDef {
+    /// external identifier used to refer to this definition.
     pub id: String,
+    /// type of this definition.
     pub typ: Type,
 }
 
