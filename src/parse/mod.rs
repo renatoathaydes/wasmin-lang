@@ -1,7 +1,7 @@
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::TopLevelExpression;
+use crate::ast::TopLevelElement;
 use crate::parse::parser::Stack;
 
 #[macro_use]
@@ -21,7 +21,7 @@ pub(crate) mod stack;
 pub type Parser<'s> = parser::Parser<'s>;
 
 #[cfg(test)]
-fn no_op_sink() -> Sender<TopLevelExpression> {
+fn no_op_sink() -> Sender<TopLevelElement> {
     use std::sync::mpsc::channel;
     let (sink, _) = channel();
     sink
@@ -39,6 +39,6 @@ pub(crate) fn new_parser_with_stack<'s>(chars: &'s mut Chars<'s>, stack: Stack) 
     Parser::new(chars, stack, sink)
 }
 
-pub fn new_parser<'s>(chars: &'s mut Chars<'s>, sender: Sender<TopLevelExpression>) -> Parser<'s> {
+pub fn new_parser<'s>(chars: &'s mut Chars<'s>, sender: Sender<TopLevelElement>) -> Parser<'s> {
     Parser::new(chars, Stack::default(), sender)
 }

@@ -17,10 +17,10 @@ fn test_let() {
         let mut parser = new_parser(&mut chars, sender);
         parser.parse();
 
-        assert_eq!(rcv.iter().next().unwrap(), texpr_let!("x" = expr_const!("1" I32)));
-        assert_eq!(rcv.iter().next().unwrap(), texpr_let!("y" =
+        assert_eq!(rcv.iter().next().unwrap(), top_let!("x" = expr_const!("1" I32)));
+        assert_eq!(rcv.iter().next().unwrap(), top_let!("y" =
         expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_local!("z" I32))));
-        assert_eq!(rcv.iter().next().unwrap(), texpr_let!(p "PI" = expr_const!("3.14" F32)));
+        assert_eq!(rcv.iter().next().unwrap(), top_let!(p "PI" = expr_const!("3.14" F32)));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -37,9 +37,9 @@ fn test_multi_let() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("x", "y", "z" = expr_const!("1" I32), expr_const!("0.1" F32), expr_const!("10i64" I64)));
+                   top_let!("x", "y", "z" = expr_const!("1" I32), expr_const!("0.1" F32), expr_const!("10i64" I64)));
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!(p "PI", "E" = expr_const!("3.14" F32), expr_const!("2.16f64" F64)));
+                   top_let!(p "PI", "E" = expr_const!("3.14" F32), expr_const!("2.16f64" F64)));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -56,7 +56,7 @@ fn test_def_then_let() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("foo" = expr_const!("0" I32)));
+                   top_let!("foo" = expr_const!("0" I32)));
         assert_eq!(rcv.iter().next().unwrap(),
                    expr_let!("bar" = expr_const!("3" I32); Some(I64)).try_into().unwrap());
     }
@@ -75,7 +75,7 @@ fn test_fun_0_args() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([]());
+                   top_fun!(def fun_type!([]());
                               fun "nothing" = expr_empty!()));
     }
 
@@ -93,7 +93,7 @@ fn test_fun_1_arg() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([I32](I32));
+                   top_fun!(def fun_type!([I32](I32));
                               fun "f" "x" = expr_local!("x" I32)));
     }
 
@@ -111,7 +111,7 @@ fn test_fun_2_arg_multi_value() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([I32 I64](I64 I32));
+                   top_fun!(def fun_type!([I32 I64](I64 I32));
                               p fun "swap" "x" "y" = expr_multi!(expr_local!("y" I64), expr_local!("x" I32))));
     }
 
@@ -129,11 +129,11 @@ fn test_def_multi_fun() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([](I32));
+                   top_fun!(def fun_type!([](I32));
                               fun "foo" = expr_const!("0" I32)));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([I32](I32));
+                   top_fun!(def fun_type!([I32](I32));
                               fun "foo" "n" = expr_local!("n" I32)));
     }
 
@@ -151,15 +151,15 @@ fn test_use_std_wasm_arithmetics() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("x" = expr_fun_call!(wasm "add" expr_const!("2" I32) expr_const!("2" I32);
+                   top_let!("x" = expr_fun_call!(wasm "add" expr_const!("2" I32) expr_const!("2" I32);
                         fun_type!([I32 I32](I32)))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("y" = expr_fun_call!(wasm "mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
+                   top_let!("y" = expr_fun_call!(wasm "mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
                         fun_type!([I64 I64](I64)))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_let!("z" = expr_fun_call!(wasm "sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
+                   top_let!("z" = expr_fun_call!(wasm "sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
                         fun_type!([F32 F32](F32)))));
     }
 
@@ -177,10 +177,10 @@ fn test_global_mut_set() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_mut!("i" = expr_const!("0" I32)));
+                   top_mut!("i" = expr_const!("0" I32)));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   texpr_fun!(def fun_type!([](I32)); fun "f" = expr_group!(
+                   top_fun!(def fun_type!([](I32)); fun "f" = expr_group!(
                        expr_set!("i" = expr_fun_call!(wasm "add"
                             expr_global!("i" I32) expr_const!("1" I32); fun_type!([I32 I32](I32))); true)
                        expr_global!("i" I32)
@@ -208,7 +208,7 @@ fn test_ext_module() {
         parser.parse();
 
         match rcv.iter().next().unwrap() {
-            TopLevelExpression::Ext(mod_name, mut defs, _) => {
+            TopLevelElement::Ext(mod_name, mut defs, _) => {
                 assert_eq!(mod_name, "console");
                 assert_eq!(defs.len(), 3);
                 let actual_defs: HashSet<_> = defs.drain(..).collect();
@@ -216,15 +216,15 @@ fn test_ext_module() {
                 let mut expected_defs = HashSet::new();
 
                 expected_defs.insert(ExtDef {
-                    def_name: "log".to_owned(),
+                    id: "log".to_owned(),
                     typ: Fn(vec![fun_type!([I32]()), fun_type!([F32]())]),
                 });
                 expected_defs.insert(ExtDef {
-                    def_name: "warn".to_owned(),
+                    id: "warn".to_owned(),
                     typ: Fn(vec![fun_type!([I32 I32]())]),
                 });
                 expected_defs.insert(ExtDef {
-                    def_name: "a_number".to_owned(),
+                    id: "a_number".to_owned(),
                     typ: I32,
                 });
 

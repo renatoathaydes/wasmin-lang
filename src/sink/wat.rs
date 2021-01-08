@@ -1,6 +1,6 @@
 use std::io::{ErrorKind, Result, Write};
 
-use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelExpression, Visibility};
+use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::{for_each_assignment, sanitize_number, WasminSink};
 use crate::types::{FnType, Type};
 
@@ -248,12 +248,12 @@ impl Wat {
                 self.start_expr(w)?;
             }
             is_first = false;
-            w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.def_name).as_bytes())?;
+            w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes())?;
             match def.typ {
                 Type::Empty | Type::WasmFn(_) => {}
                 Type::Fn(fn_types) => {
                     for fn_type in fn_types {
-                        self.write_fun(w, &def.def_name, None, None, fn_type, Visibility::Private)?;
+                        self.write_fun(w, &def.id, None, None, fn_type, Visibility::Private)?;
                     }
                 }
                 Type::I64 => { w.write_all(b"i64")?; }
@@ -291,28 +291,28 @@ impl WasminSink for Wat {
         w.write_all(b"(module\n")
     }
 
-    fn receive(&mut self, expr: TopLevelExpression, mut w: &mut Box<dyn Write>) -> Result<()> {
+    fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>) -> Result<()> {
         Wat::start_texpr(w)?;
-        match expr {
-            TopLevelExpression::Let(assign, vis) => {
+        match element {
+            TopLevelElement::Let(assign, vis) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
                     self.write_global_assignment(&mut w2, &id, &expr, &vis, false)?;
                     w2.write_all(b"\n")
                 })
             }
-            TopLevelExpression::Mut(assign, vis) => {
+            TopLevelElement::Mut(assign, vis) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
                     self.write_global_assignment(&mut w2, &id, &expr, &vis, true)?;
                     w2.write_all(b"\n")
                 })
             }
-            TopLevelExpression::Fn((id, args, body, typ), vis) => {
+            TopLevelElement::Fn((id, args, body, typ), vis) => {
                 self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)
             }
-            TopLevelExpression::Ext(mod_name, defs, ..) => {
+            TopLevelElement::Ext(mod_name, defs, ..) => {
                 self.write_ext(w, mod_name.as_str(), defs)
             }
-            TopLevelExpression::Error(e, pos) =>
+            TopLevelElement::Error(e, pos) =>
                 self.error(e.as_str(), pos)
         }
     }

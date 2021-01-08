@@ -1,6 +1,6 @@
 use std::io::{Result, Write};
 
-use crate::ast::{Assignment, Expression, TopLevelExpression};
+use crate::ast::{Assignment, Expression, TopLevelElement};
 
 pub mod wat;
 pub mod wasm;
@@ -10,7 +10,7 @@ pub type Wat = wat::Wat;
 pub type Wasm = wasm::Wasm;
 pub type DebugSink = debug::DebugSink;
 
-/// A WasminSink receives [`TopLevelExpression`] items as a Wasmin program is being parsed.
+/// A WasminSink receives [`TopLevelElement`] items as a Wasmin program is being parsed.
 ///
 /// It has the purpose of generating output from a Wasmin program (bytecode in a compilation target,
 /// output from an interpreted program, debug information etc.).
@@ -18,14 +18,14 @@ pub trait WasminSink {
     /// Start writing a module with the given name.
     fn start(&mut self, module_name: String, w: &mut Box<dyn Write>) -> Result<()>;
 
-    /// Receive a [`TopLevelExpression`] from the Wasmin parser.
+    /// Receive a [`TopLevelElement`] from the Wasmin parser.
     ///
     /// If the sink implementation is a compiler, the returned bytes may represent the compilation
     /// target's format (e.g. WAT text or WASM binary).
     /// If the sink is an interpreter, the bytes may be the output of the program.
     ///
     /// If an [`ErrorCode`] is returned, the Wasmin CLI exits immediately with the provided code.
-    fn receive(&mut self, expr: TopLevelExpression, w: &mut Box<dyn Write>) -> Result<()>;
+    fn receive(&mut self, element: TopLevelElement, w: &mut Box<dyn Write>) -> Result<()>;
 
     /// Flush any state that may be pending after receiving a full Wasmin program.
     ///

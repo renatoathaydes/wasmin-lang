@@ -3,7 +3,7 @@ use std::fmt::Result as FmtResult;
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::{Assignment, Expression, Fun, TopLevelExpression, ExtDef};
+use crate::ast::{Assignment, Expression, Fun, TopLevelElement, ExtDef};
 use crate::parse::{expr_parser, ext_parser, fun_parser, top_level_parser, type_parser};
 pub use crate::parse::stack::{*};
 use crate::types::{*};
@@ -33,9 +33,9 @@ impl From<TypeError> for ParserError {
     }
 }
 
-impl Into<TopLevelExpression> for ParserError {
-    fn into(self) -> TopLevelExpression {
-        TopLevelExpression::Error(self.msg, self.pos)
+impl Into<TopLevelElement> for ParserError {
+    fn into(self) -> TopLevelElement {
+        TopLevelElement::Error(self.msg, self.pos)
     }
 }
 
@@ -46,7 +46,7 @@ pub struct Parser<'s> {
     stack: Stack,
     chars: &'s mut Chars<'s>,
     curr_char: Option<char>,
-    sink: Sender<TopLevelExpression>,
+    sink: Sender<TopLevelElement>,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -98,7 +98,7 @@ impl Parser<'_> {
     pub fn new<'s>(
         chars: &'s mut Chars<'s>,
         stack: Stack,
-        sink: Sender<TopLevelExpression>,
+        sink: Sender<TopLevelElement>,
     ) -> Parser<'s> {
         Parser { line: 0, col: 0, curr_char: Option::None, chars, stack, sink }
     }
@@ -141,7 +141,7 @@ impl Parser<'_> {
         (self.line, self.col)
     }
 
-    pub fn sink(&self) -> &Sender<TopLevelExpression> {
+    pub fn sink(&self) -> &Sender<TopLevelElement> {
         &self.sink
     }
 

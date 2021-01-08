@@ -16,7 +16,7 @@ pub type Fun = (String, Vec<String>, Expression, FnType);
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ExtDef {
-    pub def_name: String,
+    pub id: String,
     pub typ: Type,
 }
 
@@ -48,7 +48,7 @@ pub enum Visibility {
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub enum TopLevelExpression {
+pub enum TopLevelElement {
     Let(Assignment, Visibility),
     Mut(Assignment, Visibility),
     Ext(String, Vec<ExtDef>, Visibility),
@@ -93,14 +93,14 @@ impl Expression {
     }
 }
 
-impl TryInto<TopLevelExpression> for Expression {
+impl TryInto<TopLevelElement> for Expression {
     type Error = String;
 
-    fn try_into(self) -> Result<TopLevelExpression, Self::Error> {
+    fn try_into(self) -> Result<TopLevelElement, Self::Error> {
         match self {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
-            Let(l) => Ok(TopLevelExpression::Let(l, Visibility::Private)),
-            Mut(m) => Ok(TopLevelExpression::Mut(m, Visibility::Private)),
+            Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private)),
+            Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private)),
             Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
@@ -108,9 +108,9 @@ impl TryInto<TopLevelExpression> for Expression {
     }
 }
 
-impl From<TypeError> for TopLevelExpression {
+impl From<TypeError> for TopLevelElement {
     fn from(e: TypeError) -> Self {
-        TopLevelExpression::Error(e.reason, e.pos)
+        TopLevelElement::Error(e.reason, e.pos)
     }
 }
 
@@ -256,81 +256,81 @@ macro_rules! fun_type {
 }
 
 #[macro_export]
-macro_rules! texpr_let {
+macro_rules! top_let {
     ($($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Let((ids, exprs, replacements), Visibility::Private)
+        TopLevelElement::Let((ids, exprs, replacements), Visibility::Private)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Let((ids, exprs, replacements), Visibility::Public)
+        TopLevelElement::Let((ids, exprs, replacements), Visibility::Public)
     }};
 }
 
 #[macro_export]
-macro_rules! texpr_mut {
+macro_rules! top_mut {
     ($($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Mut((ids, exprs, replacements), Visibility::Private)
+        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Private)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelExpression::Mut((ids, exprs, replacements), Visibility::Public)
+        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Public)
     }};
 }
 
 #[macro_export]
-macro_rules! texpr_fun {
+macro_rules! top_fun {
     (def $t:expr; fun $id:literal $($arg:literal)* = $e:expr) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Private)
+        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Private)
     }};
     (def $t:expr; p fun $id:literal $($arg:literal)* = $e:expr) => {{
-        use crate::ast::{TopLevelExpression, Visibility};
+        use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelExpression::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)
+        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)
     }}
 }
 
 #[macro_export]
-macro_rules! texpr_ext {
+macro_rules! top_ext {
     ($name: literal => $($id:literal $typ:expr);*) => {{
-        use crate::ast::{TopLevelExpression, Visibility, ExtDef};
+        use crate::ast::{TopLevelElement, Visibility, ExtDef};
         let mut defs = Vec::new();
         $(
             defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
         )*
-        TopLevelExpression::Ext($name.to_owned(), defs, Visibility::Private)
+        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Private)
     }};
     (p $name: literal => $($id:literal $typ:expr);*) => {{
-        use crate::ast::{TopLevelExpression, Visibility, ExtDef};
+        use crate::ast::{TopLevelElement, Visibility, ExtDef};
         let mut defs = Vec::new();
         $(
             defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
         )*
-        TopLevelExpression::Ext($name.to_owned(), defs, Visibility::Public)
+        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Public)
     }}
 }

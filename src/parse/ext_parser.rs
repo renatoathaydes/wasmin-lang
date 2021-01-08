@@ -34,7 +34,7 @@ fn parse_defs(parser: &mut Parser, mod_name: &String) -> Result<Vec<ExtDef>, Par
     }
     let defs = parser.stack_mut().drop_level_and_get_its_defs();
     let ext_defs = defs.iter()
-        .map(|(name, typ)| ExtDef { def_name: name.clone(), typ: typ.clone() })
+        .map(|(name, typ)| ExtDef { id: name.clone(), typ: typ.clone() })
         .collect();
     parser.stack_mut().push_namespace(mod_name.clone(), defs)
         .map_err(|msg| ParserError { pos: mod_pos, msg })?;

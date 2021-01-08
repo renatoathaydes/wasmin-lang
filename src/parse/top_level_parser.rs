@@ -1,6 +1,6 @@
 use Visibility::Public;
 
-use crate::ast::{TopLevelExpression, Visibility};
+use crate::ast::{TopLevelElement, Visibility};
 use crate::ast::Visibility::Private;
 use crate::parse::Parser;
 
@@ -16,7 +16,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             if let Some(w) = parser.parse_word() {
                 return parse_top(parser, &w, true);
             } else {
-                Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
+                Some(TopLevelElement::Error(format!("Unexpected: '{}'. \
                 Expected let, mut or fun", word), parser.pos()))
             }
         }
@@ -32,9 +32,9 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
                     if word.starts_with("m") {
-                        Some(TopLevelExpression::Mut(items, visibility))
+                        Some(TopLevelElement::Mut(items, visibility))
                     } else {
-                        Some(TopLevelExpression::Let(items, visibility))
+                        Some(TopLevelElement::Let(items, visibility))
                     }
                 }
                 Err(e) => Some(e.into())
@@ -43,7 +43,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
         "fun" => {
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
-                Ok(fun) => Some(TopLevelExpression::Fn(fun, visibility)),
+                Ok(fun) => Some(TopLevelElement::Fn(fun, visibility)),
                 Err(e) => Some(e.into())
             }
         }
@@ -51,13 +51,13 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_ext() {
                 Ok((mod_name, defs)) =>
-                    Some(TopLevelExpression::Ext(mod_name, defs, visibility)),
+                    Some(TopLevelElement::Ext(mod_name, defs, visibility)),
                 Err(e) => Some(e.into())
             }
         }
         _ => {
             let allowed = format!("{}let, mut or fun", if is_pub { "" } else { "pub, def, " });
-            Some(TopLevelExpression::Error(format!("Unexpected: '{}'. \
+            Some(TopLevelElement::Error(format!("Unexpected: '{}'. \
                 Expected {} here.", word, allowed), parser.pos()))
         }
     };

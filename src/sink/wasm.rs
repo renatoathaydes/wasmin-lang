@@ -1,6 +1,6 @@
 use std::io::{Result, Write};
 
-use crate::ast::TopLevelExpression;
+use crate::ast::TopLevelElement;
 use crate::sink::WasminSink;
 
 #[derive(Default)]
@@ -11,7 +11,7 @@ impl WasminSink for Wasm {
         unimplemented!()
     }
 
-    fn receive(&mut self, _expr: TopLevelExpression, mut _w: &mut Box<dyn Write>) -> Result<()> {
+    fn receive(&mut self, _expr: TopLevelElement, mut _w: &mut Box<dyn Write>) -> Result<()> {
         unimplemented!()
     }
 }

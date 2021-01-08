@@ -1,6 +1,6 @@
 use std::io::{Result, Write};
 
-use crate::ast::TopLevelExpression;
+use crate::ast::TopLevelElement;
 use crate::sink::WasminSink;
 
 #[derive(Default)]
@@ -13,7 +13,7 @@ impl WasminSink for DebugSink {
         w.write_all(b"\n")
     }
 
-    fn receive(&mut self, expr: TopLevelExpression, w: &mut Box<dyn Write>) -> Result<()> {
+    fn receive(&mut self, expr: TopLevelElement, w: &mut Box<dyn Write>) -> Result<()> {
         w.write_all(format!("  {:?}\n", expr).as_bytes())
     }
 
