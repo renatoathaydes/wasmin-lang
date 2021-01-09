@@ -3,7 +3,7 @@ use std::fmt::Result as FmtResult;
 use std::str::Chars;
 use std::sync::mpsc::Sender;
 
-use crate::ast::{Assignment, Expression, Fun, TopLevelElement, ExtDef};
+use crate::ast::{Assignment, Comment, Expression, ExtDef, Fun, TopLevelElement};
 use crate::parse::{expr_parser, ext_parser, fun_parser, top_level_parser, type_parser};
 pub use crate::parse::stack::{*};
 use crate::types::{*};
@@ -47,6 +47,8 @@ pub struct Parser<'s> {
     chars: &'s mut Chars<'s>,
     curr_char: Option<char>,
     sink: Sender<TopLevelElement>,
+    remember_comments: bool,
+    comment: Option<Comment>,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -100,7 +102,25 @@ impl Parser<'_> {
         stack: Stack,
         sink: Sender<TopLevelElement>,
     ) -> Parser<'s> {
-        Parser { line: 0, col: 0, curr_char: Option::None, chars, stack, sink }
+        Parser {
+            line: 0,
+            col: 0,
+            curr_char: Option::None,
+            remember_comments: false,
+            comment: None,
+            chars,
+            stack,
+            sink,
+        }
+    }
+
+    pub fn store_comments(&mut self, value: bool) {
+        self.remember_comments = value;
+    }
+
+    pub fn get_comment(&mut self, remember_comments: bool) -> Option<Comment> {
+        self.store_comments(remember_comments);
+        std::mem::replace(&mut self.comment, None)
     }
 
     pub fn curr_char(&self) -> Option<char> {
@@ -123,14 +143,54 @@ impl Parser<'_> {
         self.error(&format!("unexpected char: '{}' ({})", c, reason))
     }
 
-    pub fn next(&mut self) -> Option<char> {
+    fn next_after_comment(&mut self) -> Option<char> {
         let next = self.chars.next();
+        let end_char = if let Some(c) = next {
+            self.update_pos(c);
+            if c == '{' { '}' } else { '\n' }
+        } else {
+            return None;
+        };
+        if self.remember_comments {
+            let mut comment = String::with_capacity(32);
+            if end_char == '\n' { // skip the '{' if it was given
+                comment.push(next.unwrap());
+            }
+            while let Some(c) = self.chars.next() {
+                self.update_pos(c);
+                if c == end_char {
+                    self.comment = Some(comment);
+                    return self.chars.next();
+                }
+                comment.push(c);
+            }
+            self.comment = Some(comment);
+        } else {
+            while let Some(c) = self.chars.next() {
+                self.update_pos(c);
+                if c == end_char {
+                    return self.chars.next();
+                }
+            }
+        }
+        None
+    }
+
+    fn update_pos(&mut self, c: char) {
+        if c == '\n' {
+            self.line += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
+    }
+
+    pub fn next(&mut self) -> Option<char> {
+        let mut next = self.chars.next();
         if let Some(c) = next {
-            if c == '\n' {
-                self.line += 1;
-                self.col = 0;
-            } else {
-                self.col += 1;
+            self.update_pos(c);
+            if c == '#' {
+                next = self.next_after_comment();
             }
         }
         self.curr_char = next;

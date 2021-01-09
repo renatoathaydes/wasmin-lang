@@ -13,8 +13,8 @@ impl WasminSink for DebugSink {
         w.write_all(b"\n")
     }
 
-    fn receive(&mut self, expr: TopLevelElement, w: &mut Box<dyn Write>) -> Result<()> {
-        w.write_all(format!("  {:?}\n", expr).as_bytes())
+    fn receive(&mut self, elem: TopLevelElement, w: &mut Box<dyn Write>) -> Result<()> {
+        w.write_all(format!("  {:?}\n", elem).as_bytes())
     }
 
     fn flush(&mut self, w: &mut Box<dyn Write>) -> Result<()> {

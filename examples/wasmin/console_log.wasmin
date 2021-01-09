@@ -1,9 +1,11 @@
+# a sub-set of the usual console object from JavaScript
 ext console {
     log [i32];
     log [f32];
     pi f32;
 }
 
+# the function called _start is normally executed when the module is instantiated.
 pub fun _start = (
     console.log 10;
     console.log console.pi

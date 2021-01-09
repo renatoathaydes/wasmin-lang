@@ -5,8 +5,10 @@ use crate::ast::Visibility::Private;
 use crate::parse::Parser;
 
 pub fn parse(parser: &mut Parser) {
+    parser.store_comments(true);
     while let Some(word) = parser.parse_word() {
         parse_top(parser, word.as_ref(), false);
+        parser.store_comments(true);
     }
 }
 
@@ -21,6 +23,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "def" if !is_pub => {
+            parser.store_comments(false);
             if let Err(e) = parser.parse_def() {
                 Some(e.into())
             } else {
@@ -28,30 +31,33 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "let" | "mut" => {
+            let comment = parser.get_comment(false);
             match parser.parse_assignment(word.starts_with('m')) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
                     if word.starts_with("m") {
-                        Some(TopLevelElement::Mut(items, visibility))
+                        Some(TopLevelElement::Mut(items, visibility, comment))
                     } else {
-                        Some(TopLevelElement::Let(items, visibility))
+                        Some(TopLevelElement::Let(items, visibility, comment))
                     }
                 }
                 Err(e) => Some(e.into())
             }
         }
         "fun" => {
+            let comment = parser.get_comment(false);
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
-                Ok(fun) => Some(TopLevelElement::Fn(fun, visibility)),
+                Ok(fun) => Some(TopLevelElement::Fn(fun, visibility, comment)),
                 Err(e) => Some(e.into())
             }
         }
         "ext" => {
+            let comment = parser.get_comment(false);
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_ext() {
                 Ok((mod_name, defs)) =>
-                    Some(TopLevelElement::Ext(mod_name, defs, visibility)),
+                    Some(TopLevelElement::Ext(mod_name, defs, visibility, comment)),
                 Err(e) => Some(e.into())
             }
         }

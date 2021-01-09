@@ -53,12 +53,14 @@ pub enum Visibility {
     Internal,
 }
 
+pub type Comment = String;
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum TopLevelElement {
-    Let(Assignment, Visibility),
-    Mut(Assignment, Visibility),
-    Ext(String, Vec<ExtDef>, Visibility),
-    Fn(Fun, Visibility),
+    Let(Assignment, Visibility, Option<Comment>),
+    Mut(Assignment, Visibility, Option<Comment>),
+    Ext(String, Vec<ExtDef>, Visibility, Option<Comment>),
+    Fn(Fun, Visibility, Option<Comment>),
     Error(String, (usize, usize)),
 }
 
@@ -105,8 +107,8 @@ impl TryInto<TopLevelElement> for Expression {
     fn try_into(self) -> Result<TopLevelElement, Self::Error> {
         match self {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
-            Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private)),
-            Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private)),
+            Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private, None)),
+            Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private, None)),
             Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
@@ -288,7 +290,7 @@ macro_rules! top_let {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Let((ids, exprs, replacements), Visibility::Private)
+        TopLevelElement::Let((ids, exprs, replacements), Visibility::Private, None)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::{TopLevelElement, Visibility};
@@ -297,7 +299,7 @@ macro_rules! top_let {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Let((ids, exprs, replacements), Visibility::Public)
+        TopLevelElement::Let((ids, exprs, replacements), Visibility::Public, None)
     }};
 }
 
@@ -310,7 +312,7 @@ macro_rules! top_mut {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Private)
+        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Private, None)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::{TopLevelElement, Visibility};
@@ -319,7 +321,7 @@ macro_rules! top_mut {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Public)
+        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Public, None)
     }};
 }
 
@@ -329,13 +331,13 @@ macro_rules! top_fun {
         use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Private)
+        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Private, None)
     }};
     (def $t:expr; p fun $id:literal $($arg:literal)* = $e:expr) => {{
         use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Public)
+        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Public, None)
     }}
 }
 
@@ -347,7 +349,7 @@ macro_rules! top_ext {
         $(
             defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
         )*
-        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Private)
+        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Private, None)
     }};
     (p $name: literal => $($id:literal $typ:expr);*) => {{
         use crate::ast::{TopLevelElement, Visibility, ExtDef};
@@ -355,6 +357,6 @@ macro_rules! top_ext {
         $(
             defs.push(ExtDef{ def_name: $id.to_owned(), typ: $typ });
         )*
-        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Public)
+        TopLevelElement::Ext($name.to_owned(), defs, Visibility::Public, None)
     }}
 }

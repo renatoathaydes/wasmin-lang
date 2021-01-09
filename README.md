@@ -17,7 +17,7 @@ Feature Checklist:
 - [x] ungrouped expressions.
 - [x] multi-value expressions.
 - [x] type declarations.
-- [ ] comments.
+- [x] comments.
 - [ ] generic type declarations.
 - [x] let assignments.
 - [x] mut assignments.
@@ -98,15 +98,29 @@ For example, these are all expressions:
 The last example shows that the concatenative style allows certain expressions to be written in a more natural way, in
 this case using what looks like the familiar "infix operator" syntax.
 
-Notice that expressions within parenthesis are self-contained. You cannot do this for example:
+Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form:
+
+```bash
+# single line comment
+
+#{
+Multi-line
+Comment
+}
+```
+
+Top-level expressions within parenthesis end when the closing parens is reached, so no `;` is required.
 
 ```rust
+# ok
+let x = (add 2 3)
+
 # wrong!
 let x = (add 2) 3;
 ```
 
-The above example would try to assign the result of `add 2` to `x` (which won't work because `add` takes two arguments),
-then the expression `3` appears outside of the previous `let` expression, in an illegal location
+The last example above would try to assign the result of `add 2` to `x` (which won't work because `add` takes two
+arguments), then the expression `3` appears outside of the previous `let` expression, in an illegal location
 (only `let`, `mut` and as we'll see below, `def` and `fun` can appear as top-level elements).
 
 These, however, would be fine:

@@ -247,7 +247,7 @@ fn test_ext_module() {
         parser.parse();
 
         match rcv.iter().next().unwrap() {
-            TopLevelElement::Ext(mod_name, mut defs, _) => {
+            TopLevelElement::Ext(mod_name, mut defs, _, _) => {
                 assert_eq!(mod_name, "console");
                 assert_eq!(defs.len(), 3);
                 let actual_defs: HashSet<_> = defs.drain(..).collect();
@@ -273,6 +273,33 @@ fn test_ext_module() {
                 panic!(format!("Did not get Ext, got {:?}", e));
             }
         }
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_fun_with_multiline_comment() {
+    let mut chars = "\n#this is 10\nlet n = 10;\n\
+       #{   \nthis is a noop fun\n  }\nfun start = ()".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        let expected = TopLevelElement::Let(
+            (vec!["n".to_owned()], vec![expr_const!("10" I32)], vec![None]),
+            Visibility::Private, Some("this is 10".to_owned()));
+
+        assert_eq!(rcv.iter().next().unwrap(), expected);
+
+        let expected = TopLevelElement::Fn(
+            ("start".to_owned(), vec![], Expression::Empty, fun_type!([]())),
+            Visibility::Private, Some("   \nthis is a noop fun\n  ".to_owned()));
+
+        assert_eq!(rcv.iter().next().unwrap(), expected);
     }
 
     assert_eq!(rcv.iter().next(), None);

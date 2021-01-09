@@ -191,6 +191,17 @@ fn test_global() {
 }
 
 #[test]
+fn test_single_line_comment() {
+    assert_eq!(parse_expr!("\n# this is a comment\n  foo\n", "foo" => I32), Global(String::from("foo"), I32));
+    assert_eq!(parse_expr!("\n  # this is a comment\nfoo\n", "foo" => I32), Global(String::from("foo"), I32));
+}
+
+#[test]
+fn test_multi_line_comment() {
+    assert_eq!(parse_expr!("\n#{\n this\n is a\n comment}\n  foo\n", "foo" => I32), Global(String::from("foo"), I32));
+}
+
+#[test]
 fn test_fun_call_basic() {
     assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![fun_type!([I32]())])),
                expr_fun_call!("do-it" expr_const!("2" I32) ; [I32]() ));

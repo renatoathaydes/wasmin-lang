@@ -311,19 +311,19 @@ impl WasminSink for Wat {
     fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>) -> Result<()> {
         Wat::start_texpr(w)?;
         match element {
-            TopLevelElement::Let(assign, vis) => {
+            TopLevelElement::Let(assign, vis, _) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
                     self.write_global_assignment(&mut w2, &id, &expr, &vis, false)?;
                     w2.write_all(b"\n")
                 })
             }
-            TopLevelElement::Mut(assign, vis) => {
+            TopLevelElement::Mut(assign, vis, _) => {
                 for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
                     self.write_global_assignment(&mut w2, &id, &expr, &vis, true)?;
                     w2.write_all(b"\n")
                 })
             }
-            TopLevelElement::Fn((id, args, body, typ), vis) => {
+            TopLevelElement::Fn((id, args, body, typ), vis, _) => {
                 self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)
             }
             TopLevelElement::Ext(mod_name, defs, ..) => {
