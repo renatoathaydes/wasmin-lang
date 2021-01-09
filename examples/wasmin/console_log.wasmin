@@ -1,0 +1,10 @@
+ext console {
+    log [i32];
+    log [f32];
+    pi f32;
+}
+
+pub fun _start = (
+    console.log 10;
+    console.log console.pi
+)
