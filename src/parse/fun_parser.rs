@@ -59,8 +59,12 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
                 Err(e) => Err(ParserError { msg: e, pos }),
             }
         }
-        Some(typ) =>
-            Err(ParserError { msg: format!("fun '{}' cannot implement type '{}'", name, typ), pos }),
+        Some(typ) => {
+            parser.stack_mut().new_level();
+            let _ = parser.parse_expr();
+            parser.stack_mut().drop_level();
+            Err(ParserError { msg: format!("fun '{}' cannot implement type '{}'", name, typ), pos })
+        }
         None if left.is_empty() => {
             parser.stack_mut().new_level();
             let body = parser.parse_expr();
@@ -76,8 +80,12 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
                 })
             }
         }
-        None =>
+        None => {
+            parser.stack_mut().new_level();
+            let _ = parser.parse_expr();
+            parser.stack_mut().drop_level();
             Err(ParserError { msg: format!("fun '{}' missing def (arg types cannot be inferred)", name), pos })
+        }
     }
 }
 
