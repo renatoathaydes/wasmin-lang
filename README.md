@@ -132,7 +132,8 @@ function, and hence is equivalent to just `(add 2 3)` (but _accidentally_ looks 
 The type of a variable or function can be declared explicitly with a `def` statement. To implement a function, the `fun`
 keyword is used.
 
-`def`s are optional for `let` and `mut` bindings (it is always possible to infer their types), but mandatory for `fun`.
+`def`s are optional for `let` and `mut` bindings (it is always possible to infer their types), but mandatory for `fun`
+unless the function has type `[]()` (no args, no return value).
 
 To make a `fun` or `let` visible outside the module (i.e. add them to the WASM module's exports), declare them
 with `pub`. For example, `pub let PI = 3.1415;`.
@@ -184,7 +185,6 @@ To call functions defined in an `ext` module, employ the familiar `module_name.f
 ```rust
 ext console { # omitted definitions # }
 
-def _start [];
 fun _start = console.log 10;
 ```
 
@@ -192,30 +192,32 @@ fun _start = console.log 10;
 
 You can split up Wasmin programs in several files. To do that, just import other files as shown below.
 
-`factorial.wasmin`
+> TODO implement `use`.
+
+`factorial.wasmin`:
 
 ```rust
 def fact [i32]i64;
 pub fun fact n = if gt n 1; n * (fact (sub n 1)); n;
 ```
 
-`main.wasmin`
+`main.wasmin`:
 
 ```rust
 # the file extension is always implied to be .wasmin,
 # so this will import all `pub` definitions from "./factorial.wasmin".
 use * from "./factorial";
 
-def _start [];
+def _start []i64;
 fun _start = fact 5;
 ```
 
 `use` statements may also list which definitions to import:
 
 ```rust
-use { fact } from "./factorial";
+use {fact} from "./factorial";
 
-def _start [];
+def _start []i64;
 fun _start = fact 5;
 ```
 
@@ -225,7 +227,6 @@ If another file defines an `ext` module, then the `ext` module can be used as an
 # assume that "ext console" was defined inside "./factorial.wasmin"
 use { fact console } from "./factorial";
 
-def _start [];
 fun _start = console.log (fact 5);
 ```
 
