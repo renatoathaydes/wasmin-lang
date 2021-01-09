@@ -141,6 +141,45 @@ fn test_def_multi_fun() {
 }
 
 #[test]
+fn test_fun_without_def_calling_namespace_fun() {
+    let mut chars = "fun _start = console.log 42;".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.stack_mut().push_namespace("console".to_owned(), vec![
+            ("log".to_owned(), Fn(vec![fun_type!([I32]())]))
+        ]).unwrap();
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(),
+                   top_fun!(def fun_type!([]());
+                              fun "_start" = expr_fun_call!("console.log" expr_const!(42 I32); [I32]())));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
+fn test_fun_without_def_must_not_return_value() {
+    let mut chars = "fun _start = add 1 2;".chars();
+    let (sender, rcv) = channel();
+
+    // let the sender "drop" so the channel is closed
+    {
+        let mut parser = new_parser(&mut chars, sender);
+        parser.parse();
+
+        assert_eq!(rcv.iter().next().unwrap(), TopLevelElement::Error(
+            "fun '_start' missing def (body returns a value, hence the return type is mandatory)".to_owned(),
+            (0, 4)));
+    }
+
+    assert_eq!(rcv.iter().next(), None);
+}
+
+#[test]
 fn test_use_std_wasm_arithmetics() {
     let mut chars = "let x = add 2 2; let y = mul 3i64 4i64; let z = sub 1.0 0.1;".chars();
     let (sender, rcv) = channel();

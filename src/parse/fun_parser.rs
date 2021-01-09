@@ -1,7 +1,7 @@
 use crate::ast::Fun;
 use crate::parse::Parser;
 use crate::parse::parser::ParserError;
-use crate::types::{FnType, Type, Type::Fn, types_to_string};
+use crate::types::{FnType, Type, Type::Fn, types_to_string, NO_ARGS_OR_RETURNS_FUN_TYPE};
 
 pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
     let mut left = Vec::new();
@@ -29,16 +29,16 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
         Some(Fn(types)) => {
             parser.stack_mut().new_level();
             let bind_result = bind_args(parser, &types, &left);
-            let expr = parser.parse_expr();
+            let body = parser.parse_expr();
             parser.stack_mut().drop_level();
             match bind_result {
                 Ok(typ) => {
                     parser.stack_mut().push(name.clone(), Type::Fn(vec![typ.clone()]), false, false)
                         .map_err(|msg| ParserError { pos: parser.pos(), msg })?;
                     if typ.ins.len() == left.len() {
-                        let actual_type = expr.get_type();
+                        let actual_type = body.get_type();
                         if typ.outs.len() == actual_type.len() {
-                            Ok((name, left, expr, typ.clone()))
+                            Ok((name, left, body, typ.clone()))
                         } else {
                             Err(ParserError {
                                 msg: format!("fun '{}' should have type(s) {} \
@@ -61,6 +61,21 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
         }
         Some(typ) =>
             Err(ParserError { msg: format!("fun '{}' cannot implement type '{}'", name, typ), pos }),
+        None if left.is_empty() => {
+            parser.stack_mut().new_level();
+            let body = parser.parse_expr();
+            parser.stack_mut().drop_level();
+            let typ = body.get_type();
+            if typ.is_empty() {
+                Ok((name, left, body, NO_ARGS_OR_RETURNS_FUN_TYPE))
+            } else {
+                Err(ParserError {
+                    msg: format!("fun '{}' missing def (body returns a value, \
+                    hence the return type is mandatory)", name),
+                    pos,
+                })
+            }
+        }
         None =>
             Err(ParserError { msg: format!("fun '{}' missing def (arg types cannot be inferred)", name), pos })
     }

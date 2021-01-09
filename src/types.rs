@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub const NO_ARGS_OR_RETURNS_FUN_TYPE: FnType = FnType { ins: vec![], outs: vec![] };
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct FnType {
     pub ins: Vec<Type>,
