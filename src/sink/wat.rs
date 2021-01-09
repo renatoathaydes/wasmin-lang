@@ -172,7 +172,7 @@ impl Wat {
                 } else {
                     w.write_all(b"(call $")?;
                     w.write_all(name.as_bytes())?;
-                    if *fun_index != 0 { w.write_all(fun_index.to_string().as_bytes())?; }
+                    if fun_index != &0 { w.write_all(format!("${}", fun_index).as_bytes())?; }
                     w.write_all(b")")
                 }
             }
@@ -254,12 +254,17 @@ impl Wat {
                 Type::Fn(fn_types) => {
                     let mut i = 0;
                     for fn_type in fn_types {
-                        if i != 0 { self.start_expr(w)?; }
-                        i += 1;
+                        let name = if i == 0 {
+                            def.id.clone()
+                        } else {
+                            self.start_expr(w)?;
+                            format!("{}${}", def.id, i)
+                        };
                         w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes())?;
-                        self.write_fun(w, &format!("{}.{}", mod_name, &def.id),
+                        self.write_fun(w, &format!("{}.{}", mod_name, name),
                                        None, None, fn_type, Visibility::Private)?;
                         w.write_all(b")")?;
+                        i += 1;
                     }
                     None
                 }
