@@ -234,7 +234,7 @@ impl Wat {
             w.write_all(b"\n")?;
             w.write_all(self.ident.as_bytes())?;
         }
-        w.write_all(b")\n")
+        w.write_all(b")")
     }
 
     fn write_ext(&mut self,
@@ -248,21 +248,32 @@ impl Wat {
                 self.start_expr(w)?;
             }
             is_first = false;
-            w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes())?;
-            match def.typ {
-                Type::Empty | Type::WasmFn(_) => {}
+            let type_to_write = match def.typ {
+                Type::Empty | Type::WasmFn(_) => None,
                 Type::Fn(fn_types) => {
+                    let mut i = 0;
                     for fn_type in fn_types {
-                        self.write_fun(w, &def.id, None, None, fn_type, Visibility::Private)?;
+                        if i != 0 { self.start_expr(w)?; }
+                        i += 1;
+                        w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes())?;
+                        self.write_fun(w, &format!("{}.{}", mod_name, &def.id),
+                                       None, None, fn_type, Visibility::Private)?;
+                        w.write_all(b")")?;
                     }
+                    None
                 }
-                Type::I64 => { w.write_all(b"i64")?; }
-                Type::I32 => { w.write_all(b"i32")?; }
-                Type::F64 => { w.write_all(b"f64")?; }
-                Type::F32 => { w.write_all(b"f32")?; }
+                Type::I64 => Some(b"i64"),
+                Type::I32 => Some(b"i32"),
+                Type::F64 => Some(b"f64"),
+                Type::F32 => Some(b"f32"),
                 Type::Error(e) => { return self.error(e.reason.as_str(), e.pos); }
             };
-            w.write_all(b")")?;
+            if let Some(t) = type_to_write {
+                w.write_all(format!("(global ${}.{} (import \"{}\" \"{}\") ",
+                                    mod_name, &def.id, mod_name, &def.id).as_bytes())?;
+                w.write_all(t)?;
+                w.write_all(b")")?;
+            }
         }
         Ok(())
     }
@@ -318,6 +329,6 @@ impl WasminSink for Wat {
     }
 
     fn flush(&mut self, w: &mut Box<dyn Write>) -> Result<()> {
-        w.write_all(format!(")\n").as_bytes())
+        w.write_all(b"\n)\n")
     }
 }

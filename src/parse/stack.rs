@@ -115,7 +115,7 @@ impl Stack {
                 let (mod_name, elem) = id.split_at(idx);
                 let elem = &elem[1..];
                 return if let Some(ns) = self.namespaces.get(mod_name) {
-                    ns.get(elem).map(|e| (e, false))
+                    ns.get(elem).map(|e| (e, true))
                 } else { None };
             }
             let symbols = self.items.get(i).unwrap();
