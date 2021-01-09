@@ -40,6 +40,7 @@ pub enum Expression {
         name: String,
         args: Vec<Expression>,
         typ: Result<FnType, TypeError>,
+        fun_index: usize,
         is_wasm_fun: bool,
     },
     ExprError(TypeError),
@@ -232,19 +233,37 @@ macro_rules! expr_set {
 
 #[macro_export]
 macro_rules! expr_fun_call {
-    ($id:literal $($arg:expr)* ; $typ:expr) => {{
+    ($id:literal $($args:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
         use crate::ast::Expression;
-        let name = $id.to_owned();
-        let mut args = Vec::new();
-        $(args.push($arg);)*
-        Expression::FunCall {name, args, typ: Ok($typ), is_wasm_fun: false}
+        use crate::types::FnType;
+        #[allow(unused_mut)]
+        let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
+        $(args.push($args);)*
+        $(ins.push($ins);)*
+        $(outs.push($outs);)*
+        let typ = FnType{ins , outs};
+        $(idx = $idx;)?
+        Expression::FunCall { name: $id.to_string(), args, typ: Ok(typ), fun_index: idx, is_wasm_fun: false }
     }};
-    (wasm $id:literal $($arg:expr)* ; $typ:expr) => {{
+    ($id:literal $($args:expr)* ; $err:expr ) => {{
         use crate::ast::Expression;
-        let name = $id.to_owned();
+        #[allow(unused_mut)]
         let mut args = Vec::new();
+        $(args.push($args);)*
+        Expression::FunCall { name: $id.to_string(), args, typ: Err($err), fun_index: 0, is_wasm_fun: false }
+    }};
+    (wasm $id:literal $($arg:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
+        use crate::ast::Expression;
+        use crate::types::FnType;
+        let name = $id.to_owned();
+        #[allow(unused_mut)]
+        let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
         $(args.push($arg);)*
-        Expression::FunCall {name, args, typ: Ok($typ), is_wasm_fun: true}
+        $(ins.push($ins);)*
+        $(outs.push($outs);)*
+        let typ = FnType{ins , outs};
+        $(idx = $idx;)?
+        Expression::FunCall { name, args, typ: Ok(typ), fun_index: idx, is_wasm_fun: true}
     }};
 }
 

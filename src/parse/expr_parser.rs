@@ -219,7 +219,7 @@ fn create_expr(
 }
 
 fn to_fn_call(parser: &Parser, name: String, args: Vec<Expression>, t: Type) -> Expression {
-    let (typ, is_wasm_fun): (Result<FnType, TypeError>, bool) = match t {
+    let (typ_idx, is_wasm_fun): (Result<(FnType, usize), TypeError>, bool) = match t {
         Type::Error(e) => (Err(e), false),
         Type::Fn(types) =>
             (type_of_fn_call(&name, &types, &args)
@@ -229,10 +229,15 @@ fn to_fn_call(parser: &Parser, name: String, args: Vec<Expression>, t: Type) -> 
                  .map_err(|reason| TypeError { pos: parser.pos(), reason }), true),
         _ => (Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t))), false)
     };
-    Expression::FunCall { name, args, typ, is_wasm_fun }
+    let fun_index = typ_idx.as_ref()
+        .map(|(_, i)| i.clone())
+        .unwrap_or(0 as usize);
+    let typ = typ_idx.map(|(t, _)| t);
+    Expression::FunCall { name, args, typ, fun_index, is_wasm_fun }
 }
 
-fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>) -> Result<FnType, String> {
+fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>)
+                   -> Result<(FnType, usize), String> {
     let arg_types = {
         let mut t = Vec::new();
         for arg in args {
@@ -242,18 +247,20 @@ fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>
         t
     };
 
+    let mut fun_idx = 0;
     for typ in fn_types {
         if typ.ins.is_empty() && arg_types.is_empty() {
-            return Ok(typ.clone());
+            return Ok((typ.clone(), fun_idx));
         }
         if typ.ins.len() == arg_types.len() {
             let matching_fun = typ.ins.iter().zip(arg_types.iter())
-                .find(|(i, arg)| arg.is_assignable_to(i))
-                .map(|(i, _)| i);
+                .find(|(t, arg)| arg.is_assignable_to(t))
+                .map(|(t, _)| t);
             if let Some(_) = matching_fun {
-                return Ok(typ.clone());
+                return Ok((typ.clone(), fun_idx));
             }
         }
+        fun_idx += 1;
     }
 
     let types = types_to_string(&arg_types);

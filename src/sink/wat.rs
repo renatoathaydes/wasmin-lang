@@ -151,7 +151,7 @@ impl Wat {
                 }
                 Ok(())
             }
-            Expression::FunCall { name, args, is_wasm_fun, typ } => {
+            Expression::FunCall { name, args, is_wasm_fun, typ, fun_index } => {
                 if let Err(e) = typ {
                     return self.error(e.reason.as_str(), e.pos);
                 }
@@ -172,6 +172,7 @@ impl Wat {
                 } else {
                     w.write_all(b"(call $")?;
                     w.write_all(name.as_bytes())?;
+                    if *fun_index != 0 { w.write_all(fun_index.to_string().as_bytes())?; }
                     w.write_all(b")")
                 }
             }

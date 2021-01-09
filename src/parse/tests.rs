@@ -60,24 +60,6 @@ macro_rules! assign {
     }};
 }
 
-macro_rules! fn_call {
-    ($id:literal $($args:expr)* => [$($ins:expr)*] $($outs:expr)* ) => {{
-        #[allow(unused_mut)]
-        let (mut args, mut ins, mut outs) = (Vec::new(), Vec::new(), Vec::new());
-        $(args.push($args);)*
-        $(ins.push($ins);)*
-        $(outs.push($outs);)*
-        let typ = FnType{ins , outs};
-        FunCall { name: $id.to_string(), args, typ: Ok(typ), is_wasm_fun: false }
-    }};
-    ($id:literal $($args:expr)* => $err:expr ) => {{
-        #[allow(unused_mut)]
-        let mut args = Vec::new();
-        $(args.push($args);)*
-        FunCall { name: $id.to_string(), args, typ: Err($err), is_wasm_fun: false }
-    }};
-}
-
 #[test]
 fn test_type_of_empty() {
     assert_eq!(type_of!(""), Err("Unexpected EOF".into()));
@@ -210,30 +192,30 @@ fn test_global() {
 
 #[test]
 fn test_fun_call_basic() {
-    assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![FnType { ins: vec![I32], outs: vec![] }])),
-               fn_call!("do-it" expr_const!("2" I32) => [I32] ));
+    assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![fun_type!([I32]())])),
+               expr_fun_call!("do-it" expr_const!("2" I32) ; [I32]() ));
 
-    assert_eq!(parse_expr!("add 2 2;", "add" => Fn(vec![FnType { ins: vec![I32, I32], outs: vec![I64] }])),
-               fn_call!("add" expr_const!("2" I32) expr_const!("2" I32) => [I32 I32] I64));
+    assert_eq!(parse_expr!("add 2 2;", "add" => Fn(vec![fun_type!([I32 I32](I64))])),
+               expr_fun_call!("add" expr_const!("2" I32) expr_const!("2" I32) ; [I32 I32](I64)));
 
-    assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(vec![FnType { ins: vec![I32, I32], outs: vec![I32, I32] }])),
-               fn_call!("div-rem" expr_const!("4" I32) expr_const!("2" I32) => [I32 I32] I32 I32));
+    assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(vec![fun_type!([I32 I32](I32 I32))])),
+               expr_fun_call!("div-rem" expr_const!("4" I32) expr_const!("2" I32) ; [I32 I32](I32 I32)));
 
     assert_eq!(parse_expr!("(print 0.0)"),
-               fn_call!("print" expr_const!("0.0" F32) =>
+               expr_fun_call!("print" expr_const!("0.0" F32);
                TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
 
-    assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
-               fn_call!("no-args" => [] I32));
+    assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![fun_type!([](I32))])),
+               expr_fun_call!("no-args" ; [](I32)));
 
-    assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![FnType { ins: vec![], outs: vec![I32] }])),
-               fn_call!("no-args" => [] I32));
+    assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![fun_type!([](I32))])),
+               expr_fun_call!("no-args" ; [](I32)));
 }
 
 #[test]
 fn test_fun_call_complex() {
-    assert_eq!(parse_expr!("do-it(do-it 2);", "do-it" => Fn(vec![FnType { ins: vec![I32], outs: vec![I32] }])),
-               fn_call!("do-it" fn_call!("do-it" expr_const!("2" I32) => [I32] I32) => [I32] I32));
+    assert_eq!(parse_expr!("do-it(do-it 2);", "do-it" => Fn(vec![fun_type!([I32](I32))])),
+               expr_fun_call!("do-it" expr_fun_call!("do-it" expr_const!("2" I32) ; [I32](I32)); [I32](I32)));
 }
 
 #[test]
@@ -244,7 +226,7 @@ fn test_fun_call_namespace() {
         ("log".to_owned(), Fn(vec![fun_type!([I32]())]))
     ]).unwrap();
     assert_eq!(parser.parse_expr(),
-               fn_call!("console.log" expr_const!("10" I32) => [I32] ));
+               expr_fun_call!("console.log" expr_const!("10" I32) ; [I32]() ));
 }
 
 #[test]
@@ -556,7 +538,7 @@ fn test_let_multi_value() {
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_assignment(false), Ok(assign!("e", "f", "g" = fn_call!("func" => [] I64 F32 F64))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("e", "f", "g" = expr_fun_call!("func" ; [](I64 F32 F64)))));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);

@@ -152,15 +152,15 @@ fn test_use_std_wasm_arithmetics() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_let!("x" = expr_fun_call!(wasm "add" expr_const!("2" I32) expr_const!("2" I32);
-                        fun_type!([I32 I32](I32)))));
+                        [I32 I32](I32))));
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_let!("y" = expr_fun_call!(wasm "mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
-                        fun_type!([I64 I64](I64)))));
+                        [I64 I64](I64) ; 1)));
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_let!("z" = expr_fun_call!(wasm "sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
-                        fun_type!([F32 F32](F32)))));
+                        [F32 F32](F32) ; 2)));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -182,7 +182,7 @@ fn test_global_mut_set() {
         assert_eq!(rcv.iter().next().unwrap(),
                    top_fun!(def fun_type!([](I32)); fun "f" = expr_group!(
                        expr_set!("i" = expr_fun_call!(wasm "add"
-                            expr_global!("i" I32) expr_const!("1" I32); fun_type!([I32 I32](I32))); true)
+                            expr_global!("i" I32) expr_const!("1" I32); [I32 I32](I32)); true)
                        expr_global!("i" I32)
                    )));
     }
