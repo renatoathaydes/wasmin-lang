@@ -52,6 +52,8 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
             Some(';') => {
                 parser.next();
                 if state.is_empty() { break; }
+                push_if_non_empty(&mut exprs, create_expr(
+                    parser, std::mem::replace(&mut first_item, None), &mut args));
             }
             Some(',') => {
                 parser.next();
