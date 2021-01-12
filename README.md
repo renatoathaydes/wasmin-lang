@@ -17,8 +17,8 @@ Feature Checklist:
 - [x] ungrouped expressions.
 - [x] multi-value expressions.
 - [x] type declarations.
-- [x] comments.
 - [ ] generic type declarations.
+- [x] comments.
 - [x] let assignments.
 - [x] mut assignments.
 - [x] set assignments.
@@ -27,13 +27,13 @@ Feature Checklist:
 - [x] function implementations.
 - [ ] generic functions.
 - [ ] function pointers.
+- [ ] if/else blocks.
+- [ ] loops.
 - [ ] lambdas.
 - [x] global constants.
 - [ ] import from other Wasmin files with `use`.
 - [x] import external declarations with `ext`.
 - [x] export functions and constants.
-- [ ] if/else blocks.
-- [ ] loops.
 - [ ] stack operator `>`.
 - [ ] string values.
 - [ ] function pointers.
@@ -84,7 +84,10 @@ Expressions have the following forms:
 - `(function arg1 arg2)` (alternative function call syntax).
 - `function(arg1, arg2);` (same as previous two examples, uses multi-values to mimic C-like function call).
 - `(expr1; expr2)` (group of expressions, evaluates to the value of the last one).
-- `expr1 > expr2 > function;` (concatenative style, each expression is pushed to the stack)
+- `expr1 > expr2 > function;` (concatenative style, each expression is pushed to the stack).
+- `if cond_expr; expr1; expr2;` (if `cond_expr` evaluates to non-zero, evaluate `expr1`, else evaluate `expr2`).
+- `if (cond_exp) (expr1) (expr2)` (same as previous but using parenthesis instead of `;` to separate expressions).
+- `(if cond_expr; expr1)` (the `else` expression is optional if `expr1` evaluates to `()`).
 
 For example, these are all expressions:
 

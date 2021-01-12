@@ -572,3 +572,52 @@ fn test_let_multi_value() {
         pos: (0, 17),
     }));
 }
+
+#[test]
+fn test_if_then_else() {
+    let mut chars = "if 1; 0; 2; 4".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
+        expr_const!(0 I32);
+        expr_const!(2 I32)));
+
+    assert_eq!(parser.parse_expr(), expr_const!("4" I32));
+}
+
+#[test]
+fn test_if_then_else_in_parens() {
+    let mut chars = "(if 0; 1; 2) 3".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("0" I32);
+        expr_const!(1 I32);
+        expr_const!(2 I32)));
+
+    assert_eq!(parser.parse_expr(), expr_const!("3" I32));
+}
+
+#[test]
+fn test_if_then_else_in_multiple_parens() {
+    let mut chars = "if (1) (2) (3) 4".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
+        expr_const!(2 I32);
+        expr_const!(3 I32)));
+
+    assert_eq!(parser.parse_expr(), expr_const!("4" I32));
+}
+
+#[test]
+fn test_if_then_else_with_sub_expr() {
+    let mut chars = "if add 1 2; 3; sub (4, 2); 5".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(
+        expr_fun_call!(wasm "add" expr_const!(1 I32) expr_const!(2 I32); [I32 I32](I32));
+        expr_const!(3 I32);
+        expr_fun_call!(wasm "sub" expr_multi!(expr_const!(4 I32), expr_const!(2 I32)); [I32 I32](I32)) ));
+
+    assert_eq!(parser.parse_expr(), expr_const!("5" I32));
+}

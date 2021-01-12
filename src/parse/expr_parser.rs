@@ -13,8 +13,12 @@ enum FirstItemInExpr {
 }
 
 pub fn parse_expr(parser: &mut Parser) -> Expression {
+    parse_expr_start(parser, false)
+}
+
+fn parse_expr_start(parser: &mut Parser, has_parent: bool) -> Expression {
     let mut state = GroupingState::new();
-    let expr = parse_expr_with_state(parser, &mut state);
+    let expr = parse_expr_with_state(parser, &mut state, has_parent);
     if state.is_empty() {
         expr
     } else {
@@ -22,7 +26,11 @@ pub fn parse_expr(parser: &mut Parser) -> Expression {
     }
 }
 
-fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expression {
+fn parse_expr_with_state(
+    parser: &mut Parser,
+    state: &mut GroupingState,
+    has_parent: bool,
+) -> Expression {
     let mut first_item: Option<FirstItemInExpr> = None;
     let mut args = Vec::<Expression>::with_capacity(2);
     let mut exprs = Vec::<Expression>::with_capacity(2);
@@ -34,10 +42,14 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                 parser.next();
                 state.enter(GroupingSymbol::Parens);
                 consume_expr(&mut first_item, &mut args,
-                             parse_expr_with_state(parser, state));
+                             parse_expr_with_state(parser, state, has_parent));
                 if state.is_empty() { break; }
             }
             Some(')') => {
+                if has_parent && !state.is_inside(Parens) {
+                    // we're within a parent expr which is getting closed, do not consume ')'
+                    break;
+                }
                 parser.next();
                 consume_optional_semi_colon(parser);
                 if state.is_inside(Parens) {
@@ -81,6 +93,23 @@ fn parse_expr_with_state(parser: &mut Parser, state: &mut GroupingState) -> Expr
                                     Err(e) => ExprError(e.into())
                                 };
                                 exprs.push(expr);
+                            }
+                            "if" => {
+                                let state_len = state.len();
+                                let cond = parse_expr_start(parser, true);
+                                if state.len() < state_len { // closed parens, terminating expr
+                                    return ExprError(parser.error(
+                                        "incomplete if expressions, missing then expression"));
+                                }
+                                let then = parse_expr_start(parser, true);
+                                if state.len() < state_len { // closed parens, terminating expr
+                                    return ExprError(parser.error(
+                                        "incomplete if expressions, missing else expression"));
+                                }
+                                let els = parse_expr_start(parser, true);
+                                exprs.push(Expression::If(
+                                    Box::new(cond), Box::new(then), Some(Box::new(els))));
+                                if state.len() < state_len || state.is_empty() { break; }
                             }
                             _ => {
                                 first_item = Some(FirstItemInExpr::Str(word));

@@ -34,6 +34,7 @@ pub enum Expression {
     Let(Assignment),
     Mut(Assignment),
     Set(ReAssignment),
+    If(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
     Group(Vec<Expression>),
     Multi(Vec<Expression>),
     FunCall {
@@ -77,6 +78,7 @@ impl Expression {
                 Ok(t) => t.get_type(),
                 Err(e) => e.get_type(),
             },
+            If(then, ..) => then.get_type(),
             ExprError(t) => t.get_type(),
         }
     }
@@ -85,7 +87,7 @@ impl Expression {
         match self {
             Expression::Empty => true,
             Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Set(..)
-            | Multi(_) | FunCall { .. } | ExprError(..) => false,
+            | Multi(_) | FunCall { .. } | If(..) | ExprError(..) => false,
             Group(es) => es.last()
                 .map_or(true, |e| e.is_empty()),
         }
@@ -95,7 +97,7 @@ impl Expression {
         match self {
             Expression::Empty => vec![],
             Let(..) | Mut(..) | Set(..) | Const(..) | Local(..) | Global(..)
-            | FunCall { .. } | ExprError(..) | Group(..) => vec![self],
+            | FunCall { .. } | ExprError(..) | Group(..) | If(..) => vec![self],
             Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
@@ -109,7 +111,8 @@ impl TryInto<TopLevelElement> for Expression {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
             Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private, None)),
             Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private, None)),
-            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) | FunCall { .. } =>
+            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) |
+            FunCall { .. } | If(..) =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
         }
@@ -266,6 +269,14 @@ macro_rules! expr_fun_call {
         let typ = FnType{ins , outs};
         $(idx = $idx;)?
         Expression::FunCall { name, args, typ: Ok(typ), fun_index: idx, is_wasm_fun: true}
+    }};
+}
+
+#[macro_export]
+macro_rules! expr_if {
+    ($cond:expr; $then:expr; $els:expr) => {{
+        use crate::ast::Expression;
+        Expression::If(Box::new($cond), Box::new($then), Some(Box::new($els)))
     }};
 }
 

@@ -121,6 +121,34 @@ impl Wat {
                 w.write_all(id.as_bytes())?;
                 w.write_all(b")")
             }
+            Expression::If(cond, then, els) => {
+                w.write_all(b"(if (result ")?;
+                w.write_all(then.get_type().iter().map(|t| t.to_string())
+                    .collect::<Vec<_>>().join(" ").as_bytes())?;
+                w.write_all(b") (")?;
+                self.increase_ident();
+                self.start_expr(w)?;
+                self.write_expr(w, cond)?;
+                self.decrease_ident();
+                self.start_expr(w)?;
+                w.write_all(b")(then")?;
+                self.increase_ident();
+                self.start_expr(w)?;
+                self.write_expr(w, then)?;
+                self.decrease_ident();
+                self.start_expr(w)?;
+                w.write_all(b")")?;
+                if let Some(e) = els {
+                    w.write_all(b"(else")?;
+                    self.increase_ident();
+                    self.start_expr(w)?;
+                    self.write_expr(w, e)?;
+                    self.decrease_ident();
+                    self.start_expr(w)?;
+                    w.write_all(b")")?;
+                }
+                w.write_all(b")")
+            }
             Expression::Local(id, _) => {
                 w.write_all(b"(local.get $")?;
                 w.write_all(id.as_bytes())?;
