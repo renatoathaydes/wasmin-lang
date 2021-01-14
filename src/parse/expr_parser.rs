@@ -95,21 +95,10 @@ fn parse_expr_with_state(
                                 exprs.push(expr);
                             }
                             "if" => {
-                                let state_len = state.len();
-                                let cond = parse_expr_start(parser, true);
-                                if state.len() < state_len { // closed parens, terminating expr
-                                    return ExprError(parser.error(
-                                        "incomplete if expressions, missing then expression"));
+                                match parse_if(parser, &mut exprs, state) {
+                                    Ok(is_done) => if is_done { break; }
+                                    Err(e) => return ExprError(e)
                                 }
-                                let then = parse_expr_start(parser, true);
-                                if state.len() < state_len { // closed parens, terminating expr
-                                    return ExprError(parser.error(
-                                        "incomplete if expressions, missing else expression"));
-                                }
-                                let els = parse_expr_start(parser, true);
-                                exprs.push(Expression::If(
-                                    Box::new(cond), Box::new(then), Some(Box::new(els))));
-                                if state.len() < state_len || state.is_empty() { break; }
                             }
                             _ => {
                                 first_item = Some(FirstItemInExpr::Str(word));
@@ -141,6 +130,39 @@ fn parse_expr_with_state(
     }
 
     consume_all(&mut exprs).unwrap_or(Expression::Empty)
+}
+
+fn parse_if(parser: &mut Parser,
+            exprs: &mut Vec<Expression>,
+            state: &GroupingState, ) -> Result<bool, TypeError> {
+    let state_len = state.len();
+    let cond = parse_expr_start(parser, true);
+    if state.len() < state_len { // closed parens, terminating expr
+        return Err(parser.error(
+            "incomplete if expressions, missing then expression"));
+    }
+    let then = parse_expr_start(parser, true);
+    if state.len() < state_len { // closed parens, terminating expr
+        return Err(parser.error(
+            "incomplete if expressions, missing else expression"));
+    }
+    let mut els = parse_expr_start(parser, true);
+
+    let then_type = then.get_type();
+    let else_type = els.get_type();
+    if then_type != else_type {
+        els = ExprError(parser.error(
+            &format!("if expression has different types in each branch:\n  \
+            - then: {}\n  \
+            - else: {}\n\
+          To be valid, an if expression must have the same type on both branches.",
+                     types_to_string(&then_type),
+                     types_to_string(&else_type))));
+    }
+
+    exprs.push(Expression::If(
+        Box::new(cond), Box::new(then), Some(Box::new(els))));
+    Ok(state.len() < state_len || state.is_empty())
 }
 
 fn assignment_expr(parser: &Parser, word: &str, assignment: Assignment) -> Expression {

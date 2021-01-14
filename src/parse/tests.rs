@@ -621,3 +621,22 @@ fn test_if_then_else_with_sub_expr() {
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
 }
+
+#[test]
+fn test_if_then_else_error_if_different_types() {
+    let mut chars = "if 1; 2; 3.0; 5".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(
+        expr_const!(1 I32);
+        expr_const!(2 I32);
+        ExprError(TypeError{
+            reason: "if expression has different types in each branch:\n  \
+            - then: i32\n  \
+            - else: f32\n\
+            To be valid, an if expression must have the same type on both branches.".to_owned(),
+            pos: (0, 14)
+        }) ));
+
+    assert_eq!(parser.parse_expr(), expr_const!("5" I32));
+}
