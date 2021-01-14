@@ -142,11 +142,11 @@ fn parse_if(parser: &mut Parser,
             "incomplete if expressions, missing then expression"));
     }
     let then = parse_expr_start(parser, true);
-    if state.len() < state_len { // closed parens, terminating expr
-        return Err(parser.error(
-            "incomplete if expressions, missing else expression"));
-    }
-    let mut els = parse_expr_start(parser, true);
+    let mut els = if state.len() < state_len { // closed parens, terminating expr
+        Expression::Empty
+    } else {
+        parse_expr_start(parser, true)
+    };
 
     let then_type = then.get_type();
     let else_type = els.get_type();
@@ -161,7 +161,7 @@ fn parse_if(parser: &mut Parser,
     }
 
     exprs.push(Expression::If(
-        Box::new(cond), Box::new(then), Some(Box::new(els))));
+        Box::new(cond), Box::new(then), Box::new(els)));
     Ok(state.len() < state_len || state.is_empty())
 }
 

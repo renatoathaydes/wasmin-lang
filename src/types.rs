@@ -117,8 +117,8 @@ impl TypeError {
 }
 
 pub(crate) fn type_refs_to_string(types: &Vec<&Type>) -> String {
+    if types.is_empty() { return "()".to_owned(); }
     let mut res = String::new();
-    if types.is_empty() { return res; }
     let max = types.len() - 1;
     for (i, t) in types.iter().enumerate() {
         res.push_str(&format!("{}", t));

@@ -34,7 +34,7 @@ pub enum Expression {
     Let(Assignment),
     Mut(Assignment),
     Set(ReAssignment),
-    If(Box<Expression>, Box<Expression>, Option<Box<Expression>>),
+    If(Box<Expression>, Box<Expression>, Box<Expression>),
     Group(Vec<Expression>),
     Multi(Vec<Expression>),
     FunCall {
@@ -88,8 +88,7 @@ impl Expression {
             Expression::Empty => true,
             Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Set(..)
             | Multi(_) | FunCall { .. } | If(..) | ExprError(..) => false,
-            Group(es) => es.last()
-                .map_or(true, |e| e.is_empty()),
+            Group(es) => es.is_empty() || es.iter().all(|e| e.is_empty()),
         }
     }
 
@@ -276,7 +275,7 @@ macro_rules! expr_fun_call {
 macro_rules! expr_if {
     ($cond:expr; $then:expr; $els:expr) => {{
         use crate::ast::Expression;
-        Expression::If(Box::new($cond), Box::new($then), Some(Box::new($els)))
+        Expression::If(Box::new($cond), Box::new($then), Box::new($els))
     }};
 }
 

@@ -574,6 +574,35 @@ fn test_let_multi_value() {
 }
 
 #[test]
+fn test_if_then() {
+    let mut chars = "(if 1; ())4".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
+        expr_empty!();
+        expr_empty!()));
+
+    assert_eq!(parser.parse_expr(), expr_const!("4" I32));
+}
+
+#[test]
+fn test_if_then_fn_call() {
+    let mut stack = Stack::new();
+    stack.push(
+        "side-effect".to_string(),
+        Fn(vec![fun_type!([I32]())]), false, false).unwrap();
+
+    let mut chars = "(if 2; side-effect 10)\n5".chars();
+    let mut parser = new_parser_with_stack(&mut chars, stack);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("2" I32);
+        expr_fun_call!("side-effect" expr_const!(10 I32); [I32]());
+        expr_empty!()));
+
+    assert_eq!(parser.parse_expr(), expr_const!("5" I32));
+}
+
+#[test]
 fn test_if_then_else() {
     let mut chars = "if 1; 0; 2; 4".chars();
     let mut parser = new_parser_without_sink(&mut chars);

@@ -138,11 +138,11 @@ impl Wat {
                 self.decrease_ident();
                 self.start_expr(w)?;
                 w.write_all(b")")?;
-                if let Some(e) = els {
+                if !els.is_empty() {
                     w.write_all(b"(else")?;
                     self.increase_ident();
                     self.start_expr(w)?;
-                    self.write_expr(w, e)?;
+                    self.write_expr(w, els)?;
                     self.decrease_ident();
                     self.start_expr(w)?;
                     w.write_all(b")")?;
