@@ -27,7 +27,7 @@ Feature Checklist:
 - [x] function implementations.
 - [ ] generic functions.
 - [ ] function pointers.
-- [ ] if/else blocks.
+- [x] if/else blocks.
 - [ ] loops.
 - [ ] lambdas.
 - [x] global constants.
