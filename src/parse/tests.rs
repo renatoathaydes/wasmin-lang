@@ -669,3 +669,19 @@ fn test_if_then_else_error_if_different_types() {
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
 }
+
+#[test]
+fn test_if_then_else_error_if_condition_is_not_i32() {
+    let mut chars = "if 1.0; 2; 3; 5".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(
+        ExprError(TypeError{
+            reason: "condition in if expression must have type i32, but found type f32".to_owned(),
+            pos: (0, 8)
+        });
+        expr_const!(2 I32);
+        expr_const!(3 I32) ));
+
+    assert_eq!(parser.parse_expr(), expr_const!("5" I32));
+}

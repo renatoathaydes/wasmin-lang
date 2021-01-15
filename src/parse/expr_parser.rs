@@ -136,7 +136,17 @@ fn parse_if(parser: &mut Parser,
             exprs: &mut Vec<Expression>,
             state: &GroupingState, ) -> Result<bool, TypeError> {
     let state_len = state.len();
-    let cond = parse_expr_start(parser, true);
+    let cond = {
+        let expr = parse_expr_start(parser, true);
+        let typ = expr.get_type();
+        if typ == vec![Type::I32] {
+            expr
+        } else {
+            ExprError(parser.error(
+                &format!("condition in if expression must have type i32, but \
+              found type {}", types_to_string(&typ))))
+        }
+    };
     if state.len() < state_len { // closed parens, terminating expr
         return Err(parser.error(
             "incomplete if expressions, missing then expression"));
