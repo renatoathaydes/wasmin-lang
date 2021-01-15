@@ -122,16 +122,12 @@ impl Wat {
                 w.write_all(b")")
             }
             Expression::If(cond, then, els) => {
+                self.write_expr(w, cond)?;
+                self.start_expr(w)?;
                 w.write_all(b"(if (result ")?;
                 w.write_all(then.get_type().iter().map(|t| t.to_string())
                     .collect::<Vec<_>>().join(" ").as_bytes())?;
-                w.write_all(b") (")?;
-                self.increase_ident();
-                self.start_expr(w)?;
-                self.write_expr(w, cond)?;
-                self.decrease_ident();
-                self.start_expr(w)?;
-                w.write_all(b")(then")?;
+                w.write_all(b") (then")?;
                 self.increase_ident();
                 self.start_expr(w)?;
                 self.write_expr(w, then)?;
@@ -139,7 +135,7 @@ impl Wat {
                 self.start_expr(w)?;
                 w.write_all(b")")?;
                 if !els.is_empty() {
-                    w.write_all(b"(else")?;
+                    w.write_all(b" (else")?;
                     self.increase_ident();
                     self.start_expr(w)?;
                     self.write_expr(w, els)?;
