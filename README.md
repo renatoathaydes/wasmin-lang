@@ -200,7 +200,7 @@ To call functions defined in an `ext` module, employ the familiar `module_name.f
 > dots, a dot always indicates a namespaced reference.
 
 ```rust
-ext console { # omitted definitions # }
+ext console { # { omitted definitions } }
 
 fun _start = console.log 10;
 ```
