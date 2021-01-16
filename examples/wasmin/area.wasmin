@@ -1,11 +1,10 @@
 let pi = 3.141592653_f32;
 
 def circle-area [f32] f32;
-def rectangle-area [i32 i32] i32;
-
 pub fun circle-area radius = (
     let radius_square = mul radius radius;
     mul pi radius_square
 )
 
+def rectangle-area [i32 i32] i32;
 pub fun rectangle-area a b = mul a b;

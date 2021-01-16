@@ -9,6 +9,8 @@ use structopt::{*};
 
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
+use wasmin::ast::TopLevelElement;
+use std::sync::mpsc::Receiver;
 
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
@@ -42,30 +44,45 @@ fn compile(output_format: &FormatType, file: Option<String>) -> Result<(), Strin
     });
 
     {
-        let mut sink: Box<dyn WasminSink> = match output_format {
-            FormatType::DEBUG => Box::new(DebugSink {}),
-            FormatType::WAT => Box::<Wat>::default(),
-            FormatType::WASM => Box::new(Wasm {}),
-        };
-
         let mut writer: Box<dyn Write> = Box::new(stdout());
 
-        {
-            let mod_name = file.map(|n|
-                n[0..n.rfind(".").unwrap_or(n.len())].to_owned()
-            ).unwrap_or("std_module".to_owned());
-
-            sink.start(mod_name, &mut writer).map_err(|e| e.to_string())?
-        }
-
-        for expr in rcvr {
-            sink.receive(expr, &mut writer).map_err(|e| e.to_string())?
-        }
-        sink.flush(&mut writer).map_err(|e| e.to_string())?
+        match output_format {
+            FormatType::DEBUG => {
+                push_to_sink(DebugSink::default(), file, rcvr, &mut writer)?;
+            }
+            FormatType::WAT => {
+                push_to_sink(Wat::default(), file, rcvr, &mut writer)?;
+            }
+            FormatType::WASM => {
+                push_to_sink(Wasm::default(), file, rcvr, &mut writer)?;
+            }
+        };
     }
 
     parser_handle.join().expect("ERROR: parser thread error.");
     Ok(())
+}
+
+fn push_to_sink<T>(
+    mut sink: impl WasminSink<T>,
+    file: Option<String>,
+    rcvr: Receiver<TopLevelElement>,
+    writer: &mut Box<dyn Write>,
+) -> Result<(), String> {
+    let mut ctx = {
+        let mod_name = file.map(|n|
+            n[0..n.rfind(".").unwrap_or(n.len())].to_owned()
+        ).unwrap_or("std_module".to_owned());
+
+        sink.start(mod_name, writer).map_err(|e| e.to_string())?
+    };
+
+    for expr in rcvr {
+        sink.receive(expr, writer, &mut ctx)
+            .map_err(|e| e.to_string())?
+    }
+
+    sink.flush(writer, ctx).map_err(|e| e.to_string())
 }
 
 fn read_program(file: Option<String>) -> String {

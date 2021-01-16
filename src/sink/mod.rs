@@ -63,7 +63,7 @@ fn for_each_assignment<F>(
     }
 }
 
-pub(crate) fn sanitize_number(text: &String) -> String {
+pub(crate) fn sanitize_number(text: &str) -> String {
     let without_type = if text.ends_with("i32") || text.ends_with("i64") ||
         text.ends_with("f32") || text.ends_with("f64") {
         &text[0..text.len() - 3]

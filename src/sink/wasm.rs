@@ -1,31 +1,332 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::{ErrorKind, Result, Write};
 
-use parity_wasm::builder::ModuleBuilder;
-use parity_wasm::serialize;
+use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, FunctionSection,
+                   GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
 
-use crate::ast::TopLevelElement;
-use crate::sink::WasminSink;
+use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
+use crate::sink::{sanitize_number, WasminSink};
+use crate::types::{FnType, Type, types_to_string};
 
 #[derive(Default)]
-pub struct Wasm {}
+pub struct Wasm {
+    mod_name: String,
+}
 
-impl WasminSink<ModuleBuilder> for Wasm {
-    fn start(&mut self, _: String, _: &mut Box<dyn Write>) -> Result<ModuleBuilder> {
-        Ok(ModuleBuilder::new())
-    }
+pub struct Context {
+    exports: ExportSection,
+    types: TypeSection,
+    globals: GlobalSection,
+    funs: FunctionSection,
+    code: CodeSection,
+    fun_idx_by_name: HashMap<String, u32>,
+    global_idx_by_name: HashMap<String, u32>,
+    type_idx_by_type_str: HashMap<String, u32>,
+}
 
-    fn receive(&mut self,
-               _expr: TopLevelElement,
-               mut _w: &mut Box<dyn Write>,
-               _ctx: &mut ModuleBuilder,
+impl Wasm {
+    fn receive_fun(
+        &self,
+        name: String,
+        args: Vec<String>,
+        body: Expression,
+        typ: FnType,
+        vis: Visibility,
+        ctx: &mut Context,
     ) -> Result<()> {
+        let type_idx = ctx.index_fun_type(&typ);
+        let fun_idx = ctx.fun_idx_by_name.len() as u32;
+        // FIXME allow overloads
+        if let Some(_) = ctx.fun_idx_by_name.insert(name.clone(), fun_idx) {
+            panic!(format!("function '{}' duplicated", name));
+        }
+        ctx.funs.function(type_idx);
+        if vis == Visibility::Public {
+            ctx.exports.export(name.as_ref(), Export::Function(fun_idx));
+        }
+        let f = self.create_fun(ctx, &typ.ins, &args, &body)?;
+        ctx.code.function(&f);
         Ok(())
     }
 
-    fn flush(&mut self, w: &mut Box<dyn Write>, ctx: ModuleBuilder) -> Result<()> {
-        let module = ctx.build();
-        let bytes = serialize(module)
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))?;
-        w.write_all(&bytes)
+    fn create_fun(
+        &self,
+        ctx: &Context,
+        arg_types: &Vec<Type>,
+        arg_names: &Vec<String>,
+        body: &Expression,
+    ) -> Result<Function> {
+        let mut local_map = HashMap::with_capacity(arg_names.len() + 2);
+        for (i, (typ, name)) in arg_types.iter().zip(arg_names.iter()).enumerate() {
+            local_map.insert(name.clone(), (i as u32, to_val_type(typ)));
+        }
+        self.collect_locals(body, &mut local_map);
+        let locals: Vec<_> = local_map.values().cloned().collect();
+        let mut f = Function::new(locals);
+        self.add_instructions(&mut f, ctx, &local_map, body)?;
+        f.instruction(Instruction::End);
+        Ok(f)
+    }
+
+    fn add_instructions(
+        &self,
+        f: &mut Function,
+        ctx: &Context,
+        local_map: &HashMap<String, (u32, ValType)>,
+        expr: &Expression,
+    ) -> Result<()> {
+        match expr {
+            Expression::Empty => {}
+            Expression::Const(value, typ) => {
+                f.instruction(to_const(to_val_type(typ), value.as_ref()));
+            }
+            Expression::Local(name, ..) => {
+                f.instruction(Instruction::LocalGet(local_map.get(name)
+                    .expect("local name exists").0.clone()));
+            }
+            Expression::Global(name, ..) => {
+                f.instruction(Instruction::GlobalGet(ctx.global_idx_by_name.get(name)
+                    .expect("global name exists").clone()));
+            }
+            Expression::Let((names, values, ..)) |
+            Expression::Mut((names, values, ..)) => {
+                for (name, value) in names.iter().zip(values.iter()) {
+                    self.add_instructions(f, ctx, local_map, value)?;
+                    f.instruction(Instruction::LocalSet(local_map.get(name)
+                        .expect("local name exists").0.clone()));
+                }
+            }
+            Expression::Set(ReAssignment {
+                                assignment: (names, values, ..),
+                                globals,
+                            }) => {
+                for (name, (value, is_global)) in
+                names.iter().zip(values.iter().zip(globals.iter())) {
+                    self.add_instructions(f, ctx, local_map, value)?;
+                    if *is_global {
+                        f.instruction(Instruction::GlobalSet(ctx.global_idx_by_name.get(name)
+                            .expect("global name exists").clone()));
+                    } else {
+                        f.instruction(Instruction::LocalSet(local_map.get(name)
+                            .expect("local name exists").0.clone()));
+                    }
+                }
+            }
+            Expression::If(cond, then, els) => {
+                self.add_instructions(f, ctx, local_map, cond)?;
+                let typ = then.get_type();
+                if typ.is_empty() || typ.first().unwrap().is_empty() {
+                    f.instruction(Instruction::If(BlockType::Empty));
+                } else {
+                    // TODO what if it's a multi-value if block?
+                    f.instruction(Instruction::If(BlockType::Result(
+                        to_val_type(typ.first().unwrap()))));
+                }
+                self.add_instructions(f, ctx, local_map, then)?;
+                f.instruction(Instruction::Else);
+                self.add_instructions(f, ctx, local_map, els)?;
+                f.instruction(Instruction::End);
+            }
+            Expression::Group(exprs) |
+            Expression::Multi(exprs) => {
+                for expr in exprs {
+                    self.add_instructions(f, ctx, local_map, expr)?;
+                }
+            }
+            Expression::FunCall { name, args, fun_index, is_wasm_fun, .. } => {
+                for expr in args {
+                    self.add_instructions(f, ctx, local_map, expr)?;
+                }
+                if *is_wasm_fun {
+                    f.instruction(map_to_wasm_fun(name.as_ref(), args)?);
+                } else {
+                    let idx = ctx.fun_idx_by_name.get(name)
+                        .expect("called function exists").clone();
+                    f.instruction(Instruction::Call(idx));
+                }
+            }
+            Expression::ExprError(e) => {
+                return self.error(e.reason.as_str(), e.pos);
+            }
+        };
+        Ok(())
+    }
+
+    fn error<T>(&self, msg: &str, pos: (usize, usize)) -> Result<T> {
+        let (row, col) = pos;
+        Err(std::io::Error::new(
+            ErrorKind::Other,
+            format!("{}[{},{}]: {}\n", self.mod_name, row, col, msg)))
+    }
+    fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
+        match body {
+            Expression::Let((names, types, ..)) |
+            Expression::Mut((names, types, ..)) => {
+                for (name, expr) in names.iter().zip(types.iter()) {
+                    // FIXME multi-values
+                    let typ = expr.get_type().first().unwrap().clone();
+                    res.insert(name.clone(), (res.len() as u32, to_val_type(&typ)));
+                }
+            }
+            Expression::If(cond, then, els) => {
+                self.collect_locals(cond, res);
+                self.collect_locals(then, res);
+                self.collect_locals(els, res);
+            }
+            Expression::Group(exprs) |
+            Expression::Multi(exprs) => {
+                for expr in exprs {
+                    self.collect_locals(expr, res)
+                }
+            }
+            _ => {}
+        };
+    }
+
+    fn expr_to_const<'a>(&self, expr: &'a Expression) -> Result<(Instruction<'a>, ValType)> {
+        match expr {
+            Expression::Const(value, typ) => {
+                let t = to_val_type(typ);
+                Ok((to_const(t, value), t))
+            }
+            Expression::ExprError(e) =>
+                self.error(e.reason.as_str(), e.pos),
+            _ =>
+                self.error("cannot initialize constant", (0, 0))
+        }
+    }
+}
+
+impl WasminSink<Context> for Wasm {
+    fn start(&mut self, mod_name: String, _: &mut Box<dyn Write>) -> Result<Context> {
+        self.mod_name = mod_name;
+        Ok(Context {
+            exports: ExportSection::new(),
+            globals: GlobalSection::new(),
+            types: TypeSection::new(),
+            funs: FunctionSection::new(),
+            code: CodeSection::new(),
+            fun_idx_by_name: HashMap::default(),
+            global_idx_by_name: HashMap::default(),
+            type_idx_by_type_str: HashMap::default(),
+        })
+    }
+
+    fn receive(&mut self,
+               elem: TopLevelElement,
+               mut _w: &mut Box<dyn Write>,
+               ctx: &mut Context,
+    ) -> Result<()> {
+        match elem {
+            TopLevelElement::Let((names, values, ..), vis, ..) => {
+                for (name, value) in names.iter().zip(values.iter()) {
+                    let global_idx = ctx.global_idx_by_name.len() as u32;
+                    ctx.global_idx_by_name.insert(name.to_string(), global_idx);
+                    let types = value.get_type();
+                    if types.len() == 1 {
+                        let (instr, typ) = self.expr_to_const(value)?;
+                        if vis == Visibility::Public {
+                            ctx.exports.export(name.as_str(), Export::Global(global_idx));
+                        }
+                        ctx.globals.global(GlobalType {
+                            val_type: typ,
+                            mutable: false,
+                        }, instr);
+                    } else {
+                        panic!("cannot generate WASM for global '{}' with multi-value", name);
+                    }
+                }
+            }
+            TopLevelElement::Mut(_, _, _) => {}
+            TopLevelElement::Ext(_, _, _, _) => {}
+            TopLevelElement::Fn((name, args, body, typ), vis, _) => {
+                self.receive_fun(name, args, body, typ, vis, ctx)?;
+            }
+            TopLevelElement::Error(_, _) => {}
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self, w: &mut Box<dyn Write>, ctx: Context) -> Result<()> {
+        let mut module = Module::new();
+        module.section(&ctx.types);
+        module.section(&ctx.funs);
+        module.section(&ctx.globals);
+        module.section(&ctx.exports);
+        module.section(&ctx.code);
+        let wasm = module.finish();
+        match wasmparser::validate(&wasm) {
+            Ok(_) => {}
+            Err(e) => {
+                return Err(std::io::Error::new(ErrorKind::Other, format!("{}\n", e)));
+            }
+        }
+        w.write_all(&wasm)
+            .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))
+    }
+}
+
+impl Context {
+    fn index_fun_type(&mut self, typ: &FnType) -> u32 {
+        let types = vec![Type::Fn(vec![typ.clone()])];
+        let key = types_to_string(&types);
+        let len = self.type_idx_by_type_str.len() as u32;
+        match self.type_idx_by_type_str.entry(key) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(v) => {
+                v.insert(len);
+                self.types.function(to_val_types(&typ.ins), to_val_types(&typ.outs));
+                len
+            }
+        }
+    }
+}
+
+fn to_val_types(types: &Vec<Type>) -> Vec<ValType> {
+    types.iter().map(|t| to_val_type(t)).collect()
+}
+
+fn to_val_type(typ: &Type) -> ValType {
+    match typ {
+        Type::I64 => ValType::I64,
+        Type::I32 => ValType::I32,
+        Type::F64 => ValType::F64,
+        Type::F32 => ValType::F32,
+        _ => panic!("cannot convert to ValType")
+    }
+}
+
+fn to_const(typ: ValType, text: &str) -> Instruction {
+    let n = sanitize_number(text);
+    match typ {
+        ValType::I32 => Instruction::I32Const(n.parse::<i32>().unwrap()),
+        ValType::I64 => Instruction::I64Const(n.parse::<i64>().unwrap()),
+        ValType::F32 => Instruction::F32Const(n.parse::<f32>().unwrap()),
+        ValType::F64 => Instruction::F64Const(n.parse::<f64>().unwrap()),
+        _ => panic!("cannot convert to const")
+    }
+}
+
+fn map_to_wasm_fun<'a>(name: &'a str, args: &'a Vec<Expression>) -> Result<Instruction<'a>> {
+    if args.len() == 2 {
+        let instr = match args.first().unwrap().get_type().first().unwrap() {
+            Type::I64 if name == "add" => Instruction::I64Add,
+            Type::I32 if name == "add" => Instruction::I32Add,
+            Type::F64 if name == "add" => Instruction::F64Add,
+            Type::F32 if name == "add" => Instruction::F32Sub,
+            Type::I64 if name == "sub" => Instruction::I64Sub,
+            Type::I32 if name == "sub" => Instruction::I32Sub,
+            Type::F64 if name == "sub" => Instruction::F64Sub,
+            Type::F32 if name == "sub" => Instruction::F32Sub,
+            Type::I64 if name == "mul" => Instruction::I64Mul,
+            Type::I32 if name == "mul" => Instruction::I32Mul,
+            Type::F64 if name == "mul" => Instruction::F64Mul,
+            Type::F32 if name == "mul" => Instruction::F32Mul,
+            _ => unimplemented!()
+        };
+        Ok(instr)
+    } else {
+        unimplemented!()
     }
 }

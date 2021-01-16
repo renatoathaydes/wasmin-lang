@@ -113,7 +113,7 @@ impl Wat {
                 w.write_all(b"(")?;
                 w.write_all(typ.to_string().as_bytes())?;
                 w.write_all(b".const ")?;
-                w.write_all(sanitize_number(id).as_bytes())?;
+                w.write_all(sanitize_number(id.as_str()).as_bytes())?;
                 w.write_all(b")")
             }
             Expression::Global(id, _) => {
