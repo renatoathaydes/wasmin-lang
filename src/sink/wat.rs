@@ -326,13 +326,13 @@ impl Wat {
     }
 }
 
-impl WasminSink for Wat {
+impl WasminSink<()> for Wat {
     fn start(&mut self, module_name: String, w: &mut Box<dyn Write>) -> Result<()> {
         self.mod_name = module_name;
         w.write_all(b"(module\n")
     }
 
-    fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>) -> Result<()> {
+    fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>, _: &mut ()) -> Result<()> {
         Wat::start_texpr(w)?;
         match element {
             TopLevelElement::Let(assign, vis, _) => {
@@ -358,7 +358,7 @@ impl WasminSink for Wat {
         }
     }
 
-    fn flush(&mut self, w: &mut Box<dyn Write>) -> Result<()> {
+    fn flush(&mut self, w: &mut Box<dyn Write>, _: ()) -> Result<()> {
         w.write_all(b"\n)\n")
     }
 }
