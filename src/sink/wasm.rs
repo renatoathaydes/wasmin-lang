@@ -69,6 +69,33 @@ impl Wasm {
         Ok(f)
     }
 
+    fn receive_assignment(&mut self,
+                          ctx: &mut Context,
+                          names: Vec<String>,
+                          values: Vec<Expression>,
+                          vis: Visibility,
+                          is_mut: bool,
+    ) -> Result<()> {
+        for (name, value) in names.iter().zip(values.iter()) {
+            let global_idx = ctx.global_idx_by_name.len() as u32;
+            ctx.global_idx_by_name.insert(name.to_string(), global_idx);
+            let types = value.get_type();
+            if types.len() == 1 {
+                let (instr, typ) = self.expr_to_const(value)?;
+                if vis == Visibility::Public {
+                    ctx.exports.export(name.as_str(), Export::Global(global_idx));
+                }
+                ctx.globals.global(GlobalType {
+                    val_type: typ,
+                    mutable: is_mut,
+                }, instr);
+            } else {
+                panic!("cannot generate WASM for global '{}' with multi-value", name);
+            }
+        }
+        Ok(())
+    }
+
     fn add_instructions(
         &self,
         f: &mut Function,
@@ -220,25 +247,11 @@ impl WasminSink<Context> for Wasm {
     ) -> Result<()> {
         match elem {
             TopLevelElement::Let((names, values, ..), vis, ..) => {
-                for (name, value) in names.iter().zip(values.iter()) {
-                    let global_idx = ctx.global_idx_by_name.len() as u32;
-                    ctx.global_idx_by_name.insert(name.to_string(), global_idx);
-                    let types = value.get_type();
-                    if types.len() == 1 {
-                        let (instr, typ) = self.expr_to_const(value)?;
-                        if vis == Visibility::Public {
-                            ctx.exports.export(name.as_str(), Export::Global(global_idx));
-                        }
-                        ctx.globals.global(GlobalType {
-                            val_type: typ,
-                            mutable: false,
-                        }, instr);
-                    } else {
-                        panic!("cannot generate WASM for global '{}' with multi-value", name);
-                    }
-                }
+                self.receive_assignment(ctx, names, values, vis, false)?;
             }
-            TopLevelElement::Mut(_, _, _) => {}
+            TopLevelElement::Mut((names, values, ..), vis, ..) => {
+                self.receive_assignment(ctx, names, values, vis, true)?;
+            }
             TopLevelElement::Ext(_, _, _, _) => {}
             TopLevelElement::Fn((name, args, body, typ), vis, _) => {
                 self.receive_fun(name, args, body, typ, vis, ctx)?;
@@ -266,6 +279,7 @@ impl WasminSink<Context> for Wasm {
             .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))
     }
 }
+
 
 impl Context {
     fn index_fun_type(&mut self, typ: &FnType) -> u32 {
