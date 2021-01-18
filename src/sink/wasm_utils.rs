@@ -63,6 +63,20 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, args: &'a Vec<Expression>) -> Result<I
             Type::F64 if name == "ge" => Instruction::F64Ge,
             Type::F32 if name == "ge" => Instruction::F32Ge,
 
+            Type::I64 if name == "lt_s" => Instruction::I64LtS,
+            Type::I32 if name == "lt_s" => Instruction::I32LtS,
+            Type::I64 if name == "lt_u" => Instruction::I64LtU,
+            Type::I32 if name == "lt_u" => Instruction::I32LtU,
+            Type::F64 if name == "lt" => Instruction::F64Lt,
+            Type::F32 if name == "lt" => Instruction::F32Lt,
+
+            Type::I64 if name == "le_s" => Instruction::I64LeS,
+            Type::I32 if name == "le_s" => Instruction::I32LeS,
+            Type::I64 if name == "le_u" => Instruction::I64LeU,
+            Type::I32 if name == "le_u" => Instruction::I32LeU,
+            Type::F64 if name == "le" => Instruction::F64Le,
+            Type::F32 if name == "le" => Instruction::F32Le,
+
             _ => unimplemented!()
         };
         Ok(instr)
