@@ -6,7 +6,8 @@ use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, Func
                    GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
 
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
-use crate::sink::{sanitize_number, WasminSink};
+use crate::sink::WasminSink;
+use crate::sink::wasm_utils::{*};
 use crate::types::{FnType, Type, types_to_string};
 
 #[derive(Default)]
@@ -25,6 +26,22 @@ pub struct Context {
     type_idx_by_type_str: HashMap<String, u32>,
 }
 
+impl Context {
+    fn index_fun_type(&mut self, typ: &FnType) -> u32 {
+        let types = vec![Type::Fn(vec![typ.clone()])];
+        let key = types_to_string(&types);
+        let len = self.type_idx_by_type_str.len() as u32;
+        match self.type_idx_by_type_str.entry(key) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(v) => {
+                v.insert(len);
+                self.types.function(to_val_types(&typ.ins), to_val_types(&typ.outs));
+                len
+            }
+        }
+    }
+}
+
 impl Wasm {
     fn receive_fun(
         &self,
@@ -39,7 +56,7 @@ impl Wasm {
         let fun_idx = ctx.fun_idx_by_name.len() as u32;
         // FIXME allow overloads
         if let Some(_) = ctx.fun_idx_by_name.insert(name.clone(), fun_idx) {
-            panic!(format!("function '{}' duplicated", name));
+            panic!("function '{}' duplicated, overload is not implemented yet", name);
         }
         ctx.funs.function(type_idx);
         if vis == Visibility::Public {
@@ -252,12 +269,16 @@ impl WasminSink<Context> for Wasm {
             TopLevelElement::Mut((names, values, ..), vis, ..) => {
                 self.receive_assignment(ctx, names, values, vis, true)?;
             }
-            TopLevelElement::Ext(_, _, _, _) => {}
+            TopLevelElement::Ext(_, _, _, _) => {
+                unimplemented!();
+            }
             TopLevelElement::Fn((name, args, body, typ), vis, _) => {
                 self.receive_fun(name, args, body, typ, vis, ctx)?;
             }
-            TopLevelElement::Error(_, _) => {}
-        }
+            TopLevelElement::Error(reason, pos) => {
+                return self.error(reason.as_str(), pos);
+            }
+        };
         Ok(())
     }
 
@@ -277,70 +298,5 @@ impl WasminSink<Context> for Wasm {
         }
         w.write_all(&wasm)
             .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))
-    }
-}
-
-
-impl Context {
-    fn index_fun_type(&mut self, typ: &FnType) -> u32 {
-        let types = vec![Type::Fn(vec![typ.clone()])];
-        let key = types_to_string(&types);
-        let len = self.type_idx_by_type_str.len() as u32;
-        match self.type_idx_by_type_str.entry(key) {
-            Entry::Occupied(e) => e.get().clone(),
-            Entry::Vacant(v) => {
-                v.insert(len);
-                self.types.function(to_val_types(&typ.ins), to_val_types(&typ.outs));
-                len
-            }
-        }
-    }
-}
-
-fn to_val_types(types: &Vec<Type>) -> Vec<ValType> {
-    types.iter().map(|t| to_val_type(t)).collect()
-}
-
-fn to_val_type(typ: &Type) -> ValType {
-    match typ {
-        Type::I64 => ValType::I64,
-        Type::I32 => ValType::I32,
-        Type::F64 => ValType::F64,
-        Type::F32 => ValType::F32,
-        _ => panic!("cannot convert to ValType")
-    }
-}
-
-fn to_const(typ: ValType, text: &str) -> Instruction {
-    let n = sanitize_number(text);
-    match typ {
-        ValType::I32 => Instruction::I32Const(n.parse::<i32>().unwrap()),
-        ValType::I64 => Instruction::I64Const(n.parse::<i64>().unwrap()),
-        ValType::F32 => Instruction::F32Const(n.parse::<f32>().unwrap()),
-        ValType::F64 => Instruction::F64Const(n.parse::<f64>().unwrap()),
-        _ => panic!("cannot convert to const")
-    }
-}
-
-fn map_to_wasm_fun<'a>(name: &'a str, args: &'a Vec<Expression>) -> Result<Instruction<'a>> {
-    if args.len() == 2 {
-        let instr = match args.first().unwrap().get_type().first().unwrap() {
-            Type::I64 if name == "add" => Instruction::I64Add,
-            Type::I32 if name == "add" => Instruction::I32Add,
-            Type::F64 if name == "add" => Instruction::F64Add,
-            Type::F32 if name == "add" => Instruction::F32Sub,
-            Type::I64 if name == "sub" => Instruction::I64Sub,
-            Type::I32 if name == "sub" => Instruction::I32Sub,
-            Type::F64 if name == "sub" => Instruction::F64Sub,
-            Type::F32 if name == "sub" => Instruction::F32Sub,
-            Type::I64 if name == "mul" => Instruction::I64Mul,
-            Type::I32 if name == "mul" => Instruction::I32Mul,
-            Type::F64 if name == "mul" => Instruction::F64Mul,
-            Type::F32 if name == "mul" => Instruction::F32Mul,
-            _ => unimplemented!()
-        };
-        Ok(instr)
-    } else {
-        unimplemented!()
     }
 }

@@ -5,6 +5,7 @@ use crate::ast::{Assignment, Expression, TopLevelElement};
 pub mod wat;
 pub mod wasm;
 pub mod debug;
+pub(crate) mod wasm_utils;
 
 pub type Wat = wat::Wat;
 pub type Wasm = wasm::Wasm;

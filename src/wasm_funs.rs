@@ -11,6 +11,16 @@ pub fn wasm_std_funs() -> Stack {
             stack.push(name.to_owned().to_owned(), Type::WasmFn(vec![fun_type!([t.clone() t.clone()](t.clone()))]), true, false).unwrap();
         });
     });
+    [I32, I64].iter().for_each(|t| {
+        ["gt_s", "gt_u", "ge_s", "ge_u"].iter().for_each(|name| {
+            stack.push(name.to_owned().to_owned(), Type::WasmFn(vec![fun_type!([t.clone() t.clone()](t.clone()))]), true, false).unwrap();
+        });
+    });
+    [F32, F64].iter().for_each(|t| {
+        ["gt", "ge"].iter().for_each(|name| {
+            stack.push(name.to_owned().to_owned(), Type::WasmFn(vec![fun_type!([t.clone() t.clone()](t.clone()))]), true, false).unwrap();
+        });
+    });
 
     stack
 }
