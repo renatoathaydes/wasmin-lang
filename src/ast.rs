@@ -66,19 +66,22 @@ pub enum TopLevelElement {
 }
 
 impl Expression {
+    pub fn flatten_types_of(exprs: &Vec<Expression>) -> Vec<Type> {
+        exprs.iter().flat_map(|e| e.get_type().into_iter()).collect()
+    }
+
     pub fn get_type(&self) -> Vec<Type> {
         match self {
             Expression::Empty | Let(..) | Mut(..) | Set(..) => Vec::new(),
             Const(.., typ) | Local(.., typ) | Global(.., typ) => vec![typ.clone()],
             Group(es) => es.last()
                 .map_or(Vec::new(), |e| e.get_type()),
-            Multi(es) => es.iter()
-                .flat_map(|e| e.get_type()).collect(),
+            Multi(es) => Expression::flatten_types_of(es),
             FunCall { typ, .. } => match typ {
                 Ok(t) => t.get_type(),
                 Err(e) => e.get_type(),
             },
-            If(then, ..) => then.get_type(),
+            If(_, then, ..) => then.get_type(),
             ExprError(t) => t.get_type(),
         }
     }

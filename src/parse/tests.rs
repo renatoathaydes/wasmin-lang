@@ -652,6 +652,18 @@ fn test_if_then_else_with_sub_expr() {
 }
 
 #[test]
+fn test_if_then_else_multi_value() {
+    let mut chars = "if 1; 2, 3; 4, 5; 6".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
+        expr_multi!(expr_const!(2 I32), expr_const!(3 I32));
+        expr_multi!(expr_const!(4 I32), expr_const!(5 I32))));
+
+    assert_eq!(parser.parse_expr(), expr_const!("6" I32));
+}
+
+#[test]
 fn test_if_then_else_error_if_different_types() {
     let mut chars = "if 1; 2; 3.0; 5".chars();
     let mut parser = new_parser_without_sink(&mut chars);

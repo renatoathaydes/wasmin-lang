@@ -4,3 +4,6 @@ pub mod types;
 pub mod parse;
 pub mod sink;
 mod wasm_funs;
+
+#[cfg(test)]
+mod tests;
