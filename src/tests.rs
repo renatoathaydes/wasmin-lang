@@ -1,6 +1,6 @@
 use crate::ast::{Expression, ReAssignment};
 use crate::ast::Expression::If;
-use crate::types::{FnType, TypeError};
+use crate::types::{TypeError};
 use crate::types::Type::*;
 
 #[test]

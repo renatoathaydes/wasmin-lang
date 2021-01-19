@@ -2,17 +2,31 @@ use std::convert::TryInto;
 
 use Expression::{*};
 
-use crate::types::{FnType, Type, TypeError};
+use crate::types::{FunType, Type, TypeError};
 
+/// Assignment defines one or more Wasmin assignments.
+///
+/// It is represented as a tuple with the following contents:
+/// * variable names
+/// * variable expressions
+/// * optional type replacements (for implicit type conversions)
 pub type Assignment = (Vec<String>, Vec<Expression>, Vec<Option<Type>>);
 
+/// Reassignment is an [`Assignment`] of one or more mutable variables.
+/// The variables may be local or global. The [`globals`] field determines which is the case
+/// for each variable.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ReAssignment {
     pub assignment: Assignment,
     pub globals: Vec<bool>,
 }
 
-pub type Fun = (String, Vec<String>, Expression, FnType);
+/// Function defines a function implementation as a tuple with the following contents:
+/// * function name
+/// * arg names
+/// * body
+/// * function type
+pub type Function = (String, Vec<String>, Expression, FunType);
 
 /// ExtDef is an external definition that a Wasmin program requires.
 ///
@@ -25,6 +39,7 @@ pub struct ExtDef {
     pub typ: Type,
 }
 
+/// Expression is the basic unit of Wasmin code.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
     Empty,
@@ -40,28 +55,32 @@ pub enum Expression {
     FunCall {
         name: String,
         args: Vec<Expression>,
-        typ: Result<FnType, TypeError>,
+        typ: Result<FunType, TypeError>,
         fun_index: usize,
         is_wasm_fun: bool,
     },
     ExprError(TypeError),
 }
 
+/// Visibility determines the level of visibility of a Wasmin program element.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Visibility {
     Public,
     Private,
-    Internal,
 }
 
+/// Comment is a source code comment.
+/// Comments may be used for documenting Wasmin code by placing them immediately before
+/// source code top-level elements.
 pub type Comment = String;
 
+/// TopLevelElement represents elements that may appear at the top-level of a Wasmin program.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum TopLevelElement {
     Let(Assignment, Visibility, Option<Comment>),
     Mut(Assignment, Visibility, Option<Comment>),
     Ext(String, Vec<ExtDef>, Visibility, Option<Comment>),
-    Fn(Fun, Visibility, Option<Comment>),
+    Fun(Function, Visibility, Option<Comment>),
     Error(String, (usize, usize)),
 }
 
@@ -242,13 +261,13 @@ macro_rules! expr_set {
 macro_rules! expr_fun_call {
     ($id:literal $($args:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
         use crate::ast::Expression;
-        use crate::types::FnType;
+        use crate::types::FunType;
         #[allow(unused_mut)]
         let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
         $(args.push($args);)*
         $(ins.push($ins);)*
         $(outs.push($outs);)*
-        let typ = FnType{ins , outs};
+        let typ = FunType{ins , outs};
         $(idx = $idx;)?
         Expression::FunCall { name: $id.to_string(), args, typ: Ok(typ), fun_index: idx, is_wasm_fun: false }
     }};
@@ -261,14 +280,14 @@ macro_rules! expr_fun_call {
     }};
     (wasm $id:literal $($arg:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
         use crate::ast::Expression;
-        use crate::types::FnType;
+        use crate::types::FunType;
         let name = $id.to_owned();
         #[allow(unused_mut)]
         let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
         $(args.push($arg);)*
         $(ins.push($ins);)*
         $(outs.push($outs);)*
-        let typ = FnType{ins , outs};
+        let typ = FunType{ins , outs};
         $(idx = $idx;)?
         Expression::FunCall { name, args, typ: Ok(typ), fun_index: idx, is_wasm_fun: true}
     }};
@@ -285,12 +304,12 @@ macro_rules! expr_if {
 #[macro_export]
 macro_rules! fun_type {
     ([$($in:expr)*]($($out:expr)*)) => {{
-        use crate::types::FnType;
+        use crate::types::FunType;
         let mut _ins = Vec::new();
         let mut _outs = Vec::new();
         $(_ins.push($in);)*
         $(_outs.push($out);)*
-        FnType { ins: _ins, outs: _outs }
+        FunType { ins: _ins, outs: _outs }
     }}
 }
 
@@ -344,13 +363,13 @@ macro_rules! top_fun {
         use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Private, None)
+        TopLevelElement::Fun(($id.to_owned(), args, $e, $t), Visibility::Private, None)
     }};
     (def $t:expr; p fun $id:literal $($arg:literal)* = $e:expr) => {{
         use crate::ast::{TopLevelElement, Visibility};
         let mut args = Vec::new();
         $(args.push($arg.to_owned());)*
-        TopLevelElement::Fn(($id.to_owned(), args, $e, $t), Visibility::Public, None)
+        TopLevelElement::Fun(($id.to_owned(), args, $e, $t), Visibility::Public, None)
     }}
 }
 

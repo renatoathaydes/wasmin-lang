@@ -35,7 +35,7 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
 fn parse_fn_type(parser: &mut Parser, state: &mut GroupingState) -> Type {
     let ins = parse_fn_ins(parser, state);
     let outs = parse_fn_outs(parser, state);
-    Fn(vec![FnType { ins, outs }])
+    Fn(vec![FunType { ins, outs }])
 }
 
 fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {

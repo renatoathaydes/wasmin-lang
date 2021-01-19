@@ -2,7 +2,7 @@ use std::io::{ErrorKind, Result, Write};
 
 use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::{for_each_assignment, sanitize_number, WasminSink};
-use crate::types::{FnType, Type};
+use crate::types::{FunType, Type};
 
 const ONE_IDENT: &str = "  ";
 
@@ -210,7 +210,7 @@ impl Wat {
                  id: &str,
                  args: Option<Vec<String>>,
                  body: Option<Expression>,
-                 typ: FnType,
+                 typ: FunType,
                  vis: Visibility,
     ) -> Result<()> {
         w.write_all(b"(func $")?;
@@ -347,7 +347,7 @@ impl WasminSink<()> for Wat {
                     w2.write_all(b"\n")
                 })
             }
-            TopLevelElement::Fn((id, args, body, typ), vis, _) => {
+            TopLevelElement::Fun((id, args, body, typ), vis, _) => {
                 self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)
             }
             TopLevelElement::Ext(mod_name, defs, ..) => {

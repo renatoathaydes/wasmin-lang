@@ -1,9 +1,9 @@
 use std::fmt;
 
-pub const NO_ARGS_OR_RETURNS_FUN_TYPE: FnType = FnType { ins: vec![], outs: vec![] };
+pub const NO_ARGS_OR_RETURNS_FUN_TYPE: FunType = FunType { ins: vec![], outs: vec![] };
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct FnType {
+pub struct FunType {
     pub ins: Vec<Type>,
     pub outs: Vec<Type>,
 }
@@ -21,8 +21,8 @@ pub enum Type {
     F64,
     F32,
     Empty,
-    Fn(Vec<FnType>),
-    WasmFn(Vec<FnType>),
+    Fn(Vec<FunType>),
+    WasmFn(Vec<FunType>),
     Error(TypeError),
 }
 
@@ -72,7 +72,7 @@ impl Type {
     }
 }
 
-impl fmt::Display for FnType {
+impl fmt::Display for FunType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("[")?;
         f.write_str(&types_to_string(&self.ins))?;
@@ -104,7 +104,7 @@ impl fmt::Display for Type {
     }
 }
 
-impl FnType {
+impl FunType {
     pub fn get_type(&self) -> Vec<Type> {
         self.outs.clone()
     }
@@ -186,23 +186,23 @@ mod tests {
         assert_eq!(I64.is_error(), false);
         assert_eq!(F32.is_error(), false);
         assert_eq!(F64.is_error(), false);
-        assert_eq!(Fn(vec!(FnType { ins: vec![I64], outs: vec![] })).is_error(), false);
-        assert_eq!(Fn(vec!(FnType { ins: vec![I64], outs: vec![I32] })).is_error(), false);
+        assert_eq!(Fn(vec!(FunType { ins: vec![I64], outs: vec![] })).is_error(), false);
+        assert_eq!(Fn(vec!(FunType { ins: vec![I64], outs: vec![I32] })).is_error(), false);
         assert_eq!(Empty.is_error(), false);
 
         assert_eq!(error().is_error(), true);
-        assert_eq!(Fn(vec!((FnType { ins: vec![I64], outs: vec![error()] }))).is_error(), true);
-        assert_eq!(Fn(vec!(FnType { ins: vec![error()], outs: vec![I32] })).is_error(), true);
-        assert_eq!(Fn(vec!(FnType {
+        assert_eq!(Fn(vec!((FunType { ins: vec![I64], outs: vec![error()] }))).is_error(), true);
+        assert_eq!(Fn(vec!(FunType { ins: vec![error()], outs: vec![I32] })).is_error(), true);
+        assert_eq!(Fn(vec!(FunType {
             ins: vec![I64],
             outs: vec![
-                Fn(vec!(FnType { ins: vec![I64], outs: vec![error()] })),
+                Fn(vec!(FunType { ins: vec![I64], outs: vec![error()] })),
             ],
         })).is_error(), true);
-        assert_eq!(Fn(vec!(FnType {
+        assert_eq!(Fn(vec!(FunType {
             ins: vec![I64],
             outs: vec![
-                Fn(vec!(FnType { ins: vec![I64, error()], outs: vec![] })),
+                Fn(vec!(FunType { ins: vec![I64, error()], outs: vec![] })),
             ],
         })).is_error(), true);
     }

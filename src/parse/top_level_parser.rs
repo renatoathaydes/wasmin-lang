@@ -48,7 +48,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             let comment = parser.get_comment(false);
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
-                Ok(fun) => Some(TopLevelElement::Fn(fun, visibility, comment)),
+                Ok(fun) => Some(TopLevelElement::Fun(fun, visibility, comment)),
                 Err(e) => Some(e.into())
             }
         }

@@ -5,7 +5,7 @@ use wasm_encoder::{BlockType, Instruction, ValType};
 use crate::ast::Expression;
 use crate::sink::sanitize_number;
 use crate::sink::wasm::Context;
-use crate::types::{FnType, Type};
+use crate::types::{FunType, Type};
 
 pub fn to_val_types(types: &Vec<Type>) -> Vec<ValType> {
     types.iter().map(|t| to_val_type(t)).collect()
@@ -22,7 +22,7 @@ pub fn to_val_type(typ: &Type) -> ValType {
 }
 
 pub fn to_multi_val_block_type(typ: &Vec<Type>, ctx: &mut Context) -> BlockType {
-    let fun_type = FnType { ins: vec![], outs: typ.clone() };
+    let fun_type = FunType { ins: vec![], outs: typ.clone() };
     let fun_idx = ctx.index_fun_type(&fun_type);
     BlockType::FunctionType(fun_idx)
 }

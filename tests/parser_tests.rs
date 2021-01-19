@@ -295,7 +295,7 @@ fn test_fun_with_multiline_comment() {
 
         assert_eq!(rcv.iter().next().unwrap(), expected);
 
-        let expected = TopLevelElement::Fn(
+        let expected = TopLevelElement::Fun(
             ("start".to_owned(), vec![], Expression::Empty, fun_type!([]())),
             Visibility::Private, Some("   \nthis is a noop fun\n  ".to_owned()));
 

@@ -363,31 +363,31 @@ fn test_type_functions() {
         [i32] ([i64] f32) [i64] ([[i32]](f32) [i64] i32 ) err".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![] }]));
     assert_eq!(parser.curr_char(), Some('['));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I32] }]));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I64] }]));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![F32], outs: vec![F32] }]));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![I32, I64], outs: vec![F64, I32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![I32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![I64] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![F32], outs: vec![F32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![I32, I64], outs: vec![F64, I32] }]));
 
     assert_eq!(parser.parse_type(),
-               Fn(vec![FnType {
+               Fn(vec![FunType {
                    ins: vec![I32],
                    outs: vec![
-                       Fn(vec![FnType { ins: vec![I64], outs: vec![F32] }])
+                       Fn(vec![FunType { ins: vec![I64], outs: vec![F32] }])
                    ],
                }]));
 
     assert_eq!(parser.parse_type(),
-               Fn(vec![FnType {
+               Fn(vec![FunType {
                    ins: vec![I64],
                    outs: vec![
-                       Fn(vec![FnType {
-                           ins: vec![Fn(vec![FnType { ins: vec![I32], outs: vec![] }])],
+                       Fn(vec![FunType {
+                           ins: vec![Fn(vec![FunType { ins: vec![I32], outs: vec![] }])],
                            outs: vec![F32],
                        }]),
-                       Fn(vec![FnType {
+                       Fn(vec![FunType {
                            ins: vec![I64],
                            outs: vec![I32],
                        }])
@@ -404,8 +404,8 @@ fn test_type_function_optional_semi_colon() {
     let mut parser = new_parser_without_sink(&mut chars);
 
     // first type parsing should consume the optional semi-colon
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![I32] }]));
-    assert_eq!(parser.parse_type(), Fn(vec![FnType { ins: vec![], outs: vec![] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![I32] }]));
+    assert_eq!(parser.parse_type(), Fn(vec![FunType { ins: vec![], outs: vec![] }]));
 }
 
 #[test]
@@ -535,7 +535,7 @@ fn test_let_multi_value() {
     let mut stack = Stack::new();
     stack.push(
         "func".to_string(),
-        Fn(vec![FnType { ins: vec![], outs: vec![I64, F32, F64] }]), false, false).unwrap();
+        Fn(vec![FunType { ins: vec![], outs: vec![I64, F32, F64] }]), false, false).unwrap();
 
     let stack2 = stack.clone();
 

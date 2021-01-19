@@ -8,7 +8,7 @@ use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, Func
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::wasm_utils::{*};
 use crate::sink::WasminSink;
-use crate::types::{FnType, Type, types_to_string};
+use crate::types::{FunType, Type, types_to_string};
 
 #[derive(Default)]
 pub struct Wasm {
@@ -27,7 +27,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub(crate) fn index_fun_type(&mut self, typ: &FnType) -> u32 {
+    pub(crate) fn index_fun_type(&mut self, typ: &FunType) -> u32 {
         let types = vec![Type::Fn(vec![typ.clone()])];
         let key = types_to_string(&types);
         let len = self.type_idx_by_type_str.len() as u32;
@@ -48,7 +48,7 @@ impl Wasm {
         name: String,
         args: Vec<String>,
         body: Expression,
-        typ: FnType,
+        typ: FunType,
         vis: Visibility,
         ctx: &mut Context,
     ) -> Result<()> {
@@ -274,7 +274,7 @@ impl WasminSink<Context> for Wasm {
             TopLevelElement::Ext(_, _, _, _) => {
                 unimplemented!();
             }
-            TopLevelElement::Fn((name, args, body, typ), vis, _) => {
+            TopLevelElement::Fun((name, args, body, typ), vis, _) => {
                 self.receive_fun(name, args, body, typ, vis, ctx)?;
             }
             TopLevelElement::Error(reason, pos) => {

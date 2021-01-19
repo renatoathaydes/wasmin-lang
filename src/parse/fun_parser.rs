@@ -1,9 +1,9 @@
-use crate::ast::Fun;
+use crate::ast::Function;
 use crate::parse::Parser;
 use crate::parse::parser::ParserError;
-use crate::types::{FnType, Type, Type::Fn, types_to_string, NO_ARGS_OR_RETURNS_FUN_TYPE};
+use crate::types::{FunType, Type, Type::Fn, types_to_string, NO_ARGS_OR_RETURNS_FUN_TYPE};
 
-pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
+pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
     let mut left = Vec::new();
     let pos = parser.pos();
     while let Some(item) = parser.parse_word() {
@@ -89,7 +89,7 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Fun, ParserError> {
     }
 }
 
-fn bind_args<'s>(parser: &mut Parser, types: &'s Vec<FnType>, names: &Vec<String>) -> Result<&'s FnType, String> {
+fn bind_args<'s>(parser: &mut Parser, types: &'s Vec<FunType>, names: &Vec<String>) -> Result<&'s FunType, String> {
     let typ = types.get(types.len() - 1).expect("types must not be empty");
     // do not check lengths match here... bind all args we can, an error will happen later if necessary
     for (t, name) in typ.ins.iter().zip(names.iter()) {

@@ -280,7 +280,7 @@ fn create_expr(
 }
 
 fn to_fn_call(parser: &Parser, name: String, args: Vec<Expression>, t: Type) -> Expression {
-    let (typ_idx, is_wasm_fun): (Result<(FnType, usize), TypeError>, bool) = match t {
+    let (typ_idx, is_wasm_fun): (Result<(FunType, usize), TypeError>, bool) = match t {
         Type::Error(e) => (Err(e), false),
         Type::Fn(types) =>
             (type_of_fn_call(&name, &types, &args)
@@ -297,8 +297,8 @@ fn to_fn_call(parser: &Parser, name: String, args: Vec<Expression>, t: Type) -> 
     Expression::FunCall { name, args, typ, fun_index, is_wasm_fun }
 }
 
-fn type_of_fn_call(name: &String, fn_types: &Vec<FnType>, args: &Vec<Expression>)
-                   -> Result<(FnType, usize), String> {
+fn type_of_fn_call(name: &String, fn_types: &Vec<FunType>, args: &Vec<Expression>)
+                   -> Result<(FunType, usize), String> {
     let arg_types = {
         let mut t = Vec::new();
         for arg in args {

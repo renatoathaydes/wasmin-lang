@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::{FnType, Type};
+use crate::types::{FunType, Type};
 use crate::wasm_funs::wasm_std_funs;
 
 #[derive(Debug, Clone)]
@@ -185,7 +185,7 @@ impl Stack {
 }
 
 fn add_function_overload(id: &str,
-                         current_types: &mut Vec<FnType>,
+                         current_types: &mut Vec<FunType>,
                          typ: Type,
 ) -> Result<Option<Type>, String> {
     let t = match typ {
@@ -210,7 +210,7 @@ impl Default for Stack {
 
 #[cfg(test)]
 mod stack_tests {
-    use crate::types::{FnType, Type::{*}};
+    use crate::types::{FunType, Type::{*}};
 
     use super::*;
 
@@ -310,16 +310,16 @@ mod stack_tests {
         let mut stack = Stack::new();
 
         // first fun types
-        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![], outs: vec![] }]), true, false).unwrap();
-        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![], outs: vec![] }]), false, false).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![], outs: vec![] }]), true, false).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![], outs: vec![] }]), false, false).unwrap();
 
         // second fun types
-        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![Type::I32], outs: vec![] }]), true, false).unwrap();
-        stack.push("foo".to_string(), Type::Fn(vec![FnType { ins: vec![Type::I32], outs: vec![] }]), false, false).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![Type::I32], outs: vec![] }]), true, false).unwrap();
+        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![Type::I32], outs: vec![] }]), false, false).unwrap();
 
         assert_eq!(stack.get(&"foo"), Some(&Type::Fn(vec![
-            FnType { ins: vec![], outs: vec![] },
-            FnType { ins: vec![Type::I32], outs: vec![] },
+            FunType { ins: vec![], outs: vec![] },
+            FunType { ins: vec![Type::I32], outs: vec![] },
         ])));
     }
 
