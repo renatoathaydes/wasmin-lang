@@ -6,8 +6,8 @@ use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, Func
                    GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
 
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
-use crate::sink::WasminSink;
 use crate::sink::wasm_utils::{*};
+use crate::sink::WasminSink;
 use crate::types::{FnType, Type, types_to_string};
 
 #[derive(Default)]
@@ -27,7 +27,7 @@ pub struct Context {
 }
 
 impl Context {
-    fn index_fun_type(&mut self, typ: &FnType) -> u32 {
+    pub(crate) fn index_fun_type(&mut self, typ: &FnType) -> u32 {
         let types = vec![Type::Fn(vec![typ.clone()])];
         let key = types_to_string(&types);
         let len = self.type_idx_by_type_str.len() as u32;
@@ -69,7 +69,7 @@ impl Wasm {
 
     fn create_fun(
         &self,
-        ctx: &Context,
+        ctx: &mut Context,
         arg_types: &Vec<Type>,
         arg_names: &Vec<String>,
         body: &Expression,
@@ -116,7 +116,7 @@ impl Wasm {
     fn add_instructions(
         &self,
         f: &mut Function,
-        ctx: &Context,
+        ctx: &mut Context,
         local_map: &HashMap<String, (u32, ValType)>,
         expr: &Expression,
     ) -> Result<()> {
@@ -162,10 +162,12 @@ impl Wasm {
                 let typ = then.get_type();
                 if typ.is_empty() || typ.first().unwrap().is_empty() {
                     f.instruction(Instruction::If(BlockType::Empty));
-                } else {
-                    // TODO what if it's a multi-value if block?
+                } else if typ.len() == 1 {
                     f.instruction(Instruction::If(BlockType::Result(
                         to_val_type(typ.first().unwrap()))));
+                } else {
+                    let multi_val_block_type = to_multi_val_block_type(&typ, ctx);
+                    f.instruction(Instruction::If(multi_val_block_type));
                 }
                 self.add_instructions(f, ctx, local_map, then)?;
                 f.instruction(Instruction::Else);
