@@ -112,7 +112,7 @@ fn test_fun_2_arg_multi_value() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_fun!(def fun_type!([I32 I64](I64 I32));
-                              p fun "swap" "x" "y" = expr_multi!(expr_local!("y" I64), expr_local!("x" I32))));
+                              p fun "swap" "x" "y" = expr_group!(expr_local!("y" I64) expr_local!("x" I32))));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -155,7 +155,9 @@ fn test_fun_without_def_calling_namespace_fun() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_fun!(def fun_type!([]());
-                              fun "_start" = expr_fun_call!("console.log" expr_const!(42 I32); [I32]())));
+                              fun "_start" = expr_group!(
+                                expr_const!(42 I32)
+                                expr_fun_call!("console.log" [I32]()))));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -190,16 +192,19 @@ fn test_use_std_wasm_arithmetics() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   top_let!("x" = expr_fun_call!(wasm "add" expr_const!("2" I32) expr_const!("2" I32);
-                        [I32 I32](I32))));
+                   top_let!("x" = expr_group!(expr_const!("2" I32)
+                                              expr_const!("2" I32)
+                                              expr_fun_call!(wasm "add" [I32 I32](I32)))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   top_let!("y" = expr_fun_call!(wasm "mul" expr_const!("3i64" I64) expr_const!("4i64" I64);
-                        [I64 I64](I64) ; 1)));
+                   top_let!("y" = expr_group!(expr_const!("3i64" I64)
+                                              expr_const!("4i64" I64)
+                                              expr_fun_call!(wasm "mul" [I64 I64](I64) ; 1))));
 
         assert_eq!(rcv.iter().next().unwrap(),
-                   top_let!("z" = expr_fun_call!(wasm "sub" expr_const!("1.0" F32) expr_const!("0.1" F32);
-                        [F32 F32](F32) ; 2)));
+                   top_let!("z" = expr_group!(expr_const!("1.0" F32)
+                                              expr_const!("0.1" F32)
+                                              expr_fun_call!(wasm "sub" [F32 F32](F32) ; 2))));
     }
 
     assert_eq!(rcv.iter().next(), None);
@@ -220,8 +225,10 @@ fn test_global_mut_set() {
 
         assert_eq!(rcv.iter().next().unwrap(),
                    top_fun!(def fun_type!([](I32)); fun "f" = expr_group!(
-                       expr_set!("i" = expr_fun_call!(wasm "add"
-                            expr_global!("i" I32) expr_const!("1" I32); [I32 I32](I32)); true)
+                       expr_set!("i" = expr_group!(
+                                       expr_global!("i" I32)
+                                       expr_const!("1" I32)
+                                       expr_fun_call!(wasm "add" [I32 I32](I32))); true)
                        expr_global!("i" I32)
                    )));
     }
@@ -290,7 +297,7 @@ fn test_fun_with_multiline_comment() {
         parser.parse();
 
         let expected = TopLevelElement::Let(
-            (vec!["n".to_owned()], vec![expr_const!("10" I32)], vec![None]),
+            (vec!["n".to_owned()], Box::new(expr_const!("10" I32)), vec![None]),
             Visibility::Private, Some("this is 10".to_owned()));
 
         assert_eq!(rcv.iter().next().unwrap(), expected);

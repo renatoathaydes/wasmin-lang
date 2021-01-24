@@ -7,7 +7,7 @@ use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, Func
 
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::wasm_utils::{*};
-use crate::sink::WasminSink;
+use crate::sink::{WasminSink, expr_to_vec};
 use crate::types::{FunType, Type, types_to_string};
 
 #[derive(Default)]
@@ -89,10 +89,11 @@ impl Wasm {
     fn receive_assignment(&mut self,
                           ctx: &mut Context,
                           names: Vec<String>,
-                          values: Vec<Expression>,
+                          values: Expression,
                           vis: Visibility,
                           is_mut: bool,
     ) -> Result<()> {
+        let values = expr_to_vec(values, names.len());
         for (name, value) in names.iter().zip(values.iter()) {
             let global_idx = ctx.global_idx_by_name.len() as u32;
             ctx.global_idx_by_name.insert(name.to_string(), global_idx);
@@ -135,7 +136,8 @@ impl Wasm {
             }
             Expression::Let((names, values, ..)) |
             Expression::Mut((names, values, ..)) => {
-                for (name, value) in names.iter().zip(values.iter()) {
+                let exprs = expr_to_vec(*values.clone(), names.len());
+                for (name, value) in names.iter().zip(exprs.iter()) {
                     self.add_instructions(f, ctx, local_map, value)?;
                     f.instruction(Instruction::LocalSet(local_map.get(name)
                         .expect("local name exists").0.clone()));
@@ -145,8 +147,9 @@ impl Wasm {
                                 assignment: (names, values, ..),
                                 globals,
                             }) => {
+                let exprs = expr_to_vec(*values.clone(), names.len());
                 for (name, (value, is_global)) in
-                names.iter().zip(values.iter().zip(globals.iter())) {
+                names.iter().zip(exprs.iter().zip(globals.iter())) {
                     self.add_instructions(f, ctx, local_map, value)?;
                     if *is_global {
                         f.instruction(Instruction::GlobalSet(ctx.global_idx_by_name.get(name)
@@ -174,23 +177,22 @@ impl Wasm {
                 self.add_instructions(f, ctx, local_map, els)?;
                 f.instruction(Instruction::End);
             }
-            Expression::Group(exprs) |
-            Expression::Multi(exprs) => {
+            Expression::Group(exprs) => {
                 for expr in exprs {
                     self.add_instructions(f, ctx, local_map, expr)?;
                 }
             }
-            Expression::FunCall { name, args, fun_index, is_wasm_fun, .. } => {
-                for expr in args {
-                    self.add_instructions(f, ctx, local_map, expr)?;
-                }
+            Expression::FunCall { name, fun_index, is_wasm_fun, typ: Ok(typ) } => {
                 if *is_wasm_fun {
-                    f.instruction(map_to_wasm_fun(name.as_ref(), args)?);
+                    f.instruction(map_to_wasm_fun(name.as_ref(), typ)?);
                 } else {
                     let idx = ctx.fun_idx_by_name.get(name)
                         .expect("called function exists").clone();
                     f.instruction(Instruction::Call(idx));
                 }
+            }
+            Expression::FunCall { typ: Err(e), .. } => {
+                return self.error(e.reason.as_str(), e.pos);
             }
             Expression::ExprError(e) => {
                 return self.error(e.reason.as_str(), e.pos);
@@ -207,9 +209,10 @@ impl Wasm {
     }
     fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
         match body {
-            Expression::Let((names, types, ..)) |
-            Expression::Mut((names, types, ..)) => {
-                for (name, expr) in names.iter().zip(types.iter()) {
+            Expression::Let((names, values, ..)) |
+            Expression::Mut((names, values, ..)) => {
+                let exprs = expr_to_vec(*values.clone(), names.len());
+                for (name, expr) in names.iter().zip(exprs.iter()) {
                     // FIXME multi-values
                     let typ = expr.get_type().first().unwrap().clone();
                     res.insert(name.clone(), (res.len() as u32, to_val_type(&typ)));
@@ -220,8 +223,7 @@ impl Wasm {
                 self.collect_locals(then, res);
                 self.collect_locals(els, res);
             }
-            Expression::Group(exprs) |
-            Expression::Multi(exprs) => {
+            Expression::Group(exprs) => {
                 for expr in exprs {
                     self.collect_locals(expr, res)
                 }
@@ -239,7 +241,7 @@ impl Wasm {
             Expression::ExprError(e) =>
                 self.error(e.reason.as_str(), e.pos),
             _ =>
-                self.error("cannot initialize constant", (0, 0))
+                self.error("only constants are currently supported to initialize globals", (0, 0))
         }
     }
 }
@@ -266,10 +268,10 @@ impl WasminSink<Context> for Wasm {
     ) -> Result<()> {
         match elem {
             TopLevelElement::Let((names, values, ..), vis, ..) => {
-                self.receive_assignment(ctx, names, values, vis, false)?;
+                self.receive_assignment(ctx, names, *values, vis, false)?;
             }
             TopLevelElement::Mut((names, values, ..), vis, ..) => {
-                self.receive_assignment(ctx, names, values, vis, true)?;
+                self.receive_assignment(ctx, names, *values, vis, true)?;
             }
             TopLevelElement::Ext(_, _, _, _) => {
                 unimplemented!();

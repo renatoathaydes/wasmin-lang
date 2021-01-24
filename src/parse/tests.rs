@@ -47,7 +47,8 @@ macro_rules! assign {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        (ids, exprs, replacements)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        (ids, Box::new(e), replacements)
     }};
     ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
         let mut ids = Vec::new();
@@ -56,7 +57,8 @@ macro_rules! assign {
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
         $(replacements.push($rep);)*
-        (ids, exprs, replacements)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        (ids, Box::new(e), replacements)
     }};
 }
 
@@ -204,29 +206,31 @@ fn test_multi_line_comment() {
 #[test]
 fn test_fun_call_basic() {
     assert_eq!(parse_expr!("do-it 2;", "do-it" => Fn(vec![fun_type!([I32]())])),
-               expr_fun_call!("do-it" expr_const!("2" I32) ; [I32]() ));
+               expr_group!(expr_const!("2" I32) expr_fun_call!("do-it" [I32]() )));
 
     assert_eq!(parse_expr!("add 2 2;", "add" => Fn(vec![fun_type!([I32 I32](I64))])),
-               expr_fun_call!("add" expr_const!("2" I32) expr_const!("2" I32) ; [I32 I32](I64)));
+               expr_group!(expr_const!("2" I32) expr_const!("2" I32) expr_fun_call!("add" [I32 I32](I64))));
 
     assert_eq!(parse_expr!("(div-rem 4 2)", "div-rem" => Fn(vec![fun_type!([I32 I32](I32 I32))])),
-               expr_fun_call!("div-rem" expr_const!("4" I32) expr_const!("2" I32) ; [I32 I32](I32 I32)));
+               expr_group!(expr_const!("4" I32) expr_const!("2" I32) expr_fun_call!("div-rem" [I32 I32](I32 I32))));
 
     assert_eq!(parse_expr!("(print 0.0)"),
-               expr_fun_call!("print" expr_const!("0.0" F32);
-               TypeError { reason: "Unknown function: 'print'".to_string(), pos: (0, 11) }));
+               expr_group!(expr_const!("0.0" F32) ExprError(
+               TypeError { reason: "'print' does not exist in this scope".to_string(), pos: (0, 11) })));
 
     assert_eq!(parse_expr!("no-args;", "no-args" => Fn(vec![fun_type!([](I32))])),
-               expr_fun_call!("no-args" ; [](I32)));
+               expr_fun_call!("no-args" [](I32)));
 
     assert_eq!(parse_expr!("(no-args);", "no-args" => Fn(vec![fun_type!([](I32))])),
-               expr_fun_call!("no-args" ; [](I32)));
+               expr_fun_call!("no-args" [](I32)));
 }
 
 #[test]
 fn test_fun_call_complex() {
     assert_eq!(parse_expr!("do-it(do-it 2);", "do-it" => Fn(vec![fun_type!([I32](I32))])),
-               expr_fun_call!("do-it" expr_fun_call!("do-it" expr_const!("2" I32) ; [I32](I32)); [I32](I32)));
+               expr_group!(expr_const!("2" I32)
+                           expr_fun_call!("do-it" [I32](I32))
+                           expr_fun_call!("do-it" [I32](I32))));
 }
 
 #[test]
@@ -237,32 +241,51 @@ fn test_fun_call_namespace() {
         ("log".to_owned(), Fn(vec![fun_type!([I32]())]))
     ]).unwrap();
     assert_eq!(parser.parse_expr(),
-               expr_fun_call!("console.log" expr_const!("10" I32) ; [I32]() ));
+               expr_group!(expr_const!("10" I32) expr_fun_call!("console.log" [I32]() )));
 }
 
 #[test]
 fn test_expr_multi_value() {
-    assert_eq!(parse_expr!("0,1"), Multi(vec![Const(
+    assert_eq!(parse_expr!("0, 1"), Group(vec![Const(
         String::from("0"), I32), Const(String::from("1"), I32)]));
-    assert_eq!(parse_expr!("(1, 2, 3.0)"), Multi(vec![
+    assert_eq!(parse_expr!("(1, 2, 3.0)"), Group(vec![
         Const(String::from("1"), I32),
         Const(String::from("2"), I32),
         Const(String::from("3.0"), F32)
     ]));
-    assert_eq!(parse_expr!("1, (2, 3)"), Multi(vec![
+    assert_eq!(parse_expr!("1, (2, 3)"), Group(vec![
+        Const(String::from("1"), I32),
+        Group(vec![
+            Const(String::from("2"), I32),
+            Const(String::from("3"), I32),
+        ]),
+    ]));
+    assert_eq!(parse_expr!("((1, 2), 3)"), Group(vec![
         Const(String::from("1"), I32),
         Const(String::from("2"), I32),
-        Const(String::from("3"), I32)
+        Const(String::from("3"), I32),
     ]));
-    assert_eq!(parse_expr!("((1, 2), 3)"), Multi(vec![
+    assert_eq!(parse_expr!("((1, 2) 3)"), Group(vec![
         Const(String::from("1"), I32),
         Const(String::from("2"), I32),
-        Const(String::from("3"), I32)
-    ]));
-    assert_eq!(parse_expr!("((1, 2) 3)"), ExprError(TypeError {
-        reason: "fun call via expression not supported yet".to_string(),
-        pos: (0, 10),
-    }));
+        Const(String::from("3"), I32)]));
+}
+
+#[test]
+fn test_expr_concatenate() {
+    assert_eq!(parse_expr!("1 , add 2", "add" => Fn(vec![fun_type!([I32 I32](I32))])),
+               expr_group!(expr_const!("1" I32) expr_const!("2" I32)
+                           expr_fun_call!("add" [I32 I32](I32) )));
+}
+
+#[test]
+fn test_expr_concatenate_complex() {
+    assert_eq!(parse_expr!("add 1 2 , 3 , add", "add" => Fn(vec![fun_type!([I32 I32](I32))])),
+               expr_group!(
+               expr_const!("1" I32) expr_const!("2" I32)
+               expr_fun_call!("add" [I32 I32](I32))
+               expr_const!("3" I32)
+               expr_fun_call!("add" [I32 I32](I32)) ));
 }
 
 #[test]
@@ -549,14 +572,13 @@ fn test_let_multi_value() {
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    assert_eq!(parser.parse_assignment(false), Ok(assign!("e", "f", "g" = expr_fun_call!("func" ; [](I64 F32 F64)))));
+    assert_eq!(parser.parse_assignment(false), Ok(assign!("e", "f", "g" = expr_fun_call!("func" [](I64 F32 F64)))));
     assert_symbols_contains!(parser, "e" => I64);
     assert_symbols_contains!(parser, "f" => F32);
     assert_symbols_contains!(parser, "g" => F64);
     assert_symbols_contains!(parser, "b" => F32);
     assert_symbols_contains!(parser, "c" => I64);
     assert_symbols_contains!(parser, "foo" => I32);
-    // assert_eq!(parser.stack().len(), 3);
     assert_eq!(parser.parse_assignment(false), Err(ParserError {
         pos: (0, 51),
         msg: "Expected '=' in let expression, but got EOF".to_string(),
@@ -596,7 +618,7 @@ fn test_if_then_fn_call() {
     let mut parser = new_parser_with_stack(&mut chars, stack);
 
     assert_eq!(parser.parse_expr(), expr_if!(expr_const!("2" I32);
-        expr_fun_call!("side-effect" expr_const!(10 I32); [I32]());
+        expr_group!(expr_const!(10 I32) expr_fun_call!("side-effect" [I32]()));
         expr_empty!()));
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
@@ -644,9 +666,10 @@ fn test_if_then_else_with_sub_expr() {
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_expr(), expr_if!(
-        expr_fun_call!(wasm "add" expr_const!(1 I32) expr_const!(2 I32); [I32 I32](I32));
+        expr_group!(expr_const!(1 I32) expr_const!(2 I32) expr_fun_call!(wasm "add" [I32 I32](I32)));
         expr_const!(3 I32);
-        expr_fun_call!(wasm "sub" expr_multi!(expr_const!(4 I32), expr_const!(2 I32)); [I32 I32](I32)) ));
+        expr_group!(expr_group!(expr_const!(4 I32) expr_const!(2 I32)) expr_fun_call!(wasm "sub" [I32 I32](I32)))
+         ));
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
 }
@@ -657,8 +680,8 @@ fn test_if_then_else_multi_value() {
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
-        expr_multi!(expr_const!(2 I32), expr_const!(3 I32));
-        expr_multi!(expr_const!(4 I32), expr_const!(5 I32))));
+        expr_group!(expr_const!(2 I32) expr_const!(3 I32));
+        expr_group!(expr_const!(4 I32) expr_const!(5 I32))));
 
     assert_eq!(parser.parse_expr(), expr_const!("6" I32));
 }

@@ -81,10 +81,10 @@ Expressions have the following forms:
 - `mut name = expr;` (`mut` is like let, but for mutable assignments).
 - `set name = expr;` (`set` is used to re-assign a `mut` variable).
 - `function arg1 arg2;` (function call).
-- `(function arg1 arg2)` (alternative function call syntax).
-- `function(arg1, arg2);` (same as previous two examples, uses multi-values to mimic C-like function call).
-- `(expr1; expr2)` (group of expressions, evaluates to the value of the last one).
-- `expr1 > expr2 > function;` (concatenative style, each expression is pushed to the stack).
+- `(function arg1 arg2)` (function call - does not require `;` is within parens).
+- `function(arg1, arg2);` (same as previous examples, multi-value arguments style).
+- `arg1, arg2, function;` (same as previous examples, concatenative style).
+- `(expr1; expr2; expr3)` (group of expressions, each one is evaluated in order).
 - `if cond_expr; expr1; expr2;` (if `cond_expr` evaluates to non-zero, evaluate `expr1`, else evaluate `expr2`).
 - `if (cond_exp) (expr1) (expr2)` (same as previous but using parenthesis instead of `;` to separate expressions).
 - `(if cond_expr; expr1)` (the `else` expression is optional if `expr1` evaluates to `()`).
@@ -95,11 +95,11 @@ For example, these are all expressions:
 - `(0)` (same as previous).
 - `add 1 2` (calls the native WASM `i32.add` function with arguments `1` and `2`, which have type `i32`).
 - `(let n = 1; add n 3)` (assigns `1` to the variable `n`, then calls `add` with `n` and `3` as arguments).
-- `1 > 2 > add` (same as `add 1 2`, using concatenative style).
-- `1 >add 2` (same as previous example).
+- `1, add 2` (same as `add 1 2`, using concatenative style - read as `take 1, add 2 to it`).
+- `1, 2, add` (same as previous example).
 
-The last example shows that the concatenative style allows certain expressions to be written in a more natural way, in
-this case using what looks like the familiar "infix operator" syntax.
+The last examples show that the concatenative style allows certain expressions to be written in a more natural way. For
+example, it allows using a familiar "infix operator" syntax.
 
 Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form:
 
@@ -124,7 +124,7 @@ let x = (add 2) 3;
 
 The last example above would try to assign the result of `add 2` to `x` (which won't work because `add` takes two
 arguments), then the expression `3` appears outside of the previous `let` expression, in an illegal location
-(only `let`, `mut` and as we'll see below, `def` and `fun` can appear as top-level elements).
+(only `let`, `mut`, `set`, and as we'll see below, `def` and `fun` can appear as top-level elements).
 
 These, however, would be fine:
 
@@ -133,10 +133,10 @@ These, however, would be fine:
 let x = add 2 3;
 let y = add (2) (3);
 let z = (add 2 3)
-let w = add (2, 3);
+let w = add(2, 3);
 ```
 
-Basically, if an expression does not start with `(`, it must end with `;`.
+Basically, if an expression does not start with `(`, it ends when a `;` is found.
 
 Multi-value expressions are separated by `,`.
 
@@ -215,7 +215,7 @@ You can split up Wasmin programs in several files. To do that, just import other
 
 ```rust
 def fact [i32]i64;
-pub fun fact n = if gt n 1; n * (fact (sub n 1)); n;
+pub fun fact n = if n, gt 1; n, mul (n, sub 1, fact); n;
 ```
 
 `main.wasmin`:
@@ -257,8 +257,8 @@ This completes the description of the Wasmin syntax (a minimalistic syntax for W
 mut count = 0;
 
 def increment [] i32;
-pub fun increment = (set count = add count 1; count)
+pub fun increment = (set count = count, add 1; count)
 
 def decrement [] i32;
-pub fun decrement = (set count = sub count 1; count)
+pub fun decrement = (set count = count, sub 1; count)
 ```

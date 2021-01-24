@@ -2,7 +2,6 @@ use std::io::Result;
 
 use wasm_encoder::{BlockType, Instruction, ValType};
 
-use crate::ast::Expression;
 use crate::sink::sanitize_number;
 use crate::sink::wasm::Context;
 use crate::types::{FunType, Type};
@@ -38,8 +37,8 @@ pub fn to_const(typ: ValType, text: &str) -> Instruction {
     }
 }
 
-pub fn map_to_wasm_fun<'a>(name: &'a str, args: &'a Vec<Expression>) -> Result<Instruction<'a>> {
-    let types = Expression::flatten_types_of(args);
+pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instruction<'a>> {
+    let types = &fun_type.outs;
     if types.len() == 2 && types.get(0).unwrap() == types.get(1).unwrap() {
         let instr = match types.get(0).unwrap() {
             &Type::I64 if name == "add" => Instruction::I64Add,

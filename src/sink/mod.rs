@@ -45,7 +45,17 @@ fn for_each_assignment<F>(
     mut action: F,
 ) -> Result<()>
     where F: FnMut(&mut Box<dyn Write>, &String, &Expression, bool) -> Result<()> {
-    let (mut ids, mut exprs, mut rep) = a.clone();
+    let (mut ids, mut expr, mut rep) = a.clone();
+
+    let mut exprs = if ids.len() == 1 {
+        vec![*expr]
+    } else {
+        if let Expression::Group(mut e) = *expr {
+            e
+        } else {
+            panic!("cannot convert expression to multi-values: {:?}", *expr)
+        }
+    };
 
     let mut err: Vec<_> = ids.drain(..)
         .zip(exprs.drain(..))
@@ -61,6 +71,20 @@ fn for_each_assignment<F>(
         Ok(())
     } else {
         err.remove(0)
+    }
+}
+
+fn expr_to_vec(values: Expression, expected_len: usize) -> Vec<Expression> {
+    if expected_len == 1 {
+        vec![values]
+    } else {
+        if let Expression::Group(e) = values {
+            if expected_len == e.len() { e } else {
+                panic!("Expected {} expressions but found {} in {:?}", expected_len, e.len(), e)
+            }
+        } else {
+            panic!("cannot convert expression to multi-values: {:?}", values)
+        }
     }
 }
 

@@ -1,4 +1,4 @@
 def factorial [i32] i32;
-pub fun factorial n = if le_s n 2;
+pub fun factorial n = if n, le_s 2;
     n;
-    mul n (factorial (sub n 1));
+    n, mul factorial(n, sub 1);

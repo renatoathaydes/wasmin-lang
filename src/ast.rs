@@ -8,9 +8,9 @@ use crate::types::{FunType, Type, TypeError};
 ///
 /// It is represented as a tuple with the following contents:
 /// * variable names
-/// * variable expressions
+/// * variable expression (if more than one value, will be a [Group] of [Expression]s).
 /// * optional type replacements (for implicit type conversions)
-pub type Assignment = (Vec<String>, Vec<Expression>, Vec<Option<Type>>);
+pub type Assignment = (Vec<String>, Box<Expression>, Vec<Option<Type>>);
 
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
 /// The variables may be local or global. The [`globals`] field determines which is the case
@@ -51,10 +51,8 @@ pub enum Expression {
     Set(ReAssignment),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
     Group(Vec<Expression>),
-    Multi(Vec<Expression>),
     FunCall {
         name: String,
-        args: Vec<Expression>,
         typ: Result<FunType, TypeError>,
         fun_index: usize,
         is_wasm_fun: bool,
@@ -93,9 +91,7 @@ impl Expression {
         match self {
             Expression::Empty | Let(..) | Mut(..) | Set(..) => Vec::new(),
             Const(.., typ) | Local(.., typ) | Global(.., typ) => vec![typ.clone()],
-            Group(es) => es.last()
-                .map_or(Vec::new(), |e| e.get_type()),
-            Multi(es) => Expression::flatten_types_of(es),
+            Group(es) => Expression::flatten_types_of(es),
             FunCall { typ, .. } => match typ {
                 Ok(t) => t.get_type(),
                 Err(e) => e.get_type(),
@@ -109,17 +105,8 @@ impl Expression {
         match self {
             Expression::Empty => true,
             Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Set(..)
-            | Multi(_) | FunCall { .. } | If(..) | ExprError(..) => false,
+            | FunCall { .. } | If(..) | ExprError(..) => false,
             Group(es) => es.is_empty() || es.iter().all(|e| e.is_empty()),
-        }
-    }
-
-    pub fn into_multi(self) -> Vec<Expression> {
-        match self {
-            Expression::Empty => vec![],
-            Let(..) | Mut(..) | Set(..) | Const(..) | Local(..) | Global(..)
-            | FunCall { .. } | ExprError(..) | Group(..) | If(..) => vec![self],
-            Multi(mut es) => es.drain(..).flat_map(|e| e.into_multi()).collect(),
         }
     }
 }
@@ -132,7 +119,7 @@ impl TryInto<TopLevelElement> for Expression {
             Empty => Err("empty expression cannot appear at top-level".to_owned()),
             Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private, None)),
             Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private, None)),
-            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) | Multi(..) |
+            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) |
             FunCall { .. } | If(..) =>
                 Err("free expression appear at top-level".to_owned()),
             ExprError(e) => Err(e.reason)
@@ -176,15 +163,6 @@ macro_rules! expr_group {
 }
 
 #[macro_export]
-macro_rules! expr_multi {
-    ($($e:expr),*) => {{
-        let mut exprs = Vec::new();
-        $(exprs.push($e);)*
-        Expression::Multi(exprs)
-    }}
-}
-
-#[macro_export]
 macro_rules! expr_let {
     ($($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::Expression;
@@ -193,7 +171,8 @@ macro_rules! expr_let {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        Expression::Let((ids, exprs, replacements))
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Let((ids, Box::new(e), replacements))
     }};
     ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
         use crate::ast::Expression;
@@ -203,7 +182,8 @@ macro_rules! expr_let {
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
         $(replacements.push($rep);)*
-        Expression::Let((ids, exprs, replacements))
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Let((ids, Box::new(e), replacements))
     }};
 }
 
@@ -216,7 +196,8 @@ macro_rules! expr_mut {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        Expression::Mut((ids, exprs, replacements))
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Mut((ids, Box::new(e), replacements))
     }};
     ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+) => {{
         use crate::ast::Expression;
@@ -226,7 +207,8 @@ macro_rules! expr_mut {
         $(ids.push($id.to_string());)*
         $(exprs.push($e);)*
         $(replacements.push($rep);)*
-        Expression::Mut((ids, exprs, replacements))
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Mut((ids, Box::new(e), replacements))
     }};
 }
 
@@ -241,7 +223,8 @@ macro_rules! expr_set {
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
         $(globals.push($global);)*
-        Expression::Set(ReAssignment{assignment: (ids, exprs, replacements), globals})
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Set(ReAssignment{assignment: (ids, Box::new(e), replacements), globals})
     }};
     ($($id:literal),+ = $($e:expr),+ ; $($rep:expr),+ ; $($global:literal)*) => {{
         use crate::ast::{Expression, ReAssignment};
@@ -253,43 +236,40 @@ macro_rules! expr_set {
         $(exprs.push($e);)*
         $(replacements.push($rep);)*
         $(globals.push($global);)*
-        Expression::Set(ReAssignment{assignment: (ids, exprs, replacements), globals})
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        Expression::Set(ReAssignment{assignment: (ids, Box::new(e), replacements), globals})
     }};
 }
 
 #[macro_export]
 macro_rules! expr_fun_call {
-    ($id:literal $($args:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
+    ($id:literal [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
         use crate::ast::Expression;
         use crate::types::FunType;
         #[allow(unused_mut)]
-        let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
-        $(args.push($args);)*
+        let (mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), 0);
         $(ins.push($ins);)*
         $(outs.push($outs);)*
         let typ = FunType{ins , outs};
         $(idx = $idx;)?
-        Expression::FunCall { name: $id.to_string(), args, typ: Ok(typ), fun_index: idx, is_wasm_fun: false }
+        Expression::FunCall { name: $id.to_string(), typ: Ok(typ), fun_index: idx, is_wasm_fun: false }
     }};
-    ($id:literal $($args:expr)* ; $err:expr ) => {{
+    ($id:literal $err:expr ) => {{
         use crate::ast::Expression;
         #[allow(unused_mut)]
-        let mut args = Vec::new();
-        $(args.push($args);)*
-        Expression::FunCall { name: $id.to_string(), args, typ: Err($err), fun_index: 0, is_wasm_fun: false }
+        Expression::FunCall { name: $id.to_string(), typ: Err($err), fun_index: 0, is_wasm_fun: false }
     }};
-    (wasm $id:literal $($arg:expr)* ; [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
+    (wasm $id:literal [$($ins:expr)*]($($outs:expr)*) $(;$idx:literal)? ) => {{
         use crate::ast::Expression;
         use crate::types::FunType;
         let name = $id.to_owned();
         #[allow(unused_mut)]
-        let (mut args, mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), Vec::new(), 0);
-        $(args.push($arg);)*
+        let (mut ins, mut outs, mut idx) = (Vec::new(), Vec::new(), 0);
         $(ins.push($ins);)*
         $(outs.push($outs);)*
         let typ = FunType{ins , outs};
         $(idx = $idx;)?
-        Expression::FunCall { name, args, typ: Ok(typ), fun_index: idx, is_wasm_fun: true}
+        Expression::FunCall { name, typ: Ok(typ), fun_index: idx, is_wasm_fun: true}
     }};
 }
 
@@ -322,7 +302,8 @@ macro_rules! top_let {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Let((ids, exprs, replacements), Visibility::Private, None)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        TopLevelElement::Let((ids, Box::new(e), replacements), Visibility::Private, None)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
         use crate::ast::{TopLevelElement, Visibility};
@@ -331,29 +312,32 @@ macro_rules! top_let {
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Let((ids, exprs, replacements), Visibility::Public, None)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        TopLevelElement::Let((ids, Box::new(e), replacements), Visibility::Public, None)
     }};
 }
 
 #[macro_export]
 macro_rules! top_mut {
     ($($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelElement, Visibility};
+        use crate::ast::{Expression, TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Private, None)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        TopLevelElement::Mut((ids, Box::new(e), replacements), Visibility::Private, None)
     }};
     (p $($id:literal),+ = $($e:expr),+) => {{
-        use crate::ast::{TopLevelElement, Visibility};
+        use crate::ast::{Expression, TopLevelElement, Visibility};
         let mut ids = Vec::new();
         let mut exprs = Vec::new();
         let mut replacements = Vec::new();
         $(ids.push($id.to_string()); replacements.push(None);)*
         $(exprs.push($e);)*
-        TopLevelElement::Mut((ids, exprs, replacements), Visibility::Public, None)
+        let e = if exprs.len() == 1 { exprs.remove(0) } else { Expression::Group(exprs) };
+        TopLevelElement::Mut((ids, Box::new(e), replacements), Visibility::Public, None)
     }};
 }
 

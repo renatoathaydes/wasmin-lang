@@ -92,7 +92,7 @@ impl Wat {
                     w2.write_all(b")")
                 })?;
             }
-            Expression::Multi(exprs) | Expression::Group(exprs) => {
+            Expression::Group(exprs) => {
                 for expr in exprs {
                     self.write_variables(&mut w, expr)?;
                 }
@@ -166,7 +166,7 @@ impl Wat {
                     self.write_local_assignment(&mut w2, &id, &expr, *is_global)
                 })
             }
-            Expression::Multi(exprs) | Expression::Group(exprs) => {
+            Expression::Group(exprs) => {
                 let mut is_first = true;
                 for expr in exprs {
                     if !is_first { self.start_expr(w)?; }
@@ -175,18 +175,9 @@ impl Wat {
                 }
                 Ok(())
             }
-            Expression::FunCall { name, args, is_wasm_fun, typ, fun_index } => {
+            Expression::FunCall { name, is_wasm_fun, typ, fun_index } => {
                 if let Err(e) = typ {
                     return self.error(e.reason.as_str(), e.pos);
-                }
-                let mut is_first = true;
-                for arg in args {
-                    if !is_first { self.start_expr(w)?; }
-                    self.write_expr(w, arg)?;
-                    is_first = false;
-                }
-                if !args.is_empty() {
-                    self.start_expr(w)?;
                 }
                 if *is_wasm_fun {
                     // this is safe because we checked for errors above and

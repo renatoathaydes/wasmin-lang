@@ -1,192 +1,209 @@
 use std::str::Chars;
 
 use crate::ast::{Assignment, Expression, ReAssignment};
-use crate::ast::Expression::{ExprError, Let, Mut, Set};
-use crate::parse::parser::{GroupingState, GroupingSymbol, Parser, Stack};
-use crate::parse::parser::GroupingSymbol::Parens;
-use crate::types::{*};
+use crate::ast::Expression::{ExprError, Group};
+use crate::parse::Parser;
+use crate::parse::parser::{GroupingState, GroupingSymbol};
+use crate::parse::stack::Stack;
+use crate::types::{FunType, Kind, Type, TypedElement, TypeError};
 
-#[derive(Debug)]
-enum FirstItemInExpr {
+enum ExprPart {
+    Word(String),
     Expr(Expression),
-    Str(String),
 }
 
-pub fn parse_expr(parser: &mut Parser) -> Expression {
-    parse_expr_start(parser, false)
+struct ParsingState {
+    symbols: GroupingState,
+    stack: Vec<Type>,
+    expr_parts: Vec<Vec<ExprPart>>,
+    exprs: Vec<Vec<Expression>>,
 }
 
-fn parse_expr_start(parser: &mut Parser, has_parent: bool) -> Expression {
-    let mut state = GroupingState::new();
-    let expr = parse_expr_with_state(parser, &mut state, has_parent);
-    if state.is_empty() {
-        expr
-    } else {
-        Expression::ExprError(parser.error("Unclosed grouping in expression"))
+impl ParsingState {
+    fn new() -> ParsingState {
+        ParsingState {
+            symbols: GroupingState::new(),
+            stack: vec![],
+            exprs: vec![vec![]],
+            expr_parts: vec![vec![]],
+        }
+    }
+
+    fn enter(&mut self, symbol: GroupingSymbol) {
+        self.symbols.enter(symbol);
+        self.expr_parts.push(vec![]);
+        self.exprs.push(vec![]);
+    }
+
+    fn drop_level(&mut self, parser: &mut Parser) -> Result<(), String> {
+        if self.symbols.is_inside(GroupingSymbol::Parens) {
+            self.symbols.exit_symbol();
+            self.end_expr(parser);
+            remove_last_n(&mut self.expr_parts, 1);
+            let len = self.exprs.len();
+            let dropped_level = self.exprs.remove(len - 1);
+            merge(self.curr_level(), dropped_level);
+            Ok(())
+        } else {
+            Err("Closing parens does not match any opening parens".to_owned())
+        }
+    }
+
+    fn curr_level(&mut self) -> &mut Vec<Expression> {
+        get_last(&mut self.exprs)
+    }
+
+    fn push_expr_part(&mut self, part: String, parser: &mut Parser) {
+        let parts = get_last(&mut self.expr_parts);
+        if parts.is_empty() {
+            let expr = match part.as_str() {
+                "let" | "mut" | "set" => {
+                    let is_mut = !part.starts_with('l');
+                    match parser.parse_assignment(is_mut) {
+                        Ok(e) => Some(assignment_expr(parser, part.as_str(), e)),
+                        Err(e) => Some(ExprError(e.into()))
+                    }
+                }
+                "if" => {
+                    // match parse_if(parser, &mut exprs, state) {
+                    //     Ok(is_done) => if is_done { break; }
+                    //     Err(e) => return ExprError(e)
+                    // }
+                    unimplemented!()
+                }
+                _ => None
+            };
+            if let Some(e) = expr {
+                parts.push(ExprPart::Expr(e))
+            }
+        }
+        parts.push(ExprPart::Word(part));
+    }
+
+    fn end_expr(&mut self, parser: &mut Parser) {
+        let len = self.expr_parts.len();
+        let parts = self.expr_parts.get_mut(len - 1).unwrap().drain(..).collect();
+        let mut exprs = create_expr(parts, &mut self.stack, parser);
+        push_all(&exprs, self.curr_level());
+    }
+
+    fn finish_off(&mut self) -> Expression {
+        if self.exprs.len() != 1 {
+            panic!("Expected one level of expressions left, but got {}", self.exprs.len());
+        }
+        let mut level = self.exprs.remove(0);
+        if level.is_empty() {
+            Expression::Empty
+        } else if level.len() == 1 {
+            level.remove(0)
+        } else {
+            Group(level)
+        }
     }
 }
 
-fn parse_expr_with_state(
-    parser: &mut Parser,
-    state: &mut GroupingState,
-    has_parent: bool,
-) -> Expression {
-    let mut first_item: Option<FirstItemInExpr> = None;
-    let mut args = Vec::<Expression>::with_capacity(2);
-    let mut exprs = Vec::<Expression>::with_capacity(2);
-    let mut multi = Vec::new();
+pub fn parse_expr(parser: &mut Parser) -> Result<Expression, String> {
+    let mut state = ParsingState::new();
     loop {
         parser.skip_spaces();
         match parser.curr_char() {
             Some('(') => {
                 parser.next();
+                parser.stack_mut().new_level();
                 state.enter(GroupingSymbol::Parens);
-                consume_expr(&mut first_item, &mut args,
-                             parse_expr_with_state(parser, state, has_parent));
-                if state.is_empty() { break; }
             }
             Some(')') => {
-                if has_parent && !state.is_inside(Parens) {
-                    // we're within a parent expr which is getting closed, do not consume ')'
-                    break;
-                }
                 parser.next();
+                parser.stack_mut().drop_level();
+                state.drop_level(parser)?;
                 consume_optional_semi_colon(parser);
-                if state.is_inside(Parens) {
-                    state.exit_symbol();
-                    // open parens always cause recursion, so we need to always break on closing parens
+                if state.symbols.is_empty() {
                     break;
-                } else {
-                    return Expression::ExprError(parser.error_unexpected_char(
-                        ')', "Closing parens does not match any opening parens"));
                 }
             }
             Some(';') => {
                 parser.next();
-                if state.is_empty() { break; }
-                push_if_non_empty(&mut exprs, create_expr(
-                    parser, std::mem::replace(&mut first_item, None), &mut args));
+                state.end_expr(parser);
+                if state.symbols.is_empty() {
+                    break;
+                }
             }
             Some(',') => {
                 parser.next();
-                push_if_non_empty(&mut exprs, create_expr(
-                    parser, std::mem::replace(&mut first_item, None), &mut args));
-                if let Some(expr) = consume_all(&mut exprs) {
-                    if let Expression::Multi(mut m) = expr {
-                        multi.append(&mut m);
-                    } else {
-                        push_if_non_empty(&mut multi, expr);
-                    }
-                }
+                state.end_expr(parser);
             }
             Some(c) => {
                 if let Some(word) = parser.parse_word() {
-                    if first_item.is_some() {
-                        push_if_non_empty(&mut args, expr(parser, word));
-                    } else {
-                        let word_str = word.as_str();
-                        match word_str {
-                            "let" | "mut" | "set" => {
-                                let is_mut = !word_str.starts_with('l');
-                                let expr = match parser.parse_assignment(is_mut) {
-                                    Ok(e) => assignment_expr(parser, word_str, e),
-                                    Err(e) => ExprError(e.into())
-                                };
-                                exprs.push(expr);
-                            }
-                            "if" => {
-                                match parse_if(parser, &mut exprs, state) {
-                                    Ok(is_done) => if is_done { break; }
-                                    Err(e) => return ExprError(e)
-                                }
-                            }
-                            _ => {
-                                first_item = Some(FirstItemInExpr::Str(word));
-                            }
-                        }
-                    }
+                    state.push_expr_part(word, parser);
                 } else {
                     parser.next();
-                    return ExprError(
-                        parser.error_unexpected_char(c, "expected expression"));
+                    return Err(format!("unexpected character: '{}'", c));
                 }
             }
-            None => break
-        }
-    }
-
-    push_if_non_empty(&mut exprs, create_expr(
-        parser, std::mem::replace(&mut first_item, None), &mut args));
-
-    if !multi.is_empty() {
-        if let Some(expr) = consume_all(&mut exprs) {
-            if let Expression::Multi(mut m) = expr {
-                multi.append(&mut m);
-            } else {
-                push_if_non_empty(&mut multi, expr);
+            None => {
+                break;
             }
         }
-        return Expression::Multi(multi);
-    }
-
-    consume_all(&mut exprs).unwrap_or(Expression::Empty)
+    };
+    state.end_expr(parser);
+    Ok(state.finish_off())
 }
 
-fn parse_if(parser: &mut Parser,
-            exprs: &mut Vec<Expression>,
-            state: &GroupingState, ) -> Result<bool, TypeError> {
-    let state_len = state.len();
-    let cond = {
-        let expr = parse_expr_start(parser, true);
-        let typ = expr.get_type();
-        if typ == vec![Type::I32] {
-            expr
-        } else {
-            ExprError(parser.error(
-                &format!("condition in if expression must have type i32, but \
-              found type {}", types_to_string(&typ))))
-        }
-    };
-    if state.len() < state_len { // closed parens, terminating expr
-        return Err(parser.error(
-            "incomplete if expressions, missing then expression"));
-    }
-    let then = parse_expr_start(parser, true);
-    let mut els = if state.len() < state_len { // closed parens, terminating expr
-        Expression::Empty
-    } else {
-        parse_expr_start(parser, true)
-    };
-
-    let then_type = then.get_type();
-    let else_type = els.get_type();
-    if then_type != else_type {
-        els = ExprError(parser.error(
-            &format!("if expression has different types in each branch:\n  \
-            - then: {}\n  \
-            - else: {}\n\
-          To be valid, an if expression must have the same type on both branches.",
-                     types_to_string(&then_type),
-                     types_to_string(&else_type))));
-    }
-
-    exprs.push(Expression::If(
-        Box::new(cond), Box::new(then), Box::new(els)));
-    Ok(state.len() < state_len || state.is_empty())
-}
+// fn parse_if(parser: &mut Parser,
+//             exprs: &mut Vec<Expression>,
+//             state: &GroupingState, ) -> Result<bool, TypeError> {
+//     let state_len = state.len();
+//     let cond = {
+//         let expr = parse_expr_start(parser, true);
+//         let typ = expr.get_type();
+//         if typ == vec![Type::I32] {
+//             expr
+//         } else {
+//             ExprError(parser.error(
+//                 &format!("condition in if expression must have type i32, but \
+//               found type {}", types_to_string(&typ))))
+//         }
+//     };
+//     if state.len() < state_len { // closed parens, terminating expr
+//         return Err(parser.error(
+//             "incomplete if expressions, missing then expression"));
+//     }
+//     let then = parse_expr_start(parser, true);
+//     let mut els = if state.len() < state_len { // closed parens, terminating expr
+//         Expression::Empty
+//     } else {
+//         parse_expr_start(parser, true)
+//     };
+//
+//     let then_type = then.get_type();
+//     let else_type = els.get_type();
+//     if then_type != else_type {
+//         els = ExprError(parser.error(
+//             &format!("if expression has different types in each branch:\n  \
+//             - then: {}\n  \
+//             - else: {}\n\
+//           To be valid, an if expression must have the same type on both branches.",
+//                      types_to_string(&then_type),
+//                      types_to_string(&else_type))));
+//     }
+//
+//     exprs.push(Expression::If(
+//         Box::new(cond), Box::new(then), Box::new(els)));
+//     Ok(state.len() < state_len || state.is_empty())
+// }
 
 fn assignment_expr(parser: &Parser, word: &str, assignment: Assignment) -> Expression {
     if word.starts_with('l') {
-        Let(assignment)
+        Expression::Let(assignment)
     } else if word.starts_with('m') {
-        Mut(assignment)
+        Expression::Mut(assignment)
     } else {
         let (ids, ..) = &assignment;
         let globals = ids.iter().map(|id|
             parser.stack().get_is_global(id.as_str())
                 .map(|(_, global)| global))
             .map(|global| global.unwrap_or(false)).collect();
-        Set(ReAssignment { assignment, globals })
+        Expression::Set(ReAssignment { assignment, globals })
     }
 }
 
@@ -197,155 +214,100 @@ fn consume_optional_semi_colon(parser: &mut Parser) {
     }
 }
 
-fn consume_all(exprs: &mut Vec<Expression>) -> Option<Expression> {
-    let empty_count = exprs.iter().take_while(|e| e == &&Expression::Empty).count();
-    exprs.drain(0..empty_count);
-    if !exprs.is_empty() {
-        if exprs.len() == 1 {
-            Some(exprs.remove(0))
-        } else {
-            Some(Expression::Group(exprs.drain(..).collect()))
-        }
+fn merge(exprs: &mut Vec<Expression>, mut arg: Vec<Expression>) {
+    if exprs.is_empty() {
+        exprs.append(&mut arg);
     } else {
-        None
-    }
-}
-
-fn push_if_non_empty(exprs: &mut Vec<Expression>, expr: Expression) {
-    if expr != Expression::Empty {
-        exprs.push(expr);
-    }
-}
-
-fn consume_expr(
-    first_item: &mut Option<FirstItemInExpr>,
-    args: &mut Vec<Expression>,
-    expr: Expression,
-) {
-    if expr == Expression::Empty {
-        return;
-    }
-    match (first_item.is_some(), args.is_empty()) {
-        (false, false) => {
-            panic!("unexpected state: expression has no first item, but has args")
-        }
-        (false, true) => { // first item expression
-            *first_item = Some(FirstItemInExpr::Expr(expr))
-        }
-        (true, _) => { // there is a first item already
-            args.push(expr);
-        }
+        match get_last(exprs) {
+            Group(ref mut v) => v.append(&mut arg),
+            _ => exprs.push(Group(arg))
+        };
     }
 }
 
 fn create_expr(
+    mut parts: Vec<ExprPart>,
+    stack: &mut Vec<Type>,
     parser: &mut Parser,
-    first_item: Option<FirstItemInExpr>,
-    args: &mut Vec<Expression>,
+) -> Vec<Expression> {
+    if parts.is_empty() {
+        return vec![];
+    }
+    let first = parts.remove(0);
+    match first {
+        ExprPart::Word(word) => {
+            let mut result = Vec::with_capacity(parts.len() + 1);
+            while !parts.is_empty() {
+                match parts.remove(0) {
+                    ExprPart::Word(w) => result.push(word_expr(parser, w, stack)),
+                    ExprPart::Expr(e) => result.push(e),
+                };
+            }
+            result.push(word_expr(parser, word, stack));
+            result
+        }
+        ExprPart::Expr(e) => {
+            if parts.is_empty() {
+                vec![e]
+            } else {
+                vec![Expression::ExprError(TypeError {
+                    reason: format!("invocation of function selected by expression is not yet \
+                supported. Expression: {:?}", e),
+                    pos: parser.pos(),
+                })]
+            }
+        }
+    }
+}
+
+fn word_expr(
+    parser: &mut Parser,
+    word: String,
+    stack: &mut Vec<Type>,
 ) -> Expression {
-    match (first_item.is_some(), args.is_empty()) {
-        (false, true) => Expression::Empty,
-        (false, false) => { // expression at first position
-            Expression::ExprError(parser.error("Cannot use expression as a function"))
-        }
-        (true, true) => { // single item
-            match first_item.unwrap() {
-                FirstItemInExpr::Expr(e) => e,
-                FirstItemInExpr::Str(name) => {
-                    let args = args.drain(..).collect();
-                    let t = parser.stack().get(&name).cloned()
-                        .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown element: '{}'", &name))));
-                    match t {
-                        Type::Fn(_) | Type::WasmFn(_) => to_fn_call(parser, name, args, t),
-                        _ => expr(parser, name)
-                    }
-                }
-            }
-        }
-        (true, false) => { // item + args
-            match first_item.unwrap() {
-                FirstItemInExpr::Expr(_) => {
-                    args.clear();
-                    ExprError(parser.error("fun call via expression not supported yet"))
-                }
-                FirstItemInExpr::Str(name) => {
-                    let args = args.drain(..).collect();
-                    let t = parser.stack().get(&name).cloned()
-                        .unwrap_or_else(|| Type::Error(parser.error(&format!("Unknown function: '{}'", &name))));
-                    to_fn_call(parser, name, args, t)
-                }
-            }
-        }
-    }
-}
-
-fn to_fn_call(parser: &Parser, name: String, args: Vec<Expression>, t: Type) -> Expression {
-    let (typ_idx, is_wasm_fun): (Result<(FunType, usize), TypeError>, bool) = match t {
-        Type::Error(e) => (Err(e), false),
-        Type::Fn(types) =>
-            (type_of_fn_call(&name, &types, &args)
-                 .map_err(|reason| TypeError { pos: parser.pos(), reason }), false),
-        Type::WasmFn(types) =>
-            (type_of_fn_call(&name, &types, &args)
-                 .map_err(|reason| TypeError { pos: parser.pos(), reason }), true),
-        _ => (Err(parser.error(&format!("Cannot use '{}' (which has type {}) as a function", &name, t))), false)
+    let typ = match type_of(word.as_str(), parser.stack()) {
+        Ok(t) => t,
+        Err(e) => return Expression::ExprError(TypeError { reason: e, pos: parser.pos() })
     };
-    let fun_index = typ_idx.as_ref()
-        .map(|(_, i)| i.clone())
-        .unwrap_or(0 as usize);
-    let typ = typ_idx.map(|(t, _)| t);
-    Expression::FunCall { name, args, typ, fun_index, is_wasm_fun }
-}
-
-fn type_of_fn_call(name: &String, fn_types: &Vec<FunType>, args: &Vec<Expression>)
-                   -> Result<(FunType, usize), String> {
-    let arg_types = {
-        let mut t = Vec::new();
-        for arg in args {
-            let mut types = arg.get_type();
-            t.append(&mut types);
-        }
-        t
-    };
-
-    let mut fun_idx = 0;
-    for typ in fn_types {
-        if typ.ins.is_empty() && arg_types.is_empty() {
-            return Ok((typ.clone(), fun_idx));
-        }
-        if typ.ins.len() == arg_types.len() {
-            let matching_fun = typ.ins.iter().zip(arg_types.iter())
-                .find(|(t, arg)| arg.is_assignable_to(t))
-                .map(|(t, _)| t);
-            if let Some(_) = matching_fun {
-                return Ok((typ.clone(), fun_idx));
+    match typ.typ {
+        Type::I64 | Type::I32 | Type::F64 | Type::F32 => {
+            stack.push(typ.typ.clone());
+            match typ.kind {
+                Kind::Const => Expression::Const(word, typ.typ),
+                Kind::Local => Expression::Local(word, typ.typ),
+                Kind::Global => Expression::Global(word, typ.typ)
             }
         }
-        fun_idx += 1;
+        Type::Empty => Expression::Empty,
+        Type::Fn(fun_types) => select_fun(fun_types, word, parser, stack, false),
+        Type::WasmFn(fun_types) => select_fun(fun_types, word, parser, stack, true),
+        Type::Error(e) => Expression::ExprError(e),
     }
-
-    let types = types_to_string(&arg_types);
-    let valid_types = fn_types.iter()
-        .map(|t| types_to_string(&t.ins))
-        .map(|t| format!("  * {}", t))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    Err(format!("fun '{}' cannot be called with arguments of type '{}'.
-        Valid argument types are:
-        {}", name, types, valid_types))
 }
 
-fn expr(parser: &mut Parser, word: String) -> Expression {
-    let typ = type_of(word.as_str(), parser.stack());
-    match typ {
-        Ok(t) => match t.kind {
-            Kind::Const => Expression::Const(word, t.typ),
-            Kind::Global => Expression::Global(word, t.typ),
-            Kind::Local => Expression::Local(word, t.typ),
+fn select_fun(
+    mut fun_types: Vec<FunType>,
+    fun_name: String,
+    parser: &mut Parser,
+    stack: &mut Vec<Type>,
+    is_wasm_fun: bool,
+) -> Expression {
+    fun_types.sort_unstable_by(|a, b| b.ins.len().cmp(&a.ins.len()));
+    for (i, typ) in fun_types.iter().enumerate() {
+        if fun_can_be_called(typ, stack) {
+            remove_last_n(stack, typ.ins.len());
+            push_all(&typ.outs, stack);
+            return Expression::FunCall { name: fun_name, typ: Ok(typ.clone()), fun_index: i, is_wasm_fun };
         }
-        Err(e) => ExprError(TypeError { reason: e, pos: parser.pos() })
     }
+    ExprError(TypeError {
+        reason: format!("cannot call fun '{}' with current stack", fun_name),
+        pos: parser.pos(),
+    })
+}
+
+fn fun_can_be_called(typ: &FunType, stack: &Vec<Type>) -> bool {
+    typ.ins.len() <= stack.len()
 }
 
 pub fn type_of(str: &str, stack: &Stack) -> Result<TypedElement, String> {
@@ -479,4 +441,24 @@ fn explicit_int_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String> {
         }
         _ => unreachable!()
     }
+}
+
+fn remove_last_n<T>(vec: &mut Vec<T>, n: usize) {
+    let mut len = vec.len();
+    let limit = len - n;
+    while len > limit {
+        len -= 1;
+        let _ = vec.remove(len);
+    }
+}
+
+fn push_all<T: Clone>(source: &Vec<T>, dest: &mut Vec<T>) {
+    for element in source {
+        dest.push(element.clone());
+    }
+}
+
+fn get_last<T>(vec: &mut Vec<T>) -> &mut T {
+    let len = vec.len();
+    vec.get_mut(len - 1).unwrap()
 }
