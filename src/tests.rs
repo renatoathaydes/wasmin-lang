@@ -109,6 +109,9 @@ fn test_fun_call_get_type() {
     assert_eq!(expr_fun_call!("a" [I32]()).get_type(), vec![]);
     assert_eq!(expr_fun_call!("a" [](I32)).get_type(), vec![I32]);
     assert_eq!(expr_fun_call!("a" [](I32 F32)).get_type(), vec![I32, F32]);
+    assert_eq!(expr_group!(
+        expr_const!("0.4" F32)
+        expr_fun_call!("a" [F32](I32))).get_type(), vec![I32]);
 }
 
 #[test]

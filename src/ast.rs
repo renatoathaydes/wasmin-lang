@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use Expression::{*};
 
 use crate::types::{FunType, Type, TypeError};
+use crate::vec_utils::{push_all, remove_last_n};
 
 /// Assignment defines one or more Wasmin assignments.
 ///
@@ -88,16 +89,39 @@ impl Expression {
     }
 
     pub fn get_type(&self) -> Vec<Type> {
+        let mut types = Vec::new();
+        self.get_type_internal(&mut types);
+        types
+    }
+
+    fn get_type_internal(&self, types: &mut Vec<Type>) {
         match self {
-            Expression::Empty | Let(..) | Mut(..) | Set(..) => Vec::new(),
-            Const(.., typ) | Local(.., typ) | Global(.., typ) => vec![typ.clone()],
-            Group(es) => Expression::flatten_types_of(es),
+            Expression::Empty | Let(..) | Mut(..) | Set(..) => {}
+            Const(.., typ) | Local(.., typ) | Global(.., typ) => {
+                types.push(typ.clone())
+            }
+            Group(es) => {
+                for expr in es {
+                    expr.get_type_internal(types);
+                }
+            }
             FunCall { typ, .. } => match typ {
-                Ok(t) => t.get_type(),
-                Err(e) => e.get_type(),
+                Ok(t) => {
+                    if types.len() >= t.ins.len() {
+                        remove_last_n(types, t.ins.len());
+                    }
+                    push_all(&t.outs, types);
+                }
+                Err(e) => {
+                    push_all(&e.get_type(), types)
+                }
             },
-            If(_, then, ..) => then.get_type(),
-            ExprError(t) => t.get_type(),
+            If(_, then, ..) => {
+                then.get_type_internal(types)
+            }
+            ExprError(e) => {
+                push_all(&e.get_type(), types)
+            }
         }
     }
 

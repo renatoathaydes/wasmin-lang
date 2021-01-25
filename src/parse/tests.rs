@@ -279,6 +279,18 @@ fn test_expr_concatenate() {
 }
 
 #[test]
+fn test_expr_concatenate_with_let() {
+    assert_eq!(parse_expr!("(let x = 1; let y = 2; x, y, add)",
+                    "add" => Fn(vec![fun_type!([I32 I32](I32))])),
+               expr_group!(
+                    expr_let!("x" = expr_const!("1" I32))
+                    expr_let!("y" = expr_const!("2" I32))
+                    expr_local!("x" I32)
+                    expr_local!("y" I32)
+                    expr_fun_call!("add" [I32 I32](I32) )));
+}
+
+#[test]
 fn test_expr_concatenate_complex() {
     assert_eq!(parse_expr!("add 1 2 , 3 , add", "add" => Fn(vec![fun_type!([I32 I32](I32))])),
                expr_group!(

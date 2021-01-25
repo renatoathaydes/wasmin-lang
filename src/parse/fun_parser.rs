@@ -74,8 +74,8 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
                 Ok((name, left, body, NO_ARGS_OR_RETURNS_FUN_TYPE))
             } else {
                 Err(ParserError {
-                    msg: format!("fun '{}' missing def (body returns a value, \
-                    hence the return type is mandatory)", name),
+                    msg: format!("fun '{}' missing def (body returns a value of type '{}', \
+                    hence the return type is mandatory)", name, types_to_string(&typ)),
                     pos,
                 })
             }

@@ -6,6 +6,7 @@ use crate::parse::Parser;
 use crate::parse::parser::{GroupingState, GroupingSymbol};
 use crate::parse::stack::Stack;
 use crate::types::{FunType, Kind, Type, TypedElement, TypeError};
+use crate::vec_utils::{remove_last_n, get_last, push_all};
 
 enum ExprPart {
     Word(String),
@@ -441,24 +442,4 @@ fn explicit_int_type(typ: Type, fits_in_32_bits: bool) -> Result<Type, String> {
         }
         _ => unreachable!()
     }
-}
-
-fn remove_last_n<T>(vec: &mut Vec<T>, n: usize) {
-    let mut len = vec.len();
-    let limit = len - n;
-    while len > limit {
-        len -= 1;
-        let _ = vec.remove(len);
-    }
-}
-
-fn push_all<T: Clone>(source: &Vec<T>, dest: &mut Vec<T>) {
-    for element in source {
-        dest.push(element.clone());
-    }
-}
-
-fn get_last<T>(vec: &mut Vec<T>) -> &mut T {
-    let len = vec.len();
-    vec.get_mut(len - 1).unwrap()
 }
