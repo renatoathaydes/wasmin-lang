@@ -3,30 +3,32 @@ use std::str::Chars;
 use crate::ast::{Assignment, Expression, ReAssignment};
 use crate::ast::Expression::{ExprError, Group};
 use crate::parse::Parser;
-use crate::parse::parser::{GroupingState, GroupingSymbol};
+use crate::parse::parser::{GroupingState, GroupingSymbol, ParserError};
 use crate::parse::stack::Stack;
 use crate::types::{FunType, Kind, Type, TypedElement, TypeError};
-use crate::vec_utils::{remove_last_n, get_last, push_all};
+use crate::vec_utils::{get_last, push_all, remove_last_n};
 
 enum ExprPart {
     Word(String),
     Expr(Expression),
 }
 
-struct ParsingState {
+struct ParsingState<'s> {
     symbols: GroupingState,
-    stack: Vec<Type>,
+    stack: &'s mut Vec<Type>,
     expr_parts: Vec<Vec<ExprPart>>,
     exprs: Vec<Vec<Expression>>,
+    is_root: bool,
 }
 
-impl ParsingState {
-    fn new() -> ParsingState {
+impl<'s> ParsingState<'s> {
+    fn new(stack: &'s mut Vec<Type>, is_root: bool) -> ParsingState<'s> {
         ParsingState {
             symbols: GroupingState::new(),
-            stack: vec![],
+            stack,
             exprs: vec![vec![]],
             expr_parts: vec![vec![]],
+            is_root,
         }
     }
 
@@ -36,17 +38,22 @@ impl ParsingState {
         self.exprs.push(vec![]);
     }
 
-    fn drop_level(&mut self, parser: &mut Parser) -> Result<(), String> {
-        if self.symbols.is_inside(GroupingSymbol::Parens) {
+    fn drop_level(&mut self,
+                  parser: &mut Parser,
+                  symbol: GroupingSymbol,
+    ) -> Result<bool, ParserError> {
+        if self.symbols.is_inside(&symbol) {
             self.symbols.exit_symbol();
             self.end_expr(parser);
             remove_last_n(&mut self.expr_parts, 1);
             let len = self.exprs.len();
             let dropped_level = self.exprs.remove(len - 1);
             merge(self.curr_level(), dropped_level);
-            Ok(())
+            Ok(true)
+        } else if self.is_root {
+            Err(parser.error(&format!("Closing {} does not close anything", symbol)).into())
         } else {
-            Err("Closing parens does not match any opening parens".to_owned())
+            Ok(false)
         }
     }
 
@@ -55,12 +62,12 @@ impl ParsingState {
     }
 
     fn push_expr_part(&mut self, part: String, parser: &mut Parser) {
-        let parts = get_last(&mut self.expr_parts);
-        if parts.is_empty() {
+        let is_first_part = get_last(&mut self.expr_parts).is_empty();
+        if is_first_part {
             let expr = match part.as_str() {
                 "let" | "mut" | "set" => {
                     let is_mut = !part.starts_with('l');
-                    match parser.parse_assignment(is_mut) {
+                    match parse_assignment_internal(parser, is_mut, self) {
                         Ok(e) => Some(assignment_expr(parser, part.as_str(), e)),
                         Err(e) => Some(ExprError(e.into()))
                     }
@@ -75,24 +82,23 @@ impl ParsingState {
                 _ => None
             };
             if let Some(e) = expr {
-                parts.push(ExprPart::Expr(e))
+                get_last(&mut self.expr_parts).push(ExprPart::Expr(e));
+                self.end_expr(parser);
+                return;
             }
         }
-        parts.push(ExprPart::Word(part));
+        get_last(&mut self.expr_parts).push(ExprPart::Word(part));
     }
 
     fn end_expr(&mut self, parser: &mut Parser) {
         let len = self.expr_parts.len();
         let parts = self.expr_parts.get_mut(len - 1).unwrap().drain(..).collect();
-        let mut exprs = create_expr(parts, &mut self.stack, parser);
+        let exprs = create_expr(parts, &mut self.stack, parser);
         push_all(&exprs, self.curr_level());
     }
 
     fn finish_off(&mut self) -> Expression {
-        if self.exprs.len() != 1 {
-            panic!("Expected one level of expressions left, but got {}", self.exprs.len());
-        }
-        let mut level = self.exprs.remove(0);
+        let mut level: Vec<_> = self.curr_level().drain(..).collect();
         if level.is_empty() {
             Expression::Empty
         } else if level.len() == 1 {
@@ -103,8 +109,32 @@ impl ParsingState {
     }
 }
 
-pub fn parse_expr(parser: &mut Parser) -> Result<Expression, String> {
-    let mut state = ParsingState::new();
+pub fn parse_expr(parser: &mut Parser) -> Result<Expression, ParserError> {
+    let mut stack = Vec::<Type>::new();
+    let mut state = ParsingState::new(&mut stack, true);
+    parse_expr_with_state(parser, &mut state)
+}
+
+fn parse_expr_with_state(
+    parser: &mut Parser,
+    state: &mut ParsingState,
+) -> Result<Expression, ParserError> {
+    let result = parse_expr_internal(parser, state)?;
+    if state.exprs.len() != 1 {
+        panic!("Expected one level of expressions left, but got {}", state.exprs.len());
+    }
+    let level = state.exprs.remove(0);
+    if !level.is_empty() {
+        panic!("Expected all expressions to have been consumed, but still have expressions \
+            remaining: {:?}", level)
+    }
+    Ok(result)
+}
+
+fn parse_expr_internal(
+    parser: &mut Parser,
+    state: &mut ParsingState,
+) -> Result<Expression, ParserError> {
     loop {
         parser.skip_spaces();
         match parser.curr_char() {
@@ -114,11 +144,15 @@ pub fn parse_expr(parser: &mut Parser) -> Result<Expression, String> {
                 state.enter(GroupingSymbol::Parens);
             }
             Some(')') => {
-                parser.next();
                 parser.stack_mut().drop_level();
-                state.drop_level(parser)?;
-                consume_optional_semi_colon(parser);
-                if state.symbols.is_empty() {
+                let dropped = state.drop_level(parser, GroupingSymbol::Parens)?;
+                if dropped {
+                    parser.next();
+                    consume_optional_semi_colon(parser);
+                    if state.symbols.is_empty() {
+                        break;
+                    }
+                } else {
                     break;
                 }
             }
@@ -138,7 +172,7 @@ pub fn parse_expr(parser: &mut Parser) -> Result<Expression, String> {
                     state.push_expr_part(word, parser);
                 } else {
                     parser.next();
-                    return Err(format!("unexpected character: '{}'", c));
+                    return Err(parser.error_unexpected_char(c, "expected expression").into());
                 }
             }
             None => {
@@ -148,6 +182,67 @@ pub fn parse_expr(parser: &mut Parser) -> Result<Expression, String> {
     };
     state.end_expr(parser);
     Ok(state.finish_off())
+}
+
+pub(crate) fn parse_assignment(
+    parser: &mut Parser,
+    is_mut: bool,
+) -> Result<Assignment, ParserError> {
+    let mut stack = Vec::<Type>::new();
+    let mut state = ParsingState::new(&mut stack, true);
+    parse_assignment_internal(parser, is_mut, &mut state)
+}
+
+fn parse_assignment_internal(
+    parser: &mut Parser,
+    is_mut: bool,
+    state: &mut ParsingState,
+) -> Result<Assignment, ParserError> {
+    let mut ids = Vec::new();
+    while let Some(id) = parser.parse_word() {
+        ids.push(id);
+        parser.skip_spaces();
+        if let Some(',') = parser.curr_char() { parser.next(); } else { break; }
+    }
+    parser.skip_spaces();
+    if let Some('=') = parser.curr_char() {
+        parser.next();
+        parser.stack_mut().new_level();
+        let pos = parser.pos();
+        let expr = {
+            let mut state = ParsingState::new(state.stack, false);
+            parse_expr_with_state(parser, &mut state)?
+        };
+        parser.stack_mut().drop_level();
+        let mut typ = expr.get_type();
+        if ids.len() <= typ.len() {
+            remove_last_n(state.stack, ids.len());
+            let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
+                .map(move |(id, t)| {
+                    parser.stack_mut().push(id.clone(), t, false, is_mut)
+                }).partition(|r| r.is_ok());
+            if errors.is_empty() {
+                let type_replacements = results.drain(..)
+                    .map(|r| r.unwrap()).collect();
+                Ok((ids, Box::new(expr), type_replacements))
+            } else {
+                let msg = errors.drain(..).map(|e| e.unwrap_err())
+                    .collect::<Vec<_>>().join(", ");
+                Err(ParserError { pos, msg })
+            }
+        } else {
+            let e = format!("multi-value assignment mismatch: \
+                {} identifier{} but expression results in type{} '{}'",
+                            ids.len(), if ids.len() == 1 { "" } else { "s" },
+                            if typ.len() == 1 { "" } else { "s" },
+                            typ.iter().map(|t| format!("{}", t)).collect::<Vec<_>>().join(" "));
+            parser.parser_err(e)
+        }
+    } else {
+        parser.parser_err(format!("Expected '=' in let expression, but got {}",
+                                  parser.curr_char().map(|c| format!("'{}'", c))
+                                      .unwrap_or_else(|| "EOF".to_string())))
+    }
 }
 
 // fn parse_if(parser: &mut Parser,
@@ -308,7 +403,8 @@ fn select_fun(
 }
 
 fn fun_can_be_called(typ: &FunType, stack: &Vec<Type>) -> bool {
-    typ.ins.len() <= stack.len()
+    typ.ins.len() <= stack.len() && typ.ins.iter().zip(stack.iter())
+        .all(|(t, s)| s.is_assignable_to(t))
 }
 
 pub fn type_of(str: &str, stack: &Stack) -> Result<TypedElement, String> {

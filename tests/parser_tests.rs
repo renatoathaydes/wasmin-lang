@@ -174,7 +174,7 @@ fn test_fun_without_def_must_not_return_value() {
         parser.parse();
 
         assert_eq!(rcv.iter().next().unwrap(), TopLevelElement::Error(
-            "fun '_start' missing def (body returns a value, hence the return type is mandatory)".to_owned(),
+            "fun '_start' missing def (body returns a value of type 'i32', hence the return type is mandatory)".to_owned(),
             (0, 4)));
     }
 

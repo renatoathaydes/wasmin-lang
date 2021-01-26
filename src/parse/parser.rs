@@ -58,6 +58,16 @@ pub enum GroupingSymbol {
     SquareBracket,
 }
 
+impl Display for GroupingSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GroupingSymbol::Parens => { f.write_str("parenthesis")?; }
+            GroupingSymbol::SquareBracket => { f.write_str("square-bracket")?; }
+        };
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct GroupingState { items: Vec<GroupingSymbol> }
 
@@ -66,8 +76,8 @@ impl GroupingState {
         GroupingState { items: Vec::with_capacity(2) }
     }
 
-    pub fn is_inside(&self, symbol: GroupingSymbol) -> bool {
-        self.items.last().map(|g| g == &symbol).unwrap_or(false)
+    pub fn is_inside(&self, symbol: &GroupingSymbol) -> bool {
+        self.items.last().map(|g| g == symbol).unwrap_or(false)
     }
 
     pub fn enter(&mut self, symbol: GroupingSymbol) {
@@ -78,8 +88,6 @@ impl GroupingState {
         let idx = self.items.len() - 1;
         self.items.remove(idx);
     }
-
-    pub fn len(&self) -> usize { self.items.len() }
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
@@ -249,47 +257,7 @@ impl Parser<'_> {
     }
 
     pub fn parse_assignment(&mut self, is_mut: bool) -> Result<Assignment, ParserError> {
-        let mut ids = Vec::new();
-        while let Some(id) = self.parse_word() {
-            ids.push(id);
-            self.skip_spaces();
-            if let Some(',') = self.curr_char() { self.next(); } else { break; }
-        }
-        self.skip_spaces();
-        if let Some('=') = self.curr_char() {
-            self.next();
-            self.stack.new_level();
-            let pos = self.pos();
-            let expr = self.parse_expr();
-            self.stack.drop_level();
-            let mut typ = expr.get_type();
-            if ids.len() == typ.len() {
-                let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
-                    .map(move |(id, t)| {
-                        self.stack.push(id.clone(), t, false, is_mut)
-                    }).partition(|r| r.is_ok());
-                if errors.is_empty() {
-                    let type_replacements = results.drain(..)
-                        .map(|r| r.unwrap()).collect();
-                    Ok((ids, Box::new(expr), type_replacements))
-                } else {
-                    let msg = errors.drain(..).map(|e| e.unwrap_err())
-                        .collect::<Vec<_>>().join(", ");
-                    Err(ParserError { pos, msg })
-                }
-            } else {
-                let e = format!("multi-value assignment mismatch: \
-                {} identifier{} but {} expression{} of type{3} '{}' found",
-                                ids.len(), if ids.len() == 1 { "" } else { "s" },
-                                typ.len(), if typ.len() == 1 { "" } else { "s" },
-                                typ.iter().map(|t| format!("{}", t)).collect::<Vec<_>>().join(" "));
-                self.parser_err(e)
-            }
-        } else {
-            self.parser_err(format!("Expected '=' in let expression, but got {}",
-                                    self.curr_char().map(|c| format!("'{}'", c))
-                                        .unwrap_or_else(|| "EOF".to_string())))
-        }
+        expr_parser::parse_assignment(self, is_mut)
     }
 
     pub fn parse_type(&mut self) -> Type {
@@ -301,9 +269,7 @@ impl Parser<'_> {
     }
 
     pub fn parse_expr(&mut self) -> Expression {
-        // FIXME error handling
-        expr_parser::parse_expr(self).unwrap_or_else(|e|
-            ExprError(TypeError { reason: e, pos: (0, 0) }))
+        expr_parser::parse_expr(self).unwrap_or_else(|e| ExprError(e.into()))
     }
 
     pub fn parse_ext(&mut self) -> Result<(String, Vec<ExtDef>), ParserError> {

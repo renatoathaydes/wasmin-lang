@@ -291,6 +291,33 @@ fn test_expr_concatenate_with_let() {
 }
 
 #[test]
+fn test_expr_concatenate_with_let_using_stack() {
+    assert_eq!(parse_expr!("1, let x = add 2",
+                    "add" => Fn(vec![fun_type!([I32 I32](I32))])),
+               expr_group!(
+                    expr_const!("1" I32)
+                    expr_let!("x" = expr_group!(
+                        expr_const!("2" I32)
+                        expr_fun_call!("add" [I32 I32](I32))))
+                ));
+}
+
+#[test]
+fn test_expr_concatenate_with_let_leaving_value_on_stack() {
+    assert_eq!(parse_expr!("1, let x = 2; add 2 x, add",
+                    "add" => Fn(vec![fun_type!([I32 I32](I32))])),
+               expr_group!(
+                    expr_const!("1" I32)
+                    expr_let!("x" = expr_const!("2" I32))
+                    expr_const!("2" I32)
+                    expr_global!("x" I32)
+                    expr_fun_call!("add" [I32 I32](I32))
+                    expr_fun_call!("add" [I32 I32](I32))
+                )
+    );
+}
+
+#[test]
 fn test_expr_concatenate_complex() {
     assert_eq!(parse_expr!("add 1 2 , 3 , add", "add" => Fn(vec![fun_type!([I32 I32](I32))])),
                expr_group!(
@@ -597,13 +624,13 @@ fn test_let_multi_value() {
     }));
     assert_eq!(parser.curr_char(), None);
 
-    let mut chars = " ee, ff = (func) ".chars();
+    let mut chars = " ee, ff, gg, hh = (func) ".chars();
     let mut parser = new_parser_with_stack(&mut chars, stack2);
 
     assert_eq!(parser.parse_assignment(false), Err(ParserError {
-        msg: "multi-value assignment mismatch: 2 identifiers but 3 expressions of types \
-        'i64 f32 f64' found".to_string(),
-        pos: (0, 17),
+        msg: "multi-value assignment mismatch: 4 identifiers but expression results in types \
+        'i64 f32 f64'".to_string(),
+        pos: (0, 25),
     }));
 }
 

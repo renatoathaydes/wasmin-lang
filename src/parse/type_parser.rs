@@ -76,12 +76,12 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
                     consume_optional_semi_colon(parser);
                     break;
                 }
-                if state.is_inside(Parens) {
+                if state.is_inside(&Parens) {
                     break;
                 }
             }
             Some(']') => {
-                if state.is_inside(SquareBracket) {
+                if state.is_inside(&SquareBracket) {
                     break;
                 }
             }

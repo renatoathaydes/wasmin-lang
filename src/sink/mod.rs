@@ -45,12 +45,12 @@ fn for_each_assignment<F>(
     mut action: F,
 ) -> Result<()>
     where F: FnMut(&mut Box<dyn Write>, &String, &Expression, bool) -> Result<()> {
-    let (mut ids, mut expr, mut rep) = a.clone();
+    let (mut ids, expr, mut rep) = a.clone();
 
     let mut exprs = if ids.len() == 1 {
         vec![*expr]
     } else {
-        if let Expression::Group(mut e) = *expr {
+        if let Expression::Group(e) = *expr {
             e
         } else {
             panic!("cannot convert expression to multi-values: {:?}", *expr)
