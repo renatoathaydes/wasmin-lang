@@ -144,9 +144,9 @@ fn parse_expr_internal(
                 state.enter(GroupingSymbol::Parens);
             }
             Some(')') => {
-                parser.stack_mut().drop_level();
                 let dropped = state.drop_level(parser, GroupingSymbol::Parens)?;
                 if dropped {
+                    parser.stack_mut().drop_level();
                     parser.next();
                     consume_optional_semi_colon(parser);
                     if state.symbols.is_empty() {
@@ -207,15 +207,13 @@ fn parse_assignment_internal(
     parser.skip_spaces();
     if let Some('=') = parser.curr_char() {
         parser.next();
-        parser.stack_mut().new_level();
         let pos = parser.pos();
         let expr = {
             let mut state = ParsingState::new(state.stack, false);
             parse_expr_with_state(parser, &mut state)?
         };
-        parser.stack_mut().drop_level();
         let mut typ = expr.get_type();
-        if ids.len() <= typ.len() {
+        if ids.len() <= state.stack.len() {
             remove_last_n(state.stack, ids.len());
             let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
                 .map(move |(id, t)| {

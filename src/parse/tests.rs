@@ -526,6 +526,16 @@ fn test_let() {
 }
 
 #[test]
+fn test_let_within_let() {
+    let mut chars = "x = (let z = 2; z) ".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_assignment(false), Ok(assign!(
+        "x" = expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_local!("z" I32)))));
+    assert_symbols_contains!(parser, "x" => I32);
+}
+
+#[test]
 fn test_mut_then_set() {
     let mut chars = "foo = 1; foo=2".chars();
     let mut parser = new_parser_without_sink(&mut chars);
