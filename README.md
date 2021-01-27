@@ -101,6 +101,8 @@ For example, these are all expressions:
 The last examples show that the concatenative style allows certain expressions to be written in a more natural way. For
 example, it allows using a familiar "infix operator" syntax.
 
+> Wasmin source code must always be encoded using UTF-8.
+
 Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form:
 
 ```bash
@@ -144,7 +146,9 @@ In the example above, `add (2, 3)` actually creates an expression whose second t
 which then are passed as arguments to the first term, the `add`
 function, and hence is equivalent to just `(add 2 3)` (but _accidentally_ looks like a C-like function call).
 
-> Wasmin source code must always be encoded using UTF-8.
+> `let` expressions can be multi-valued as in `let x, y = 2, 3;`.
+> A `let` will consume one value per identifier.
+> Wasmin does not allow a single identifier to have more than one value.
 
 The type of a variable or function can be declared explicitly with a `def` statement. To implement a function, the `fun`
 keyword is used.
