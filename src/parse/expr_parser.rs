@@ -212,10 +212,8 @@ fn parse_assignment_internal(
             let mut state = ParsingState::new(state.stack, false);
             parse_expr_with_state(parser, &mut state)?
         };
-        let mut typ = expr.get_type();
         if ids.len() <= state.stack.len() {
-            remove_last_n(state.stack, ids.len());
-            let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(typ.drain(..))
+            let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(state.stack.drain(0..ids.len()))
                 .map(move |(id, t)| {
                     parser.stack_mut().push(id.clone(), t, false, is_mut)
                 }).partition(|r| r.is_ok());
@@ -229,6 +227,7 @@ fn parse_assignment_internal(
                 Err(ParserError { pos, msg })
             }
         } else {
+            let mut typ = expr.get_type();
             let e = format!("multi-value assignment mismatch: \
                 {} identifier{} but expression results in type{} '{}'",
                             ids.len(), if ids.len() == 1 { "" } else { "s" },
