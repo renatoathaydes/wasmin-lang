@@ -15,6 +15,7 @@ mod expr_parser;
 mod fun_parser;
 mod top_level_parser;
 mod ext_parser;
+mod state;
 pub(crate) mod stack;
 
 /// Parser of Wasmin programs.

@@ -19,7 +19,7 @@ fn test_let() {
 
         assert_eq!(rcv.iter().next().unwrap(), top_let!("x" = expr_const!("1" I32)));
         assert_eq!(rcv.iter().next().unwrap(), top_let!("y" =
-        expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_local!("z" I32))));
+            expr_group!(expr_let!("z" = expr_const!("2" I32)) expr_local!("z" I32))));
         assert_eq!(rcv.iter().next().unwrap(), top_let!(p "PI" = expr_const!("3.14" F32)));
     }
 

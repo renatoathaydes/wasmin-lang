@@ -6,4 +6,5 @@ otherwise square it.
 }
 pub fun double_or_square n =
     # notice that `mul` is applied to either (2, n) or (n, n)
+    # depending on the value of n
     mul (if n, gt_s 100; 2, n; n, n);

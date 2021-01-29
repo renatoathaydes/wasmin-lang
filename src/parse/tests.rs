@@ -255,10 +255,8 @@ fn test_expr_multi_value() {
     ]));
     assert_eq!(parse_expr!("1, (2, 3)"), Group(vec![
         Const(String::from("1"), I32),
-        Group(vec![
-            Const(String::from("2"), I32),
-            Const(String::from("3"), I32),
-        ]),
+        Const(String::from("2"), I32),
+        Const(String::from("3"), I32),
     ]));
     assert_eq!(parse_expr!("((1, 2), 3)"), Group(vec![
         Const(String::from("1"), I32),
@@ -304,7 +302,7 @@ fn test_expr_concatenate_with_let_using_stack() {
 
 #[test]
 fn test_expr_concatenate_with_let_leaving_value_on_stack() {
-    assert_eq!(parse_expr!("1, let x = 2; add 2 x, add",
+    assert_eq!(parse_expr!("(1, let x = 2; add 2 x; add)",
                     "add" => Fn(vec![fun_type!([I32 I32](I32))])),
                expr_group!(
                     expr_const!("1" I32)
@@ -727,7 +725,7 @@ fn test_if_then_else_with_sub_expr() {
     assert_eq!(parser.parse_expr(), expr_if!(
         expr_group!(expr_const!(1 I32) expr_const!(2 I32) expr_fun_call!(wasm "add" [I32 I32](I32)));
         expr_const!(3 I32);
-        expr_group!(expr_group!(expr_const!(4 I32) expr_const!(2 I32)) expr_fun_call!(wasm "sub" [I32 I32](I32)))
+        expr_group!(expr_const!(4 I32) expr_const!(2 I32) expr_fun_call!(wasm "sub" [I32 I32](I32)))
          ));
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
