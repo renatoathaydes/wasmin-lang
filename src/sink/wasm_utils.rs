@@ -38,7 +38,7 @@ pub fn to_const(typ: ValType, text: &str) -> Instruction {
 }
 
 pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instruction<'a>> {
-    let types = &fun_type.outs;
+    let types = &fun_type.ins;
     if types.len() == 2 && types.get(0).unwrap() == types.get(1).unwrap() {
         let instr = match types.get(0).unwrap() {
             &Type::I64 if name == "add" => Instruction::I64Add,
@@ -84,10 +84,10 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             &Type::F64 if name == "le" => Instruction::F64Le,
             &Type::F32 if name == "le" => Instruction::F32Le,
 
-            _ => unimplemented!()
+            _ => panic!("Cannot find WASM fun '{}' with type: {:?}", name, fun_type)
         };
         Ok(instr)
     } else {
-        unimplemented!()
+        panic!("Cannot find WASM fun '{}' with type: {:?}", name, fun_type)
     }
 }
