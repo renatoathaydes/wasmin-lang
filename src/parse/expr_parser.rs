@@ -226,7 +226,9 @@ fn parse_if(parser: &mut Parser,
     let (then, then_type) =
         parse_expr_with_clean_state(parser, state, "then")?;
 
-    remove_last_n(state.stack, then_type.len());
+    if !has_error(&then_type) {
+        remove_last_n(state.stack, then_type.len());
+    }
 
     let (mut els, else_type) = if is_within_parens {
         parser.skip_spaces();

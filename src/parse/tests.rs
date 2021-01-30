@@ -810,3 +810,23 @@ fn test_if_then_else_error_if_condition_is_not_i32() {
 
     assert_eq!(parser.parse_expr(), expr_const!("5" I32));
 }
+
+#[test]
+fn test_if_then_error_expression() {
+    let mut chars = "if (1) fool; 2;".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(
+        expr_const!(1 I32);
+        ExprError(TypeError{
+            reason: "'fool' does not exist in this scope".to_owned(),
+            pos: (0, 13)
+        });
+        ExprError(TypeError{
+            reason: "if expression has different types in each branch:\n  \
+                - then: ERROR([0, 13] 'fool' does not exist in this scope)\n  \
+                - else: i32\n\
+                To be valid, an if expression must have the same type on both branches.".to_owned(),
+            pos: (0, 15)
+        }) ));
+}
