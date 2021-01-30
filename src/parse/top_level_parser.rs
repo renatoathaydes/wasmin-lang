@@ -31,7 +31,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "let" | "mut" => {
-            let comment = parser.get_comment(false);
+            let comment = parser.take_comment();
             match parser.parse_assignment(word.starts_with('m')) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
@@ -45,7 +45,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "fun" => {
-            let comment = parser.get_comment(false);
+            let comment = parser.take_comment();
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
                 Ok(fun) => Some(TopLevelElement::Fun(fun, visibility, comment)),
@@ -53,7 +53,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             }
         }
         "ext" => {
-            let comment = parser.get_comment(false);
+            let comment = parser.take_comment();
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_ext() {
                 Ok((mod_name, defs)) =>

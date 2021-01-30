@@ -129,8 +129,8 @@ impl Parser<'_> {
         self.remember_comments = value;
     }
 
-    pub fn get_comment(&mut self, remember_comments: bool) -> Option<Comment> {
-        self.store_comments(remember_comments);
+    pub fn take_comment(&mut self) -> Option<Comment> {
+        self.store_comments(false);
         std::mem::replace(&mut self.comment, None)
     }
 

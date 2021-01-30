@@ -286,9 +286,9 @@ fn test_ext_module() {
 }
 
 #[test]
-fn test_fun_with_multiline_comment() {
+fn test_let_and_fun_with_multiline_comment() {
     let mut chars = "\n#this is 10\nlet n = 10;\n\
-       #{   \nthis is a noop fun\n  }\nfun start = ()".chars();
+       #{   \nthis is a noop fun\n  }\nfun start = () fun no-comments = ()".chars();
     let (sender, rcv) = channel();
 
     // let the sender "drop" so the channel is closed
@@ -305,6 +305,12 @@ fn test_fun_with_multiline_comment() {
         let expected = TopLevelElement::Fun(
             ("start".to_owned(), vec![], Expression::Empty, fun_type!([]())),
             Visibility::Private, Some("   \nthis is a noop fun\n  ".to_owned()));
+
+        assert_eq!(rcv.iter().next().unwrap(), expected);
+
+        let expected = TopLevelElement::Fun(
+            ("no-comments".to_owned(), vec![], Expression::Empty, fun_type!([]())),
+            Visibility::Private, None);
 
         assert_eq!(rcv.iter().next().unwrap(), expected);
     }
