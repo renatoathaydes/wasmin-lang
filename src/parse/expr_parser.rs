@@ -61,9 +61,12 @@ fn parse_expr_internal(
             Some(c) => {
                 if let Some(word) = parser.parse_word() {
                     let part = create_expr_part(parser, state, word);
-                    let is_expr = if let ExprPart::Expr(_) = part { true } else { false };
+                    let is_expr = part.is_expression();
                     state.push_expr_part(part);
-                    if is_expr && state.symbols().is_empty() { break; }
+                    // if we get an expression we need to stop collecting parts as we're done.
+                    if is_expr && state.symbols().is_empty() {
+                        break;
+                    }
                 } else {
                     parser.next();
                     return Err(parser.error_unexpected_char(c, "expected expression").into());
@@ -83,7 +86,7 @@ fn consume_expr_parts(parser: &mut Parser, state: &mut ParsingState) {
 }
 
 fn create_expr_part(parser: &mut Parser, state: &mut ParsingState, part: String) -> ExprPart {
-    let is_first_part = state.is_expr_parts_empty();
+    let is_first_part = !state.has_non_expr_part();
     if is_first_part {
         let expr = match part.as_str() {
             "let" | "mut" | "set" => {
@@ -105,7 +108,7 @@ fn create_expr_part(parser: &mut Parser, state: &mut ParsingState, part: String)
             return ExprPart::Expr(e);
         }
     }
-    ExprPart::Word(part)
+    if is_first_part { ExprPart::Fun(part) } else { ExprPart::Arg(part) }
 }
 
 pub(crate) fn parse_assignment(
@@ -260,31 +263,25 @@ fn create_expr(
     if parts.is_empty() {
         return vec![];
     }
-    let first = parts.remove(0);
-    match first {
-        ExprPart::Word(word) => {
-            let mut result = Vec::with_capacity(parts.len() + 1);
-            while !parts.is_empty() {
-                match parts.remove(0) {
-                    ExprPart::Word(w) => result.push(word_expr(parser, w, stack)),
-                    ExprPart::Expr(e) => result.push(e),
-                };
+    let mut fun: Option<String> = None;
+    let mut result = Vec::with_capacity(parts.len() + 1);
+    loop {
+        match parts.remove(0) {
+            ExprPart::Fun(fun_name) => {
+                if let Some(f) = fun {
+                    result.push(word_expr(parser, f, stack));
+                }
+                fun = Some(fun_name);
             }
-            result.push(word_expr(parser, word, stack));
-            result
+            ExprPart::Arg(w) => result.push(word_expr(parser, w, stack)),
+            ExprPart::Expr(e) => result.push(e),
         }
-        ExprPart::Expr(e) => {
-            if parts.is_empty() {
-                vec![e]
-            } else {
-                vec![Expression::ExprError(TypeError {
-                    reason: format!("invocation of function selected by expression is not yet \
-                supported. Expression: {:?}", e),
-                    pos: parser.pos(),
-                })]
-            }
-        }
+        if parts.is_empty() { break; }
     }
+    if let Some(f) = fun {
+        result.push(word_expr(parser, f, stack));
+    }
+    result
 }
 
 fn word_expr(
@@ -328,7 +325,8 @@ fn select_fun(
         }
     }
     ExprError(TypeError {
-        reason: format!("cannot call fun '{}' with current stack", fun_name),
+        reason: format!("cannot call fun '{}' with current stack: '{}'",
+                        fun_name, types_to_string(stack)),
         pos: parser.pos(),
     })
 }

@@ -308,7 +308,7 @@ fn test_expr_concatenate_with_let_leaving_value_on_stack() {
                     expr_const!("1" I32)
                     expr_let!("x" = expr_const!("2" I32))
                     expr_const!("2" I32)
-                    expr_global!("x" I32)
+                    expr_local!("x" I32)
                     expr_fun_call!("add" [I32 I32](I32))
                     expr_fun_call!("add" [I32 I32](I32))
                 )

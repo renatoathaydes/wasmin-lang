@@ -14,8 +14,18 @@ pub struct ParsingState<'s> {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub(crate) enum ExprPart {
-    Word(String),
+    Arg(String),
+    Fun(String),
     Expr(Expression),
+}
+
+impl ExprPart {
+    pub(crate) fn is_expression(&self) -> bool {
+        match self {
+            ExprPart::Expr(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'s> ParsingState<'s> {
@@ -33,8 +43,8 @@ impl<'s> ParsingState<'s> {
         &self.symbols
     }
 
-    pub fn is_expr_parts_empty(&self) -> bool {
-        get_last(&self.expr_parts).is_empty()
+    pub fn has_non_expr_part(&self) -> bool {
+        get_last(&self.expr_parts).iter().any(|e| !e.is_expression())
     }
 
     pub fn enter_level(&mut self, symbol: GroupingSymbol) {
@@ -124,8 +134,12 @@ mod state_tests {
 
     use super::*;
 
-    macro_rules! word {
-        ($id:literal) => { ExprPart::Word($id.to_owned()) };
+    macro_rules! arg {
+        ($id:literal) => { ExprPart::Arg($id.to_owned()) };
+    }
+
+    macro_rules! fun {
+        ($id:literal) => { ExprPart::Fun($id.to_owned()) };
     }
 
     macro_rules! expr {
@@ -137,9 +151,9 @@ mod state_tests {
         let mut stack = Vec::new();
         let mut state = ParsingState::new(&mut stack, true);
 
-        state.push_expr_part(word!("hi"));
+        state.push_expr_part(fun!("hi"));
         state.push_expr_part(expr!(expr_const!("3" I32)));
-        assert_eq!(state.end_expr(), vec![word!("hi"), expr!(expr_const!("3" I32))]);
+        assert_eq!(state.end_expr(), vec![fun!("hi"), expr!(expr_const!("3" I32))]);
 
         // shouldn't panic
         state.verify_end_state();
