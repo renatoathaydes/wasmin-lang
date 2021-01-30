@@ -95,7 +95,6 @@ impl<'s> ParsingState<'s> {
 
     pub fn finish_off(&mut self) -> Expression {
         let level: Vec<_> = self.curr_level().drain(..).collect();
-        println!("FINISHING OFF: {:?}", level);
         group_exprs(level)
     }
 
