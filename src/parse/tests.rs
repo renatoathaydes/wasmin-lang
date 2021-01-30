@@ -665,6 +665,27 @@ fn test_if_then() {
 }
 
 #[test]
+fn test_if_then_with_readability_word() {
+    let mut stack = Stack::new();
+    stack.push(
+        "log".to_string(),
+        Fn(vec![fun_type!([I32]())]), false, false).unwrap();
+    stack.push(
+        "add".to_string(),
+        Fn(vec![fun_type!([I32 I32](I32))]), false, false).unwrap();
+
+    let mut chars = "(if add 2 2; then log 1) 4".chars();
+    let mut parser = new_parser_with_stack(&mut chars, stack);
+
+    assert_eq!(parser.parse_expr(), expr_if!(
+        expr_group!(expr_const!("2" I32) expr_const!("2" I32) expr_fun_call!("add" [I32 I32](I32)));
+        expr_group!(expr_const!("1" I32) expr_fun_call!("log" [I32]()));
+        expr_empty!()));
+
+    assert_eq!(parser.parse_expr(), expr_const!("4" I32));
+}
+
+#[test]
 fn test_if_then_fn_call() {
     let mut stack = Stack::new();
     stack.push(
@@ -684,6 +705,18 @@ fn test_if_then_fn_call() {
 #[test]
 fn test_if_then_else() {
     let mut chars = "if 1; 0; 2; 4".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);
+        expr_const!(0 I32);
+        expr_const!(2 I32)));
+
+    assert_eq!(parser.parse_expr(), expr_const!("4" I32));
+}
+
+#[test]
+fn test_if_then_else_with_readability_words() {
+    let mut chars = "if 1; then 0; else 2; 4".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_expr(), expr_if!(expr_const!("1" I32);

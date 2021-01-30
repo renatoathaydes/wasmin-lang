@@ -140,6 +140,33 @@ fn test_global_mut_set() {
 }
 
 #[test]
+fn test_fun_with_conditionals() {
+    test_parser!("\
+        def factorial [i32]i32;
+        pub fun factorial n = if n, le_s 2;
+          then n;
+          else n, mul (n, sub 1, factorial);
+        ";;
+        top_fun!(def fun_type!([I32](I32));
+            p fun "factorial" "n" =
+                expr_if!(expr_group!(
+                    expr_local!("n" I32)
+                    expr_const!("2" I32)
+                    expr_fun_call!(wasm "le_s" [I32 I32](I32))
+                );
+                expr_local!("n" I32);
+                expr_group!(
+                    expr_local!("n" I32)
+                    expr_local!("n" I32)
+                    expr_const!("1" I32)
+                    expr_fun_call!(wasm "sub" [I32 I32](I32))
+                    expr_fun_call!("factorial" [I32](I32))
+                    expr_fun_call!(wasm "mul" [I32 I32](I32))
+                ))
+    ));
+}
+
+#[test]
 fn test_ext_module() {
     let mut chars = "\
         ext console {

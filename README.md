@@ -86,6 +86,8 @@ Expressions have the following forms:
 - `(expr1; expr2; expr3)` (group of expressions, each one is evaluated in order).
 - `if cond_expr; expr1; expr2;` (if `cond_expr` evaluates to non-zero, evaluate `expr1`, else evaluate `expr2`).
 - `if (cond_exp) (expr1) (expr2)` (same as previous but using parenthesis instead of `;` to separate expressions).
+- `if cond_exp; then expr1; else expr2;` (same as previous but using `then` and `else` optional keywords for
+  readability).
 - `(if cond_expr; expr1)` (the `else` expression is optional if `expr1` evaluates to `()`).
 
 For example, these are all expressions:
@@ -217,8 +219,10 @@ You can split up Wasmin programs in several files. To do that, just import other
 `factorial.wasmin`:
 
 ```rust
-def fact [i32]i64;
-pub fun fact n = if n, gt 1; n, mul (n, sub 1, fact); n;
+def factorial [i32]i64;
+pub fun factorial n = if n, le_s 2;
+    then n;
+    else n, mul (n, sub 1, factorial);
 ```
 
 `main.wasmin`:
@@ -229,25 +233,28 @@ pub fun fact n = if n, gt 1; n, mul (n, sub 1, fact); n;
 use * from "./factorial";
 
 def _start []i64;
-fun _start = fact 5;
+fun _start = factorial 5;
 ```
 
 `use` statements may also list which definitions to import:
 
 ```rust
-use {fact} from "./factorial";
+use { factorial } from "./factorial";
 
 def _start []i64;
-fun _start = fact 5;
+fun _start = factorial 5;
 ```
 
 If another file defines an `ext` module, then the `ext` module can be used as any other definition in that file:
 
 ```rust
 # assume that "ext console" was defined inside "./factorial.wasmin"
-use { fact console } from "./factorial";
+use {
+    factorial
+    console
+} from "./factorial";
 
-fun _start = console.log (fact 5);
+fun _start = console.log (factorial 5);
 ```
 
 This completes the description of the Wasmin syntax (a minimalistic syntax for WASM, hence the name ;))!
