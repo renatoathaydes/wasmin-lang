@@ -34,7 +34,6 @@ Feature Checklist:
 - [ ] import from other Wasmin files with `use`.
 - [x] import external declarations with `ext`.
 - [x] export functions and constants.
-- [ ] stack operator `>`.
 - [ ] string values.
 - [ ] function pointers.
 - [ ] arrays.
