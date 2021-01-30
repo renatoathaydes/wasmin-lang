@@ -1,13 +1,13 @@
 use std::str::Chars;
 
 use crate::ast::{Assignment, Expression, ReAssignment};
-use crate::ast::Expression::{ExprError, Group};
+use crate::ast::Expression::{ExprError};
 use crate::parse::Parser;
 use crate::parse::parser::{GroupingSymbol, ParserError};
 use crate::parse::stack::Stack;
 use crate::parse::state::{*};
 use crate::types::{FunType, Kind, Type, TypedElement, TypeError, types_to_string};
-use crate::vec_utils::{get_last_mut, push_all, remove_last_n};
+use crate::vec_utils::{push_all, remove_last_n};
 
 pub fn parse_expr(parser: &mut Parser) -> Result<Expression, ParserError> {
     let mut stack = Vec::<Type>::new();

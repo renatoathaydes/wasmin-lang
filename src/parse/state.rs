@@ -1,8 +1,7 @@
 use crate::ast::Expression;
-use crate::ast::Expression::Group;
 use crate::parse::parser::{GroupingState, GroupingSymbol};
 use crate::types::Type;
-use crate::vec_utils::{get_last, get_last_mut, push_all, remove_last, remove_last_n};
+use crate::vec_utils::{get_last, get_last_mut, remove_last, remove_last_n};
 
 pub struct ParsingState<'s> {
     symbols: GroupingState,
@@ -129,7 +128,7 @@ fn group_exprs(mut exprs: Vec<Expression>) -> Expression {
 
 #[cfg(test)]
 mod state_tests {
-    use crate::types::{FunType, Type::{*}};
+    use crate::types::{Type::{*}};
 
     use super::*;
 
@@ -165,10 +164,10 @@ mod state_tests {
 
         state.push_exprs(vec![expr_const!("2" I32)]);
         state.enter_level(GroupingSymbol::Parens);
-        state.push_expr_part(expr!(expr_const!("3" I32)));
+        state.push_expr_part(arg!("3"));
         state.push_expr_part(expr!(expr_const!("4" I32)));
 
-        assert_eq!(state.end_expr(), vec![expr!(expr_const!("3" I32)), expr!(expr_const!("4" I32))]);
+        assert_eq!(state.end_expr(), vec![arg!("3"), expr!(expr_const!("4" I32))]);
 
         state.push_exprs(vec![expr_const!("3" I32), expr_const!("4" I32)]);
 
