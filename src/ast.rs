@@ -1,7 +1,7 @@
 use Expression::{*};
 
 use crate::types::{FunType, Type, TypeError};
-use crate::vec_utils::{push_all, remove_last_n};
+use crate::vec_utils::{push_all, remove_last_n, get_last};
 
 /// Assignment defines one or more Wasmin assignments.
 ///
@@ -92,13 +92,18 @@ impl Expression {
 
     fn get_type_internal(&self, types: &mut Vec<Type>) {
         match self {
-            Expression::Empty | Let(..) | Mut(..) | Set(..) => {}
+            Expression::Empty | Let(..) | Mut(..) | Set(..) | Break(..) => {}
             Const(.., typ) | Local(.., typ) | Global(.., typ) => {
                 types.push(typ.clone())
             }
             Group(es) => {
-                for expr in es {
-                    expr.get_type_internal(types);
+                let ignore_stack = if !es.is_empty() {
+                    if let Break(..) = get_last(es) { true } else { false }
+                } else { false };
+                if !ignore_stack {
+                    for expr in es {
+                        expr.get_type_internal(types);
+                    }
                 }
             }
             FunCall { typ, .. } => match typ {
@@ -116,10 +121,9 @@ impl Expression {
                 then.get_type_internal(types)
             }
             Loop(e) => {
-                push_all(&e.get_type(), types)
-            }
-            Break(t) => {
-                push_all(t, types)
+                if let Some(Break(ref typ)) = e.get_nested_break() {
+                    push_all(typ, types)
+                }
             }
             ExprError(e) => {
                 push_all(&e.get_type(), types)
@@ -134,6 +138,37 @@ impl Expression {
             Loop(e) => e.is_empty(),
             _ => false
         }
+    }
+
+    fn get_nested_break(&self) -> Option<&Expression> {
+        match self {
+            Break(_) => {
+                return Some(self);
+            }
+            Let((_, e, ..)) | Mut((_, e, ..)) |
+            Set(ReAssignment { assignment: (_, e, ..), .. }) => {
+                if let Some(expr) = e.get_nested_break() {
+                    return Some(expr);
+                }
+            }
+            If(_, then, els) => {
+                if let Some(expr) = then.get_nested_break() {
+                    return Some(expr);
+                }
+                if let Some(expr) = els.get_nested_break() {
+                    return Some(expr);
+                }
+            }
+            Group(exprs) => {
+                for e in exprs {
+                    if let Some(expr) = e.get_nested_break() {
+                        return Some(expr);
+                    }
+                }
+            }
+            _ => {}
+        };
+        None
     }
 }
 

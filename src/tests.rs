@@ -1,6 +1,6 @@
 use crate::ast::{Expression, ReAssignment};
 use crate::ast::Expression::If;
-use crate::types::{TypeError};
+use crate::types::TypeError;
 use crate::types::Type::*;
 
 #[test]
@@ -123,4 +123,24 @@ fn test_error_get_type() {
         reason: "wrong".to_owned(),
         pos: (10, 20),
     })])
+}
+
+#[test]
+fn test_group_with_break_get_type() {
+    assert_eq!(expr_group!(expr_const!("1" I32) expr_break!(I32)).get_type(), vec![]);
+    assert_eq!(expr_group!(expr_const!("1" I32)
+                           expr_const!("2" I32)
+                           expr_break!(I32 I32)).get_type(), vec![]);
+}
+
+#[test]
+fn test_loop_get_type() {
+    assert_eq!(expr_loop!(expr_empty!()).get_type(), vec![]);
+    assert_eq!(expr_loop!(expr_group!(expr_const!("1" I32)
+                                      expr_const!("2" I32)
+                                      expr_break!(I32 I32))).get_type(), vec![I32, I32]);
+    assert_eq!(expr_loop!(expr_group!(
+        expr_if!(expr_const!("1" I32);
+            expr_group!(expr_const!("2" F64) expr_break!(F64));
+            expr_group!(expr_const!("2" F64) expr_break!(F64))))).get_type(), vec![F64]);
 }
