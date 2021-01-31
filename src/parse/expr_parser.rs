@@ -130,13 +130,7 @@ fn create_expr_part(parser: &mut Parser, state: &mut ParsingState, part: String)
                     Err(e) => Some(ExprError(e))
                 }
             }
-            "loop" => {
-                state.start_block();
-                match parse_expr_with_clean_state(parser, state, "") {
-                    Ok((e, _)) => Some(Loop(Box::new(e))),
-                    Err(e) => Some(ExprError(e))
-                }
-            }
+            "loop" => Some(parse_loop(parser, state)),
             _ => None
         };
         if let Some(e) = expr {
@@ -261,6 +255,15 @@ fn parse_if(parser: &mut Parser,
     Ok(Expression::If(Box::new(cond), Box::new(then), Box::new(els)))
 }
 
+fn parse_loop(parser: &mut Parser, state: &mut ParsingState) -> Expression {
+    state.start_block();
+    let expr = match parse_expr_with_clean_state(parser, state, "") {
+        Ok((e, _)) => e,
+        Err(e) => return ExprError(e)
+    };
+    Loop(Box::new(expr))
+}
+
 fn parse_expr_with_clean_state(
     parser: &mut Parser,
     state: &mut ParsingState,
@@ -337,7 +340,7 @@ fn create_break(parser: &mut Parser, state: &mut ParsingState) -> Expression {
                 "cannot 'break' at this point because loop would be consuming \
                  items from the stack indefinitely, depleting the stack."))
         } else {
-            let types = state.stack[start_len..].iter().cloned().collect();
+            let types = state.stack.drain(start_len..).collect();
             Expression::Break(types)
         }
     } else {

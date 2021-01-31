@@ -232,11 +232,11 @@ mod state_tests {
         assert_eq!(state.get_stack_count_at_block_start(), Some(1));
         state.start_block();
         assert_eq!(state.get_stack_count_at_block_start(), Some(3));
-        state.exit_level(GroupingSymbol::Parens);
+        state.exit_level(GroupingSymbol::Parens).unwrap();
         assert_eq!(state.get_stack_count_at_block_start(), Some(1));
         state.start_block();
         assert_eq!(state.get_stack_count_at_block_start(), Some(3));
-        state.exit_level(GroupingSymbol::Parens);
+        state.exit_level(GroupingSymbol::Parens).unwrap();
         assert_eq!(state.get_stack_count_at_block_start(), Some(1));
     }
 }

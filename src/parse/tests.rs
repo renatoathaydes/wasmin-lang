@@ -850,3 +850,33 @@ fn test_loop_then_break() {
                  expr_break!();
                  expr_empty!())));
 }
+
+#[test]
+fn test_loop_with_multiple_breaks() {
+    let mut chars = "
+        loop(
+            if 2, gt_s 1; then break 2;;
+            if 3, gt_s 2; then break 3;;
+        )".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+    assert_eq!(parser.parse_expr(), expr_loop!(
+        expr_group!(expr_if!(
+            expr_group!(
+                expr_const!("2" I32)
+                expr_const!("1" I32)
+                expr_fun_call!(wasm "gt_s" [I32 I32](I32)));
+            expr_group!(
+                expr_const!("2" I32)
+                expr_break!(I32));
+            expr_empty!())
+        expr_if!(
+            expr_group!(
+                expr_const!("3" I32)
+                expr_const!("2" I32)
+                expr_fun_call!(wasm "gt_s" [I32 I32](I32)));
+            expr_group!(
+                expr_const!("3" I32)
+                expr_break!(I32));
+            expr_empty!())
+        )));
+}

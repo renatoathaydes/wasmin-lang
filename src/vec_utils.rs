@@ -1,6 +1,6 @@
 pub(crate) fn remove_last_n<T>(vec: &mut Vec<T>, n: usize) {
     let mut len = vec.len();
-    let limit = len - n;
+    let limit = if n > len { 0 } else { len - n };
     while len > limit {
         len -= 1;
         let _ = vec.remove(len);
