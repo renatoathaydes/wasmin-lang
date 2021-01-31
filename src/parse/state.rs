@@ -8,7 +8,13 @@ pub struct ParsingState<'s> {
     pub stack: &'s mut Vec<Type>,
     expr_parts: Vec<Vec<ExprPart>>,
     exprs: Vec<Vec<Expression>>,
+    block_info: Vec<Option<BlockInfo>>,
     is_root: bool,
+}
+
+#[derive(Debug, Clone)]
+struct BlockInfo {
+    type_count_at_start: usize
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -28,13 +34,26 @@ impl ExprPart {
 }
 
 impl<'s> ParsingState<'s> {
-    pub fn new(stack: &'s mut Vec<Type>, is_root: bool) -> ParsingState<'s> {
+    pub fn new(stack: &'s mut Vec<Type>) -> ParsingState<'s> {
         ParsingState {
             symbols: GroupingState::new(),
             stack,
             exprs: vec![vec![]],
             expr_parts: vec![vec![]],
-            is_root,
+            block_info: vec![None],
+            is_root: true,
+        }
+    }
+
+    pub fn new_nested(state: &'s mut ParsingState) -> ParsingState<'s> {
+        let block_info = state.block_info.clone();
+        ParsingState {
+            symbols: GroupingState::new(),
+            stack: &mut state.stack,
+            exprs: vec![vec![]],
+            expr_parts: vec![vec![]],
+            block_info,
+            is_root: false,
         }
     }
 
@@ -50,6 +69,7 @@ impl<'s> ParsingState<'s> {
         self.symbols.enter(symbol);
         self.expr_parts.push(vec![]);
         self.exprs.push(vec![]);
+        self.block_info.push(None);
     }
 
     pub fn exit_level(&mut self,
@@ -62,6 +82,7 @@ impl<'s> ParsingState<'s> {
                 panic!("Exiting level without consuming expression parts first: {:?}", parts)
             }
             remove_last_n(&mut self.expr_parts, 1);
+            remove_last_n(&mut self.block_info, 1);
             let level = remove_last(&mut self.exprs);
             self.push_exprs(level);
             Ok(true)
@@ -78,6 +99,16 @@ impl<'s> ParsingState<'s> {
 
     fn curr_parts(&mut self) -> &mut Vec<ExprPart> {
         get_last_mut(&mut self.expr_parts)
+    }
+
+    pub(crate) fn start_block(&mut self) {
+        get_last_mut(&mut self.block_info)
+            .replace(BlockInfo { type_count_at_start: self.stack.len() });
+    }
+
+    pub(crate) fn get_stack_count_at_block_start(&self) -> Option<usize> {
+        self.block_info.iter().rfind(|info| info.is_some())
+            .map(|info| info.as_ref().unwrap().type_count_at_start)
     }
 
     pub(crate) fn push_expr_part(&mut self, part: ExprPart) {
@@ -147,7 +178,7 @@ mod state_tests {
     #[test]
     fn basic_usage() {
         let mut stack = Vec::new();
-        let mut state = ParsingState::new(&mut stack, true);
+        let mut state = ParsingState::new(&mut stack);
 
         state.push_expr_part(fun!("hi"));
         state.push_expr_part(expr!(expr_const!("3" I32)));
@@ -160,7 +191,7 @@ mod state_tests {
     #[test]
     fn can_merge_levels_when_exit_level() {
         let mut stack = Vec::new();
-        let mut state = ParsingState::new(&mut stack, true);
+        let mut state = ParsingState::new(&mut stack);
 
         state.push_exprs(vec![expr_const!("2" I32)]);
         state.enter_level(GroupingSymbol::Parens);
@@ -183,5 +214,29 @@ mod state_tests {
 
         // shouldn't panic
         state.verify_end_state();
+    }
+
+    #[test]
+    fn can_remember_block_start() {
+        let mut stack = vec![Type::I32];
+        let mut state = ParsingState::new(&mut stack);
+
+        state.start_block();
+        assert_eq!(state.get_stack_count_at_block_start(), Some(1));
+
+        state.enter_level(GroupingSymbol::Parens);
+        state.stack.push(Type::F32);
+        state.enter_level(GroupingSymbol::Parens);
+        state.stack.push(Type::F64);
+
+        assert_eq!(state.get_stack_count_at_block_start(), Some(1));
+        state.start_block();
+        assert_eq!(state.get_stack_count_at_block_start(), Some(3));
+        state.exit_level(GroupingSymbol::Parens);
+        assert_eq!(state.get_stack_count_at_block_start(), Some(1));
+        state.start_block();
+        assert_eq!(state.get_stack_count_at_block_start(), Some(3));
+        state.exit_level(GroupingSymbol::Parens);
+        assert_eq!(state.get_stack_count_at_block_start(), Some(1));
     }
 }

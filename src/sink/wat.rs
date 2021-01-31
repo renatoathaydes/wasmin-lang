@@ -145,6 +145,18 @@ impl Wat {
                 }
                 w.write_all(b")")
             }
+            Expression::Loop(expr) => {
+                self.start_expr(w)?;
+                w.write_all(b"(loop\n")?;
+                self.increase_ident();
+                self.start_expr(w)?;
+                self.write_expr(w, expr)?;
+                self.decrease_ident();
+                w.write_all(b"br 0)")
+            }
+            Expression::Break(_) => {
+                w.write_all(b"br 0")
+            }
             Expression::Local(id, _) => {
                 w.write_all(b"(local.get $")?;
                 w.write_all(id.as_bytes())?;

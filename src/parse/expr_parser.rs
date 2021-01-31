@@ -1,17 +1,17 @@
 use std::str::Chars;
 
 use crate::ast::{Assignment, Expression, ReAssignment};
-use crate::ast::Expression::ExprError;
+use crate::ast::Expression::{ExprError, Loop};
 use crate::parse::Parser;
 use crate::parse::parser::{GroupingSymbol, ParserError};
 use crate::parse::stack::Stack;
 use crate::parse::state::{*};
-use crate::types::{FunType, Kind, Type, TypedElement, TypeError, types_to_string};
+use crate::types::{FunType, has_error, Kind, Type, TypedElement, TypeError, types_to_string};
 use crate::vec_utils::{push_all, remove_last_n};
 
 pub fn parse_expr(parser: &mut Parser) -> Result<Expression, ParserError> {
     let mut stack = Vec::<Type>::new();
-    let mut state = ParsingState::new(&mut stack, true);
+    let mut state = ParsingState::new(&mut stack);
     parse_expr_with_state(parser, &mut state, "")
 }
 
@@ -101,7 +101,7 @@ fn skip_word_or_push(
     if skip_word != "" {
         if let Some(word) = parser.parse_word() {
             if word == skip_word { return false; }
-            return consume_expr_part(parser, state, word)
+            return consume_expr_part(parser, state, word);
         }
     }
     return false;
@@ -109,7 +109,7 @@ fn skip_word_or_push(
 
 fn consume_expr_parts(parser: &mut Parser, state: &mut ParsingState) {
     let parts = state.end_expr();
-    let exprs = create_expr(parts, &mut state.stack, parser);
+    let exprs = create_expr(parts, state, parser);
     state.push_exprs(exprs);
 }
 
@@ -130,6 +130,13 @@ fn create_expr_part(parser: &mut Parser, state: &mut ParsingState, part: String)
                     Err(e) => Some(ExprError(e))
                 }
             }
+            "loop" => {
+                state.start_block();
+                match parse_expr_with_clean_state(parser, state, "") {
+                    Ok((e, _)) => Some(Loop(Box::new(e))),
+                    Err(e) => Some(ExprError(e))
+                }
+            }
             _ => None
         };
         if let Some(e) = expr {
@@ -144,7 +151,7 @@ pub(crate) fn parse_assignment(
     is_mut: bool,
 ) -> Result<Assignment, ParserError> {
     let mut stack = Vec::<Type>::new();
-    let mut state = ParsingState::new(&mut stack, true);
+    let mut state = ParsingState::new(&mut stack);
     parse_assignment_internal(parser, is_mut, &mut state)
 }
 
@@ -164,7 +171,7 @@ fn parse_assignment_internal(
         parser.next();
         let pos = parser.pos();
         let expr = {
-            let mut state = ParsingState::new(state.stack, false);
+            let mut state = ParsingState::new_nested(state);
             parse_expr_with_state(parser, &mut state, "")?
         };
         if ids.len() <= state.stack.len() {
@@ -259,7 +266,7 @@ fn parse_expr_with_clean_state(
     state: &mut ParsingState,
     skip_word: &'static str,
 ) -> Result<(Expression, Vec<Type>), TypeError> {
-    let mut state = ParsingState::new(state.stack, false);
+    let mut state = ParsingState::new_nested(state);
     let expr = parse_expr_with_state(parser, &mut state, skip_word)
         .map_err(|e| e.into())?;
     let typ = expr.get_type();
@@ -290,7 +297,7 @@ fn consume_optional_semi_colon(parser: &mut Parser) {
 
 fn create_expr(
     mut parts: Vec<ExprPart>,
-    stack: &mut Vec<Type>,
+    state: &mut ParsingState,
     parser: &mut Parser,
 ) -> Vec<Expression> {
     if parts.is_empty() {
@@ -300,21 +307,42 @@ fn create_expr(
     let mut result = Vec::with_capacity(parts.len() + 1);
     loop {
         match parts.remove(0) {
+            // remember the fun for later, as we need to push its arguments first
             ExprPart::Fun(fun_name) => {
                 if let Some(f) = fun {
-                    result.push(word_expr(parser, f, stack));
+                    result.push(word_expr(parser, f, &mut state.stack));
                 }
                 fun = Some(fun_name);
             }
-            ExprPart::Arg(w) => result.push(word_expr(parser, w, stack)),
+            ExprPart::Arg(w) => result.push(word_expr(parser, w, &mut state.stack)),
             ExprPart::Expr(e) => result.push(e),
         }
         if parts.is_empty() { break; }
     }
+    // if there was a pending function call, we can push it now that its args have been pushed
     if let Some(f) = fun {
-        result.push(word_expr(parser, f, stack));
+        if f == "break" {
+            result.push(create_break(parser, state));
+        } else {
+            result.push(word_expr(parser, f, &mut state.stack));
+        }
     }
     result
+}
+
+fn create_break(parser: &mut Parser, state: &mut ParsingState) -> Expression {
+    if let Some(start_len) = state.get_stack_count_at_block_start() {
+        if state.stack.len() < start_len {
+            ExprError(parser.error(
+                "cannot 'break' at this point because loop would be consuming \
+                 items from the stack indefinitely, depleting the stack."))
+        } else {
+            let types = state.stack[start_len..].iter().cloned().collect();
+            Expression::Break(types)
+        }
+    } else {
+        ExprError(parser.error("cannot use 'break' outside a 'loop' block"))
+    }
 }
 
 fn word_expr(

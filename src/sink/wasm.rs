@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Result, Write};
 
-use wasm_encoder::{BlockType, CodeSection, Export, ExportSection, Function, FunctionSection,
+use wasm_encoder::{CodeSection, Export, ExportSection, Function, FunctionSection,
                    GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
 
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
@@ -163,19 +163,20 @@ impl Wasm {
             Expression::If(cond, then, els) => {
                 self.add_instructions(f, ctx, local_map, cond)?;
                 let typ = then.get_type();
-                if typ.is_empty() || typ.first().unwrap().is_empty() {
-                    f.instruction(Instruction::If(BlockType::Empty));
-                } else if typ.len() == 1 {
-                    f.instruction(Instruction::If(BlockType::Result(
-                        to_val_type(typ.first().unwrap()))));
-                } else {
-                    let multi_val_block_type = to_multi_val_block_type(&typ, ctx);
-                    f.instruction(Instruction::If(multi_val_block_type));
-                }
+                f.instruction(Instruction::If(block_type(typ, ctx)));
                 self.add_instructions(f, ctx, local_map, then)?;
                 f.instruction(Instruction::Else);
                 self.add_instructions(f, ctx, local_map, els)?;
                 f.instruction(Instruction::End);
+            }
+            Expression::Loop(expr) => {
+                let typ = expr.get_type();
+                f.instruction(Instruction::Block(block_type(typ, ctx)));
+                self.add_instructions(f, ctx, local_map, expr)?;
+                f.instruction(Instruction::End);
+            }
+            Expression::Break(_) => {
+                f.instruction(Instruction::Br(0));
             }
             Expression::Group(exprs) => {
                 for expr in exprs {

@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use Expression::{*};
 
 use crate::types::{FunType, Type, TypeError};
@@ -51,6 +49,8 @@ pub enum Expression {
     Mut(Assignment),
     Set(ReAssignment),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
+    Loop(Box<Expression>),
+    Break(Vec<Type>),
     Group(Vec<Expression>),
     FunCall {
         name: String,
@@ -84,10 +84,6 @@ pub enum TopLevelElement {
 }
 
 impl Expression {
-    pub fn flatten_types_of(exprs: &Vec<Expression>) -> Vec<Type> {
-        exprs.iter().flat_map(|e| e.get_type().into_iter()).collect()
-    }
-
     pub fn get_type(&self) -> Vec<Type> {
         let mut types = Vec::new();
         self.get_type_internal(&mut types);
@@ -119,6 +115,12 @@ impl Expression {
             If(_, then, ..) => {
                 then.get_type_internal(types)
             }
+            Loop(e) => {
+                push_all(&e.get_type(), types)
+            }
+            Break(t) => {
+                push_all(t, types)
+            }
             ExprError(e) => {
                 push_all(&e.get_type(), types)
             }
@@ -128,25 +130,9 @@ impl Expression {
     pub fn is_empty(&self) -> bool {
         match self {
             Expression::Empty => true,
-            Const(..) | Local(..) | Global(..) | Let(..) | Mut(..) | Set(..)
-            | FunCall { .. } | If(..) | ExprError(..) => false,
             Group(es) => es.is_empty() || es.iter().all(|e| e.is_empty()),
-        }
-    }
-}
-
-impl TryInto<TopLevelElement> for Expression {
-    type Error = String;
-
-    fn try_into(self) -> Result<TopLevelElement, Self::Error> {
-        match self {
-            Empty => Err("empty expression cannot appear at top-level".to_owned()),
-            Let(l) => Ok(TopLevelElement::Let(l, Visibility::Private, None)),
-            Mut(m) => Ok(TopLevelElement::Mut(m, Visibility::Private, None)),
-            Set(..) | Const(..) | Local(..) | Global(..) | Group(..) |
-            FunCall { .. } | If(..) =>
-                Err("free expression appear at top-level".to_owned()),
-            ExprError(e) => Err(e.reason)
+            Loop(e) => e.is_empty(),
+            _ => false
         }
     }
 }
@@ -303,6 +289,24 @@ macro_rules! expr_if {
         use crate::ast::Expression;
         Expression::If(Box::new($cond), Box::new($then), Box::new($els))
     }};
+}
+
+#[macro_export]
+macro_rules! expr_loop {
+    ($e:expr) => {{
+        use crate::ast::Expression;
+        Expression::Loop(Box::new($e))
+    }};
+}
+
+#[macro_export]
+macro_rules! expr_break {
+    ($($t:expr)*) => {{
+        use crate::ast::Expression;
+        let mut _types = Vec::new();
+        $(_types.push($t);)*
+        Expression::Break(_types)
+    }}
 }
 
 #[macro_export]

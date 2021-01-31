@@ -91,3 +91,13 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
         panic!("Cannot find WASM fun '{}' with type: {:?}", name, fun_type)
     }
 }
+
+pub(crate) fn block_type(typ: Vec<Type>, ctx: &mut Context) -> BlockType {
+    if typ.is_empty() || typ.first().unwrap().is_empty() {
+        BlockType::Empty
+    } else if typ.len() == 1 {
+        BlockType::Result(to_val_type(typ.first().unwrap()))
+    } else {
+        to_multi_val_block_type(&typ, ctx)
+    }
+}

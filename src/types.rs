@@ -134,6 +134,10 @@ pub(crate) fn types_to_string(types: &Vec<Type>) -> String {
     type_refs_to_string(&v)
 }
 
+pub(crate) fn has_error(types: &Vec<Type>) -> bool {
+    types.iter().any(|t| t.is_error())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
