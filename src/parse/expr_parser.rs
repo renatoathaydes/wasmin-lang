@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use crate::ast::{Assignment, Expression, ReAssignment};
+use crate::ast::{Assignment, Expression, ReAssignment, Break};
 use crate::ast::Expression::{ExprError, Loop};
 use crate::parse::Parser;
 use crate::parse::parser::{GroupingSymbol, ParserError};
@@ -257,11 +257,41 @@ fn parse_if(parser: &mut Parser,
 
 fn parse_loop(parser: &mut Parser, state: &mut ParsingState) -> Expression {
     state.start_block();
-    let expr = match parse_expr_with_clean_state(parser, state, "") {
-        Ok((e, _)) => e,
-        Err(e) => return ExprError(e)
-    };
-    Loop(Box::new(expr))
+    match parse_expr_with_clean_state(parser, state, "") {
+        Ok((expr, typ)) => {
+            let error = if typ.is_empty() {
+                let mut breaks = vec![];
+                expr.get_nested_breaks(usize::MAX, &mut breaks);
+                if breaks.is_empty() { None } else {
+                    let first_break = breaks.remove(0);
+                    let mut err = None;
+                    for br in breaks {
+                        if br.types != first_break.types {
+                            err = Some(TypeError {
+                                pos: parser.pos(),
+                                reason: format!("break has type(s) '{}', but the first break in \
+                                    this loop breaks with type(s) '{}'. All breaks should have the \
+                                    same type(s)", types_to_string(&br.types),
+                                                types_to_string(&first_break.types)),
+                            });
+                            break;
+                        }
+                    }
+                    err
+                }
+            } else {
+                Some(TypeError {
+                    pos: parser.pos(),
+                    reason: format!("loop leaving values of type(s) {} on \
+                        the stack. Loops cannot leave values on the stack \
+                        without returning them with break instructions",
+                                    types_to_string(&typ)),
+                })
+            };
+            Loop { expr: Box::new(expr), error }
+        }
+        Err(e) => ExprError(e)
+    }
 }
 
 fn parse_expr_with_clean_state(
@@ -313,7 +343,7 @@ fn create_expr(
             // remember the fun for later, as we need to push its arguments first
             ExprPart::Fun(fun_name) => {
                 if let Some(f) = fun {
-                    result.push(word_expr(parser, f, &mut state.stack));
+                    push_fun(state, parser, &mut result, f)
                 }
                 fun = Some(fun_name);
             }
@@ -324,13 +354,22 @@ fn create_expr(
     }
     // if there was a pending function call, we can push it now that its args have been pushed
     if let Some(f) = fun {
-        if f == "break" {
-            result.push(create_break(parser, state));
-        } else {
-            result.push(word_expr(parser, f, &mut state.stack));
-        }
+        push_fun(state, parser, &mut result, f)
     }
     result
+}
+
+fn push_fun(
+    state: &mut ParsingState,
+    parser: &mut Parser,
+    exprs: &mut Vec<Expression>,
+    name: String,
+) {
+    if name == "break" {
+        exprs.push(create_break(parser, state));
+    } else {
+        exprs.push(word_expr(parser, name, &mut state.stack));
+    }
 }
 
 fn create_break(parser: &mut Parser, state: &mut ParsingState) -> Expression {
@@ -341,7 +380,7 @@ fn create_break(parser: &mut Parser, state: &mut ParsingState) -> Expression {
                  items from the stack indefinitely, depleting the stack."))
         } else {
             let types = state.stack.drain(start_len..).collect();
-            Expression::Break(types)
+            Expression::Br(Break { types })
         }
     } else {
         ExprError(parser.error("cannot use 'break' outside a 'loop' block"))

@@ -169,13 +169,13 @@ impl Wasm {
                 self.add_instructions(f, ctx, local_map, els)?;
                 f.instruction(Instruction::End);
             }
-            Expression::Loop(expr) => {
+            Expression::Loop { expr, .. } => {
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(typ, ctx)));
                 self.add_instructions(f, ctx, local_map, expr)?;
                 f.instruction(Instruction::End);
             }
-            Expression::Break(_) => {
+            Expression::Br(_) => {
                 f.instruction(Instruction::Br(0));
             }
             Expression::Group(exprs) => {

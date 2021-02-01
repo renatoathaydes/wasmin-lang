@@ -880,3 +880,68 @@ fn test_loop_with_multiple_breaks() {
             expr_empty!())
         )));
 }
+
+#[test]
+fn test_loop_with_multiple_breaks_multi_value() {
+    let mut chars = "
+        loop(
+            if 1; then break(2, 3);;
+            if 2; then break(4, 5); else break(6,7)
+        )".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+    assert_eq!(parser.parse_expr(), expr_loop!(
+        expr_group!(expr_if!(
+            expr_const!("1" I32);
+            expr_group!(
+                expr_const!("2" I32)
+                expr_const!("3" I32)
+                expr_break!(I32 I32));
+            expr_empty!())
+        expr_if!(
+            expr_const!("2" I32);
+            expr_group!(
+                expr_const!("4" I32)
+                expr_const!("5" I32)
+                expr_break!(I32 I32));
+            expr_group!(
+                expr_const!("6" I32)
+                expr_const!("7" I32)
+                expr_break!(I32 I32)))
+        )));
+}
+
+#[test]
+fn test_loop_error_breaks_different_types() {
+    let mut chars = "loop (if 1; break 2;; if 2; break (3, 4))".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+
+    assert_eq!(parser.parse_expr(), expr_loop!(expr_group!(
+        expr_if!(expr_const!(1 I32);
+            expr_group!(expr_const!("2" I32) expr_break!(I32));
+            expr_empty!())
+        expr_if!(expr_const!(2 I32);
+            expr_group!(expr_const!("3" I32) expr_const!("4" I32) expr_break!(I32 I32));
+            expr_empty!())
+    ), TypeError{
+            reason: "break has type(s) 'i32 i32', but the first break in this loop breaks with \
+                type(s) 'i32'. All breaks should have the same type(s)".to_owned(),
+            pos: (0, 41)
+        }));
+}
+
+#[test]
+fn test_loop_error_leaves_values_on_stack() {
+    let mut chars = "loop(add 2 2)".chars();
+    let mut parser = new_parser_without_sink(&mut chars);
+    assert_eq!(parser.parse_expr(), expr_loop!(
+        expr_group!(
+            expr_const!("2" I32)
+            expr_const!("2" I32)
+            expr_fun_call!(wasm "add" [I32 I32](I32))),
+            TypeError {
+                pos: (0, 13),
+                reason: "loop leaving values of type(s) i32 on the stack. Loops cannot leave \
+                    values on the stack without returning them with break instructions".to_owned()
+            }
+    ));
+}

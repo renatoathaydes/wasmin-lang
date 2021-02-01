@@ -145,7 +145,7 @@ impl Wat {
                 }
                 w.write_all(b")")
             }
-            Expression::Loop(expr) => {
+            Expression::Loop { expr, .. } => {
                 self.start_expr(w)?;
                 w.write_all(b"(loop\n")?;
                 self.increase_ident();
@@ -154,7 +154,7 @@ impl Wat {
                 self.decrease_ident();
                 w.write_all(b"br 0)")
             }
-            Expression::Break(_) => {
+            Expression::Br(_) => {
                 w.write_all(b"br 0")
             }
             Expression::Local(id, _) => {

@@ -1,7 +1,7 @@
 use Expression::{*};
 
 use crate::types::{FunType, Type, TypeError};
-use crate::vec_utils::{push_all, remove_last_n, get_last};
+use crate::vec_utils::{get_last, push_all, remove_last, remove_last_n};
 
 /// Assignment defines one or more Wasmin assignments.
 ///
@@ -38,6 +38,10 @@ pub struct ExtDef {
     pub typ: Type,
 }
 
+/// Break instruction that exits a loop with a certain set of types on the stack.
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+pub struct Break { pub types: Vec<Type> }
+
 /// Expression is the basic unit of Wasmin code.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression {
@@ -49,8 +53,8 @@ pub enum Expression {
     Mut(Assignment),
     Set(ReAssignment),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
-    Loop(Box<Expression>),
-    Break(Vec<Type>),
+    Loop { expr: Box<Expression>, error: Option<TypeError> },
+    Br(Break),
     Group(Vec<Expression>),
     FunCall {
         name: String,
@@ -90,43 +94,43 @@ impl Expression {
         types
     }
 
-    fn get_type_internal(&self, types: &mut Vec<Type>) {
+    fn get_type_internal(&self, result: &mut Vec<Type>) {
         match self {
-            Expression::Empty | Let(..) | Mut(..) | Set(..) | Break(..) => {}
+            Expression::Empty | Let(..) | Mut(..) | Set(..) | Br(..) => {}
             Const(.., typ) | Local(.., typ) | Global(.., typ) => {
-                types.push(typ.clone())
+                result.push(typ.clone())
             }
             Group(es) => {
                 let ignore_stack = if !es.is_empty() {
-                    if let Break(..) = get_last(es) { true } else { false }
+                    if let Br(..) = get_last(es) { true } else { false }
                 } else { false };
                 if !ignore_stack {
                     for expr in es {
-                        expr.get_type_internal(types);
+                        expr.get_type_internal(result);
                     }
                 }
             }
             FunCall { typ, .. } => match typ {
                 Ok(t) => {
-                    if types.len() >= t.ins.len() {
-                        remove_last_n(types, t.ins.len());
+                    if result.len() >= t.ins.len() {
+                        remove_last_n(result, t.ins.len());
                     }
-                    push_all(&t.outs, types);
+                    push_all(&t.outs, result);
                 }
                 Err(e) => {
-                    push_all(&e.get_type(), types)
+                    push_all(&e.get_type(), result)
                 }
             },
             If(_, then, ..) => {
-                then.get_type_internal(types)
+                then.get_type_internal(result)
             }
-            Loop(e) => {
-                if let Some(Break(ref typ)) = e.get_nested_break() {
-                    push_all(typ, types)
+            Loop { expr, .. } => {
+                if let Some(Break { types }) = expr.get_nested_break() {
+                    push_all(types, result)
                 }
             }
             ExprError(e) => {
-                push_all(&e.get_type(), types)
+                push_all(&e.get_type(), result)
             }
         }
     }
@@ -135,40 +139,41 @@ impl Expression {
         match self {
             Expression::Empty => true,
             Group(es) => es.is_empty() || es.iter().all(|e| e.is_empty()),
-            Loop(e) => e.is_empty(),
+            Loop { expr, .. } => expr.is_empty(),
             _ => false
         }
     }
 
-    fn get_nested_break(&self) -> Option<&Expression> {
+    fn get_nested_break(&self) -> Option<&Break> {
+        let mut result = vec![];
+        self.get_nested_breaks(1, &mut result);
+        if result.is_empty() { None } else { Some(remove_last(&mut result)) }
+    }
+
+    pub fn get_nested_breaks<'s, 't>(&'s self, limit: usize, result: &'t mut Vec<&'s Break>)
+        where 's: 't {
         match self {
-            Break(_) => {
-                return Some(self);
+            Br(br) => {
+                result.push(br);
             }
             Let((_, e, ..)) | Mut((_, e, ..)) |
             Set(ReAssignment { assignment: (_, e, ..), .. }) => {
-                if let Some(expr) = e.get_nested_break() {
-                    return Some(expr);
-                }
+                e.get_nested_breaks(limit, result)
             }
             If(_, then, els) => {
-                if let Some(expr) = then.get_nested_break() {
-                    return Some(expr);
-                }
-                if let Some(expr) = els.get_nested_break() {
-                    return Some(expr);
+                then.get_nested_breaks(limit, result);
+                if result.len() < limit {
+                    els.get_nested_breaks(limit, result);
                 }
             }
             Group(exprs) => {
                 for e in exprs {
-                    if let Some(expr) = e.get_nested_break() {
-                        return Some(expr);
-                    }
+                    e.get_nested_breaks(limit, result);
+                    if result.len() >= limit { break; }
                 }
             }
             _ => {}
         };
-        None
     }
 }
 
@@ -330,17 +335,21 @@ macro_rules! expr_if {
 macro_rules! expr_loop {
     ($e:expr) => {{
         use crate::ast::Expression;
-        Expression::Loop(Box::new($e))
+        Expression::Loop { expr: Box::new($e), error: None }
+    }};
+    ($e:expr, $err:expr) => {{
+        use crate::ast::Expression;
+        Expression::Loop { expr: Box::new($e), error: Some($err) }
     }};
 }
 
 #[macro_export]
 macro_rules! expr_break {
     ($($t:expr)*) => {{
-        use crate::ast::Expression;
+        use crate::ast::{Expression, Break};
         let mut _types = Vec::new();
         $(_types.push($t);)*
-        Expression::Break(_types)
+        Expression::Br(Break { types: _types })
     }}
 }
 
