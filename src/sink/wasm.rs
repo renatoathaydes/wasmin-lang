@@ -2,10 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Result, Write};
 
-use wasm_encoder::{CodeSection, Export, ExportSection, Function, FunctionSection,
-                   GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
+use wasm_encoder::{CodeSection, EntityType, Export, ExportSection, Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection, ValType};
 
-use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
+use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::{expr_to_vec, WasminSink};
 use crate::sink::wasm_utils::{*};
 use crate::types::{FunType, Type, types_to_string};
@@ -16,6 +15,7 @@ pub struct Wasm {
 }
 
 pub struct Context {
+    imports: ImportSection,
     exports: ExportSection,
     types: TypeSection,
     globals: GlobalSection,
@@ -115,6 +115,33 @@ impl Wasm {
         }
     }
 
+    fn receive_ext(&mut self,
+                   ctx: &mut Context,
+                   name: &str,
+                   defs: &Vec<ExtDef>,
+    ) -> Result<()> {
+        for def in defs {
+            let typ = &def.typ;
+            match typ {
+                // TODO implement imports
+                Type::I64 => {}
+                Type::I32 => {}
+                Type::F64 => {}
+                Type::F32 => {}
+                Type::Empty => {}
+                Type::Fn(types) => {
+                    for typ in types {
+                        let type_idx = ctx.index_fun_type(&typ);
+                        ctx.imports.import(name, Some(&def.id), EntityType::Function(type_idx));
+                    }
+                }
+                Type::WasmFn(_) => {}
+                Type::Error(_) => {}
+            };
+        }
+        Ok(())
+    }
+
     fn add_instructions(
         &self,
         f: &mut Function,
@@ -186,6 +213,7 @@ impl Wasm {
                 if *is_wasm_fun {
                     f.instruction(map_to_wasm_fun(name.as_ref(), typ)?);
                 } else {
+                    // FIXME does not find imported function
                     let idx = ctx.fun_idx_by_name.get(name)
                         .expect("called function exists").clone();
                     f.instruction(Instruction::Call(idx));
@@ -227,6 +255,9 @@ impl Wasm {
                     self.collect_locals(expr, res)
                 }
             }
+            Expression::Loop { expr, .. } => {
+                self.collect_locals(expr, res)
+            }
             _ => {}
         };
     }
@@ -252,6 +283,7 @@ impl WasminSink<Context> for Wasm {
     fn start(&mut self, mod_name: String, _: &mut Box<dyn Write>) -> Result<Context> {
         self.mod_name = mod_name;
         Ok(Context {
+            imports: ImportSection::new(),
             exports: ExportSection::new(),
             globals: GlobalSection::new(),
             types: TypeSection::new(),
@@ -275,9 +307,8 @@ impl WasminSink<Context> for Wasm {
             TopLevelElement::Mut((names, values, ..), vis, ..) => {
                 self.receive_assignment(ctx, names, *values, vis, true)?;
             }
-            TopLevelElement::Ext(_, _, _, _) => {
-                // FIXME
-                unimplemented!();
+            TopLevelElement::Ext(name, defs, ..) => {
+                self.receive_ext(ctx, &name, &defs)?;
             }
             TopLevelElement::Fun((name, args, body, typ), vis, _) => {
                 self.receive_fun(name, args, body, typ, vis, ctx)?;
