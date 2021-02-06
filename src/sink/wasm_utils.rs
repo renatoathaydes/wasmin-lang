@@ -4,7 +4,7 @@ use wasm_encoder::{BlockType, Instruction, ValType};
 
 use crate::sink::sanitize_number;
 use crate::sink::wasm::Context;
-use crate::types::{FunType, Type};
+use crate::types::{FunType, Type, types_to_string};
 
 pub fn to_val_types(types: &Vec<Type>) -> Vec<ValType> {
     types.iter().map(|t| to_val_type(t)).collect()
@@ -39,8 +39,14 @@ pub fn to_const(typ: ValType, text: &str) -> Instruction {
 
 pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instruction<'a>> {
     let types = &fun_type.ins;
-    if types.len() == 2 && types.get(0).unwrap() == types.get(1).unwrap() {
-        let instr = match types.get(0).unwrap() {
+    let instr = if types.len() == 1 {
+        match types.get(0).unwrap() {
+            &Type::I32 if name == "eqz" => Instruction::I32Eqz,
+            &Type::I64 if name == "eqz" => Instruction::I64Eqz,
+            _ => cannot_find_fun(name, fun_type)
+        }
+    } else if types.len() == 2 && types.get(0).unwrap() == types.get(1).unwrap() {
+        match types.get(0).unwrap() {
             &Type::I64 if name == "add" => Instruction::I64Add,
             &Type::I32 if name == "add" => Instruction::I32Add,
             &Type::F64 if name == "add" => Instruction::F64Add,
@@ -55,6 +61,14 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             &Type::I32 if name == "mul" => Instruction::I32Mul,
             &Type::F64 if name == "mul" => Instruction::F64Mul,
             &Type::F32 if name == "mul" => Instruction::F32Mul,
+
+            &Type::I32 if name == "rem_s" => Instruction::I32RemS,
+            &Type::I64 if name == "rem_s" => Instruction::I64RemS,
+            &Type::I32 if name == "rem_u" => Instruction::I32RemU,
+            &Type::I64 if name == "rem_u" => Instruction::I64RemU,
+
+            &Type::I64 if name == "and" => Instruction::I64And,
+            &Type::I32 if name == "and" => Instruction::I32And,
 
             &Type::I64 if name == "gt_s" => Instruction::I64GtS,
             &Type::I32 if name == "gt_s" => Instruction::I32GtS,
@@ -84,12 +98,17 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             &Type::F64 if name == "le" => Instruction::F64Le,
             &Type::F32 if name == "le" => Instruction::F32Le,
 
-            _ => panic!("Cannot find WASM fun '{}' with type: {:?}", name, fun_type)
-        };
-        Ok(instr)
+            _ => cannot_find_fun(name, fun_type)
+        }
     } else {
-        panic!("Cannot find WASM fun '{}' with type: {:?}", name, fun_type)
-    }
+        cannot_find_fun(name, fun_type)
+    };
+    Ok(instr)
+}
+
+fn cannot_find_fun(name: &str, fun_type: &FunType) -> ! {
+    panic!("Cannot find WASM fun '{}' taking arguments {:?}",
+           name, types_to_string(&fun_type.ins));
 }
 
 pub(crate) fn block_type(typ: Vec<Type>, ctx: &mut Context) -> BlockType {
