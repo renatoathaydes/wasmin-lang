@@ -68,21 +68,20 @@ impl Wat {
 
     fn write_local_assignment(
         &mut self,
-        mut w: &mut Box<dyn Write>,
+        w: &mut Box<dyn Write>,
         assignment: &Assignment,
         is_global: &Vec<bool>,
     ) -> Result<()> {
         let (names, value, type_conversion) = assignment;
         self.write_expr(w, value.as_ref())?;
-        self.start_expr(w)?;
         for (name, global) in names.iter().rev().zip(is_global.iter().rev()) {
+            self.start_expr(w)?;
             if *global {
-                w.write_all(b"(global.set $")?;
+                w.write_all(b"global.set $")?;
             } else {
-                w.write_all(b"(local.set $")?;
+                w.write_all(b"local.set $")?;
             };
             w.write_all(name.as_bytes())?;
-            w.write_all(b")")?;
         }
         Ok(())
     }
@@ -132,16 +131,13 @@ impl Wat {
         match expr {
             Expression::Empty => Ok(()),
             Expression::Const(id, typ) => {
-                w.write_all(b"(")?;
                 w.write_all(typ.to_string().as_bytes())?;
                 w.write_all(b".const ")?;
-                w.write_all(sanitize_number(id.as_str()).as_bytes())?;
-                w.write_all(b")")
+                w.write_all(sanitize_number(id.as_str()).as_bytes())
             }
             Expression::Global(id, _) => {
-                w.write_all(b"(global.get $")?;
-                w.write_all(id.as_bytes())?;
-                w.write_all(b")")
+                w.write_all(b"global.get $")?;
+                w.write_all(id.as_bytes())
             }
             Expression::If(cond, then, els) => {
                 self.write_expr(w, cond)?;
@@ -179,17 +175,18 @@ impl Wat {
                 self.increase_ident();
                 self.start_expr(w)?;
                 self.write_expr(w, expr)?;
+                self.start_expr(w)?;
+                w.write_all(b"br 0")?;
                 self.decrease_ident();
                 self.start_expr(w)?;
-                w.write_all(b"br 0)")
+                w.write_all(b")")
             }
             Expression::Br(_) => {
                 w.write_all(b"br 0")
             }
             Expression::Local(id, _) => {
-                w.write_all(b"(local.get $")?;
-                w.write_all(id.as_bytes())?;
-                w.write_all(b")")
+                w.write_all(b"local.get $")?;
+                w.write_all(id.as_bytes())
             }
             Expression::Let(assign) | Expression::Mut(assign) => {
                 let globals = repeat(false).take(assign.0.len()).collect();
@@ -215,12 +212,12 @@ impl Wat {
                     // this is safe because we checked for errors above and
                     // WASM functions always have at least one argument.
                     let t = typ.as_ref().unwrap().ins.get(0).unwrap();
-                    w.write_all(format!("({}.{})", t, name).as_bytes())
+                    w.write_all(format!("{}.{}", t, name).as_bytes())
                 } else {
-                    w.write_all(b"(call $")?;
+                    w.write_all(b"call $")?;
                     w.write_all(name.as_bytes())?;
                     if fun_index != &0 { w.write_all(format!("${}", fun_index).as_bytes())?; }
-                    w.write_all(b")")
+                    Ok(())
                 }
             }
             Expression::ExprError(e) =>
