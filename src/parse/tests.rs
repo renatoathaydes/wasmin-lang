@@ -534,12 +534,15 @@ fn test_let_within_let() {
 }
 
 #[test]
-fn test_let_leaving_value_on_stack() {
+fn test_let_error_leaving_value_on_stack() {
     let mut chars = "x = (let z = 2, 3) ".chars();
     let mut parser = new_parser_without_sink(&mut chars);
 
     assert_eq!(parser.parse_assignment(false), Ok(assign!(
-        "x" = expr_let!("z" = expr_group!(expr_const!("2" I32) expr_const!("3" I32))))));
+        "x" = Expression::ExprError(TypeError {
+            reason: "multi-value assignment mismatch: 1 identifier but expression results in types 'i32 i32'".to_string(),
+            pos: (0, 18)
+        }))));
     assert_symbols_contains!(parser, "x" => I32);
 }
 

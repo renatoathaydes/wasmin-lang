@@ -1,7 +1,8 @@
 use std::io::{ErrorKind, Result, Write};
+use std::iter::repeat;
 
-use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
-use crate::sink::{for_each_assignment, sanitize_number, WasminSink};
+use crate::ast::{Assignment, Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
+use crate::sink::{expr_to_vec, sanitize_number, WasminSink};
 use crate::types::{FunType, Type};
 
 const ONE_IDENT: &str = "  ";
@@ -29,51 +30,61 @@ impl Wat {
     fn write_global_assignment(
         &mut self,
         mut w: &mut Box<dyn Write>,
-        id: &String,
-        expr: &Expression,
+        assignment: &Assignment,
         vis: &Visibility,
         is_mut: bool,
     ) -> Result<()> {
-        let typ = if is_mut {
-            format!("(mut {})", expr.get_type().get(0).unwrap().to_string())
+        let (names, value, type_conversion) = assignment;
+        let values = expr_to_vec(*value.clone());
+
+        // if all values have value types, write globals directly
+        if values.iter().all(|v| v.get_value_type().is_some()) {
+            for (name, expr) in names.iter().zip(values.iter()) {
+                let typ = expr.get_value_type().unwrap();
+                let type_str = if is_mut {
+                    format!("(mut {})", typ.to_string())
+                } else {
+                    typ.to_string()
+                };
+                self.start_expr(w)?;
+                w.write_all(b"(global $")?;
+                w.write_all(name.as_bytes())?;
+                w.write_all(b" ")?;
+                w.write_all(type_str.as_bytes())?;
+                w.write_all(b" ")?;
+                if vis == &Visibility::Public {
+                    w.write_all(b"(export \"")?;
+                    w.write_all(name.as_bytes())?;
+                    w.write_all(b"\") ")?;
+                }
+                self.write_expr(&mut w, expr)?;
+                w.write_all(b")")?;
+            }
+            Ok(())
         } else {
-            expr.get_type().get(0).unwrap().to_string()
-        };
-        w.write_all(b"(global $")?;
-        w.write_all(id.as_bytes())?;
-        w.write_all(b" ")?;
-        w.write_all(typ.as_bytes())?;
-        w.write_all(b" ")?;
-        if vis == &Visibility::Public {
-            w.write_all(b"(export \"")?;
-            w.write_all(id.as_bytes())?;
-            w.write_all(b"\") ")?;
+            self.error("Non-constant global variables are not supported yet.", (0, 0))
         }
-        self.increase_ident();
-        self.start_expr(w)?;
-        self.write_expr(&mut w, &expr)?;
-        self.decrease_ident();
-        w.write_all(b")")
     }
 
     fn write_local_assignment(
         &mut self,
         mut w: &mut Box<dyn Write>,
-        id: &String,
-        expr: &Expression,
-        is_global: bool,
+        assignment: &Assignment,
+        is_global: &Vec<bool>,
     ) -> Result<()> {
-        if is_global {
-            w.write_all(b"(global.set $")?;
-        } else {
-            w.write_all(b"(local.set $")?;
-        };
-        w.write_all(id.as_bytes())?;
-        self.increase_ident();
+        let (names, value, type_conversion) = assignment;
+        self.write_expr(w, value.as_ref())?;
         self.start_expr(w)?;
-        self.write_expr(&mut w, &expr)?;
-        self.decrease_ident();
-        w.write_all(b")")
+        for (name, global) in names.iter().rev().zip(is_global.iter().rev()) {
+            if *global {
+                w.write_all(b"(global.set $")?;
+            } else {
+                w.write_all(b"(local.set $")?;
+            };
+            w.write_all(name.as_bytes())?;
+            w.write_all(b")")?;
+        }
+        Ok(())
     }
 
     fn write_variables(
@@ -82,20 +93,31 @@ impl Wat {
         expr: &Expression,
     ) -> Result<()> {
         match expr {
-            Expression::Let(assign) | Expression::Mut(assign) => {
-                for_each_assignment(&mut w, assign, |mut w2, id, expr, _| {
-                    self.start_expr(&mut w2)?;
-                    w2.write_all(b"(local $")?;
-                    w2.write_all(id.as_bytes())?;
-                    w2.write_all(b" ")?;
-                    w2.write_all(expr.get_type()[0].to_string().as_bytes())?;
-                    w2.write_all(b")")
-                })?;
+            Expression::Let(assignment) | Expression::Mut(assignment) => {
+                let (names, value, type_conversion) = assignment;
+                for (name, (typ, new_type)) in names.iter()
+                    .zip(value.get_type().iter().zip(type_conversion.iter())) {
+                    let t = if let Some(t) = new_type { t } else { typ };
+                    self.start_expr(&mut w)?;
+                    w.write_all(b"(local $")?;
+                    w.write_all(name.as_bytes())?;
+                    w.write_all(b" ")?;
+                    w.write_all(t.to_string().as_bytes())?;
+                    w.write_all(b")")?;
+                }
             }
             Expression::Group(exprs) => {
                 for expr in exprs {
                     self.write_variables(&mut w, expr)?;
                 }
+            }
+            Expression::If(cond, then, els) => {
+                self.write_variables(&mut w, cond)?;
+                self.write_variables(&mut w, then)?;
+                self.write_variables(&mut w, els)?;
+            }
+            Expression::Loop { expr, .. } => {
+                self.write_variables(&mut w, expr)?;
             }
             _ => {}
         };
@@ -124,17 +146,23 @@ impl Wat {
             Expression::If(cond, then, els) => {
                 self.write_expr(w, cond)?;
                 self.start_expr(w)?;
-                w.write_all(b"(if (result ")?;
-                w.write_all(then.get_type().iter().map(|t| t.to_string())
-                    .collect::<Vec<_>>().join(" ").as_bytes())?;
-                w.write_all(b") (then")?;
+                w.write_all(b"(if ")?;
+                if !then.get_type().is_empty() {
+                    w.write_all(b"(result ")?;
+                    w.write_all(then.get_type().iter().map(|t| t.to_string())
+                        .collect::<Vec<_>>().join(" ").as_bytes())?;
+                    w.write_all(b") ")?;
+                }
+                w.write_all(b"(then")?;
                 self.increase_ident();
                 self.start_expr(w)?;
                 self.write_expr(w, then)?;
                 self.decrease_ident();
                 self.start_expr(w)?;
                 w.write_all(b")")?;
-                if !els.is_empty() {
+                if els.is_empty() {
+                    w.write_all(b" (else)")?;
+                } else {
                     w.write_all(b" (else")?;
                     self.increase_ident();
                     self.start_expr(w)?;
@@ -147,11 +175,12 @@ impl Wat {
             }
             Expression::Loop { expr, .. } => {
                 self.start_expr(w)?;
-                w.write_all(b"(loop\n")?;
+                w.write_all(b"(loop")?;
                 self.increase_ident();
                 self.start_expr(w)?;
                 self.write_expr(w, expr)?;
                 self.decrease_ident();
+                self.start_expr(w)?;
                 w.write_all(b"br 0)")
             }
             Expression::Br(_) => {
@@ -163,20 +192,11 @@ impl Wat {
                 w.write_all(b")")
             }
             Expression::Let(assign) | Expression::Mut(assign) => {
-                let use_new_lines = !assign.0.is_empty();
-                for_each_assignment(&mut w, assign, |mut w2, id, expr, is_first| {
-                    if !is_first && use_new_lines { self.start_expr(w2)?; }
-                    self.write_local_assignment(&mut w2, &id, &expr, false)
-                })
+                let globals = repeat(false).take(assign.0.len()).collect();
+                self.write_local_assignment(&mut w, &assign, &globals)
             }
             Expression::Set(ReAssignment { assignment, globals }) => {
-                let use_new_lines = !assignment.0.is_empty();
-                let mut is_global_iter = globals.iter();
-                for_each_assignment(&mut w, assignment, |mut w2, id, expr, is_first| {
-                    if !is_first && use_new_lines { self.start_expr(w2)?; }
-                    let is_global = is_global_iter.next().unwrap_or(&false);
-                    self.write_local_assignment(&mut w2, &id, &expr, *is_global)
-                })
+                self.write_local_assignment(&mut w, &assignment, globals)
             }
             Expression::Group(exprs) => {
                 let mut is_first = true;
@@ -339,16 +359,10 @@ impl WasminSink<()> for Wat {
         Wat::start_texpr(w)?;
         match element {
             TopLevelElement::Let(assign, vis, _) => {
-                for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
-                    self.write_global_assignment(&mut w2, &id, &expr, &vis, false)?;
-                    w2.write_all(b"\n")
-                })
+                self.write_global_assignment(&mut w, &assign, &vis, false)
             }
             TopLevelElement::Mut(assign, vis, _) => {
-                for_each_assignment(&mut w, &assign, |mut w2, id, expr, _| {
-                    self.write_global_assignment(&mut w2, &id, &expr, &vis, true)?;
-                    w2.write_all(b"\n")
-                })
+                self.write_global_assignment(&mut w, &assign, &vis, true)
             }
             TopLevelElement::Fun((id, args, body, typ), vis, _) => {
                 self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)

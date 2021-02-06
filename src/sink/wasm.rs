@@ -6,8 +6,8 @@ use wasm_encoder::{CodeSection, Export, ExportSection, Function, FunctionSection
                    GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType};
 
 use crate::ast::{Expression, ReAssignment, TopLevelElement, Visibility};
+use crate::sink::{expr_to_vec, WasminSink};
 use crate::sink::wasm_utils::{*};
-use crate::sink::{WasminSink, expr_to_vec};
 use crate::types::{FunType, Type, types_to_string};
 
 #[derive(Default)]
@@ -89,17 +89,18 @@ impl Wasm {
     fn receive_assignment(&mut self,
                           ctx: &mut Context,
                           names: Vec<String>,
-                          values: Expression,
+                          value: Expression,
                           vis: Visibility,
                           is_mut: bool,
     ) -> Result<()> {
-        let values = expr_to_vec(values, names.len());
-        for (name, value) in names.iter().zip(values.iter()) {
-            let global_idx = ctx.global_idx_by_name.len() as u32;
-            ctx.global_idx_by_name.insert(name.to_string(), global_idx);
-            let types = value.get_type();
-            if types.len() == 1 {
-                let (instr, typ) = self.expr_to_const(value)?;
+        let values = expr_to_vec(value);
+
+        // if all values have value types, write globals directly
+        if values.iter().all(|v| v.get_value_type().is_some()) {
+            for (name, expr) in names.iter().zip(values.iter()) {
+                let (instr, typ) = self.expr_to_value(expr, ctx)?;
+                let global_idx = ctx.global_idx_by_name.len() as u32;
+                ctx.global_idx_by_name.insert(name.to_string(), global_idx);
                 if vis == Visibility::Public {
                     ctx.exports.export(name.as_str(), Export::Global(global_idx));
                 }
@@ -107,11 +108,11 @@ impl Wasm {
                     val_type: typ,
                     mutable: is_mut,
                 }, instr);
-            } else {
-                panic!("cannot generate WASM for global '{}' with multi-value", name);
             }
+            Ok(())
+        } else {
+            self.error("Non-constant global variables are not supported yet.", (0, 0))
         }
-        Ok(())
     }
 
     fn add_instructions(
@@ -136,21 +137,18 @@ impl Wasm {
             }
             Expression::Let((names, values, ..)) |
             Expression::Mut((names, values, ..)) => {
-                let exprs = expr_to_vec(*values.clone(), names.len());
-                for (name, value) in names.iter().zip(exprs.iter()) {
-                    self.add_instructions(f, ctx, local_map, value)?;
+                self.add_instructions(f, ctx, local_map, values)?;
+                names.iter().rev().for_each(|name| {
                     f.instruction(Instruction::LocalSet(local_map.get(name)
                         .expect("local name exists").0.clone()));
-                }
+                });
             }
             Expression::Set(ReAssignment {
                                 assignment: (names, values, ..),
                                 globals,
                             }) => {
-                let exprs = expr_to_vec(*values.clone(), names.len());
-                for (name, (value, is_global)) in
-                names.iter().zip(exprs.iter().zip(globals.iter())) {
-                    self.add_instructions(f, ctx, local_map, value)?;
+                self.add_instructions(f, ctx, local_map, values)?;
+                names.iter().rev().zip(globals.iter().rev()).for_each(|(name, is_global)| {
                     if *is_global {
                         f.instruction(Instruction::GlobalSet(ctx.global_idx_by_name.get(name)
                             .expect("global name exists").clone()));
@@ -158,7 +156,7 @@ impl Wasm {
                         f.instruction(Instruction::LocalSet(local_map.get(name)
                             .expect("local name exists").0.clone()));
                     }
-                }
+                });
             }
             Expression::If(cond, then, els) => {
                 self.add_instructions(f, ctx, local_map, cond)?;
@@ -169,7 +167,8 @@ impl Wasm {
                 self.add_instructions(f, ctx, local_map, els)?;
                 f.instruction(Instruction::End);
             }
-            Expression::Loop { expr, .. } => {
+            Expression::Loop { expr, error } => {
+                // FIXME check error
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(typ, ctx)));
                 self.add_instructions(f, ctx, local_map, expr)?;
@@ -208,16 +207,15 @@ impl Wasm {
             ErrorKind::Other,
             format!("{}[{},{}]: {}\n", self.mod_name, row, col, msg)))
     }
+
     fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
         match body {
             Expression::Let((names, values, ..)) |
             Expression::Mut((names, values, ..)) => {
-                let exprs = expr_to_vec(*values.clone(), names.len());
-                for (name, expr) in names.iter().zip(exprs.iter()) {
-                    // FIXME multi-values
-                    let typ = expr.get_type().first().unwrap().clone();
-                    res.insert(name.clone(), (res.len() as u32, to_val_type(&typ)));
-                }
+                let types = values.get_type();
+                names.iter().zip(types.iter()).for_each(|(name, typ)| {
+                    res.insert(name.clone(), (res.len() as u32, to_val_type(typ)));
+                });
             }
             Expression::If(cond, then, els) => {
                 self.collect_locals(cond, res);
@@ -233,16 +231,19 @@ impl Wasm {
         };
     }
 
-    fn expr_to_const<'a>(&self, expr: &'a Expression) -> Result<(Instruction<'a>, ValType)> {
+    fn expr_to_value<'a>(&self, expr: &'a Expression, ctx: &Context) -> Result<(Instruction<'a>, ValType)> {
         match expr {
+            Expression::Global(name, typ) => {
+                let idx = ctx.global_idx_by_name.get(name).unwrap();
+                Ok((Instruction::GlobalGet(*idx), to_val_type(typ)))
+            }
             Expression::Const(value, typ) => {
                 let t = to_val_type(typ);
                 Ok((to_const(t, value), t))
             }
             Expression::ExprError(e) =>
                 self.error(e.reason.as_str(), e.pos),
-            _ =>
-                self.error("only constants are currently supported to initialize globals", (0, 0))
+            _ => self.error("only constants are currently supported to initialize globals", (0, 0))
         }
     }
 }
@@ -275,6 +276,7 @@ impl WasminSink<Context> for Wasm {
                 self.receive_assignment(ctx, names, *values, vis, true)?;
             }
             TopLevelElement::Ext(_, _, _, _) => {
+                // FIXME
                 unimplemented!();
             }
             TopLevelElement::Fun((name, args, body, typ), vis, _) => {

@@ -112,9 +112,7 @@ impl Expression {
             }
             FunCall { typ, .. } => match typ {
                 Ok(t) => {
-                    if result.len() >= t.ins.len() {
-                        remove_last_n(result, t.ins.len());
-                    }
+                    remove_last_n(result, t.ins.len());
                     push_all(&t.outs, result);
                 }
                 Err(e) => {
@@ -141,6 +139,15 @@ impl Expression {
             Group(es) => es.is_empty() || es.iter().all(|e| e.is_empty()),
             Loop { expr, .. } => expr.is_empty(),
             _ => false
+        }
+    }
+
+    pub fn get_value_type(&self) -> Option<&Type> {
+        match self {
+            Const(_, typ) |
+            Local(_, typ) |
+            Global(_, typ) => Some(typ),
+            _ => None
         }
     }
 

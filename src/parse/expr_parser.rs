@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use crate::ast::{Assignment, Expression, ReAssignment, Break};
+use crate::ast::{Assignment, Break, Expression, ReAssignment};
 use crate::ast::Expression::{ExprError, Loop};
 use crate::parse::Parser;
 use crate::parse::parser::{GroupingSymbol, ParserError};
@@ -115,27 +115,25 @@ fn consume_expr_parts(parser: &mut Parser, state: &mut ParsingState) {
 
 fn create_expr_part(parser: &mut Parser, state: &mut ParsingState, part: String) -> ExprPart {
     let is_first_part = !state.has_non_expr_part();
-    if is_first_part {
-        let expr = match part.as_str() {
-            "let" | "mut" | "set" => {
-                let is_mut = !part.starts_with('l');
-                match parse_assignment_internal(parser, is_mut, state) {
-                    Ok(e) => Some(assignment_expr(parser, part.as_str(), e)),
-                    Err(e) => Some(ExprError(e.into()))
-                }
+    let expr = match part.as_str() {
+        "let" | "mut" | "set" => {
+            let is_mut = !part.starts_with('l');
+            match parse_assignment_internal(parser, is_mut, state) {
+                Ok(e) => Some(assignment_expr(parser, part.as_str(), e)),
+                Err(e) => Some(ExprError(e.into()))
             }
-            "if" => {
-                match parse_if(parser, state) {
-                    Ok(e) => Some(e),
-                    Err(e) => Some(ExprError(e))
-                }
-            }
-            "loop" => Some(parse_loop(parser, state)),
-            _ => None
-        };
-        if let Some(e) = expr {
-            return ExprPart::Expr(e);
         }
+        "if" => {
+            match parse_if(parser, state) {
+                Ok(e) => Some(e),
+                Err(e) => Some(ExprError(e))
+            }
+        }
+        "loop" => Some(parse_loop(parser, state)),
+        _ => None
+    };
+    if let Some(e) = expr {
+        return ExprPart::Expr(e);
     }
     if is_first_part { ExprPart::Fun(part) } else { ExprPart::Arg(part) }
 }
@@ -168,7 +166,7 @@ fn parse_assignment_internal(
             let mut state = ParsingState::new_nested(state);
             parse_expr_with_state(parser, &mut state, "")?
         };
-        if ids.len() <= state.stack.len() {
+        if ids.len() == expr.get_type().len() {
             let (mut results, mut errors): (Vec<_>, Vec<_>) = ids.iter().zip(state.stack.drain(0..ids.len()))
                 .map(move |(id, t)| {
                     parser.stack_mut().push(id.clone(), t, false, is_mut)

@@ -1,6 +1,6 @@
 use std::io::{Result, Write};
 
-use crate::ast::{Assignment, Expression, TopLevelElement};
+use crate::ast::{Expression, TopLevelElement};
 
 pub mod wat;
 pub mod wasm;
@@ -39,53 +39,8 @@ pub trait WasminSink<Context> {
     }
 }
 
-fn for_each_assignment<F>(
-    mut w: &mut Box<dyn Write>,
-    a: &Assignment,
-    mut action: F,
-) -> Result<()>
-    where F: FnMut(&mut Box<dyn Write>, &String, &Expression, bool) -> Result<()> {
-    let (mut ids, expr, mut rep) = a.clone();
-
-    let mut exprs = if ids.len() == 1 {
-        vec![*expr]
-    } else {
-        if let Expression::Group(e) = *expr {
-            e
-        } else {
-            panic!("cannot convert expression to multi-values: {:?}", *expr)
-        }
-    };
-
-    let mut err: Vec<_> = ids.drain(..)
-        .zip(exprs.drain(..))
-        .zip(rep.drain(..)
-            .zip(std::iter::once(true).chain(std::iter::repeat(false))))
-        .map(|((id, expr), (_fix, is_first))| {
-            // TODO add fix conversion to expression if needed
-
-            action(&mut w, &id, &expr, is_first)
-        }).filter(|r| r.is_err())
-        .collect();
-    if err.is_empty() {
-        Ok(())
-    } else {
-        err.remove(0)
-    }
-}
-
-fn expr_to_vec(values: Expression, expected_len: usize) -> Vec<Expression> {
-    if expected_len == 1 {
-        vec![values]
-    } else {
-        if let Expression::Group(e) = values {
-            if expected_len == e.len() { e } else {
-                panic!("Expected {} expressions but found {} in {:?}", expected_len, e.len(), e)
-            }
-        } else {
-            panic!("cannot convert expression to multi-values: {:?}", values)
-        }
-    }
+fn expr_to_vec(expr: Expression) -> Vec<Expression> {
+    if let Expression::Group(e) = expr { e } else { vec![expr] }
 }
 
 pub(crate) fn sanitize_number(text: &str) -> String {
