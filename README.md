@@ -28,7 +28,7 @@ Feature Checklist:
 - [ ] generic functions.
 - [ ] function pointers.
 - [x] if/else blocks.
-- [ ] loops.
+- [x] loops.
 - [ ] lambdas.
 - [x] global constants.
 - [ ] import from other Wasmin files with `use`.
