@@ -37,7 +37,7 @@ impl Context {
         remove_last(&mut self.block_levels);
     }
 
-    fn idx_of_breakable(&self) -> u32 {
+    fn index_of_breakable(&self) -> u32 {
         let mut current: u32 = 0;
         for is_breakable in self.block_levels.iter().rev() {
             if *is_breakable { return current; }
@@ -59,6 +59,18 @@ impl Context {
             }
         }
     }
+
+    fn index_fun(&mut self, fun_name: &str, type_index: u32, is_import: bool) -> u32 {
+        let fun_idx = self.fun_idx_by_name.len() as u32;
+        if let Some(_) = self.fun_idx_by_name.insert(fun_name.to_owned(), fun_idx) {
+            // FIXME overloads should be supported
+            panic!("function '{}' duplicated, overload is not implemented yet", fun_name);
+        }
+        if !is_import {
+            self.funs.function(type_index);
+        }
+        fun_idx
+    }
 }
 
 impl Wasm {
@@ -72,12 +84,7 @@ impl Wasm {
         ctx: &mut Context,
     ) -> Result<()> {
         let type_idx = ctx.index_fun_type(&typ);
-        let fun_idx = ctx.fun_idx_by_name.len() as u32;
-        // FIXME allow overloads
-        if let Some(_) = ctx.fun_idx_by_name.insert(name.clone(), fun_idx) {
-            panic!("function '{}' duplicated, overload is not implemented yet", name);
-        }
-        ctx.funs.function(type_idx);
+        let fun_idx = ctx.index_fun(&name, type_idx, false);
         if vis == Visibility::Public {
             ctx.exports.export(name.as_ref(), Export::Function(fun_idx));
         }
@@ -136,7 +143,7 @@ impl Wasm {
 
     fn receive_ext(&mut self,
                    ctx: &mut Context,
-                   name: &str,
+                   mod_name: &str,
                    defs: &Vec<ExtDef>,
     ) -> Result<()> {
         for def in defs {
@@ -151,13 +158,9 @@ impl Wasm {
                 Type::Fn(types) => {
                     for typ in types {
                         let type_idx = ctx.index_fun_type(&typ);
-                        let fun_name = format!("{}.{}", name, def.id);
-                        let fun_idx = ctx.fun_idx_by_name.len() as u32;
-                        // FIXME allow overloads
-                        if let Some(_) = ctx.fun_idx_by_name.insert(fun_name.clone(), fun_idx) {
-                            panic!("function '{}' duplicated, overload is not implemented yet", name);
-                        }
-                        ctx.imports.import(name, Some(&fun_name), EntityType::Function(type_idx));
+                        let fun_name = format!("{}.{}", mod_name, def.id);
+                        ctx.index_fun(&fun_name, type_idx, true);
+                        ctx.imports.import(mod_name, Some(&def.id), EntityType::Function(type_idx));
                     }
                 }
                 Type::WasmFn(_) => {}
@@ -238,7 +241,7 @@ impl Wasm {
                 ctx.end_block();
             }
             Expression::Br(_) => {
-                f.instruction(Instruction::Br(ctx.idx_of_breakable()));
+                f.instruction(Instruction::Br(ctx.index_of_breakable()));
             }
             Expression::Group(exprs) => {
                 for expr in exprs {
@@ -359,6 +362,7 @@ impl WasminSink<Context> for Wasm {
     fn flush(&mut self, w: &mut Box<dyn Write>, ctx: Context) -> Result<()> {
         let mut module = Module::new();
         module.section(&ctx.types);
+        module.section(&ctx.imports);
         module.section(&ctx.funs);
         module.section(&ctx.globals);
         module.section(&ctx.exports);
