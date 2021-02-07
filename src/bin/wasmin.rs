@@ -1,4 +1,4 @@
-use std::io::{Read, stdin, stdout, Write};
+use std::io::{Read, stdin, stdout, Write, BufWriter};
 use std::io::stderr;
 use std::process::exit;
 use std::str::FromStr;
@@ -16,8 +16,8 @@ use wasmin::wasm_parse;
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
     match opts {
-        CliOptions::Build { output_format, file } => {
-            match compile(&output_format, file) {
+        CliOptions::Build { output_format, input, output } => {
+            match build(&output_format, input, output) {
                 Ok(_) => {}
                 Err(e) => {
                     stderr().lock().write_all(format!("ERROR: {}", e).as_bytes())
@@ -43,31 +43,40 @@ fn main() {
     }
 }
 
-fn compile(output_format: &FormatType, file: Option<String>) -> Result<(), String> {
+fn build(output_format: &FormatType, input: Option<String>, output: Option<String>) -> Result<(), String> {
     let (sender, rcvr) = mpsc::channel();
 
-    let file_name = file.clone();
+    let input_file = input.clone();
     let parser_handle = thread::spawn(move || {
-        let text = read_program(file_name);
+        let text = read_program(input_file);
         let mut chars = text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
     });
 
     {
-        let mut writer: Box<dyn Write> = Box::new(stdout());
+        let mut writer: Box<dyn Write> = if let Some(out) = output {
+            let out_file = std::fs::File::create(out)
+                .map_err(|e| e.to_string())?;
+            let w = BufWriter::new(out_file);
+            Box::new(w)
+        } else {
+            Box::new(stdout())
+        };
 
         match output_format {
             FormatType::DEBUG => {
-                push_to_sink(DebugSink::default(), file, rcvr, &mut writer)?;
+                push_to_sink(DebugSink::default(), input, rcvr, &mut writer)?;
             }
             FormatType::WAT => {
-                push_to_sink(Wat::default(), file, rcvr, &mut writer)?;
+                push_to_sink(Wat::default(), input, rcvr, &mut writer)?;
             }
             FormatType::WASM => {
-                push_to_sink(Wasm::default(), file, rcvr, &mut writer)?;
+                push_to_sink(Wasm::default(), input, rcvr, &mut writer)?;
             }
         };
+
+        writer.flush().map_err(|e| e.to_string())?;
     }
 
     parser_handle.join().expect("ERROR: parser thread error.");
@@ -126,8 +135,11 @@ enum CliOptions {
         #[structopt(short = "f", long = "format", default_value = "wat",
         help = "output format (wat, wasm, debug)")]
         output_format: FormatType,
-        /// Wasmin module file. If not given, the module is read from stdin.
-        file: Option<String>,
+        /// Wasmin source file. If not given, the source is read from stdin.
+        input: Option<String>,
+        #[structopt(short = "o", long = "output",
+        help = "output file. If not given, the output is sent to stdout.")]
+        output: Option<String>,
     },
     /// Run a Wasmin module using an interpreter.
     Run,
