@@ -3,14 +3,15 @@ use std::io::stderr;
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
 use std::thread;
 
 use structopt::{*};
 
+use wasmin::ast::TopLevelElement;
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
-use wasmin::ast::TopLevelElement;
-use std::sync::mpsc::Receiver;
+use wasmin::wasm_parse;
 
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
@@ -28,6 +29,16 @@ fn main() {
         CliOptions::Run => {
             println!("ERROR: the 'run' sub-command is not supported yet!");
             exit(-1);
+        }
+        CliOptions::Parse { file, verbose } => {
+            match wasm_parse::parse(file, verbose) {
+                Ok(_) => {}
+                Err(e) => {
+                    stderr().lock().write_all(format!("ERROR: {}", e).as_bytes())
+                        .expect("cannot write to stderr");
+                    exit(-1);
+                }
+            }
         }
     }
 }
@@ -120,6 +131,13 @@ enum CliOptions {
     },
     /// Run a Wasmin module using an interpreter.
     Run,
+    /// Parse a WASM file.
+    Parse {
+        /// WASM file.
+        file: String,
+        #[structopt(short = "v", long = "verbose", help = "verbose output")]
+        verbose: bool,
+    },
 }
 
 impl FromStr for FormatType {
