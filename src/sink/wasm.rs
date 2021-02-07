@@ -201,7 +201,9 @@ impl Wasm {
                 f.instruction(Instruction::End);
             }
             Expression::Loop { expr, error } => {
-                // FIXME check error
+                if let Some(e) = error {
+                    return self.error(&e.reason, e.pos);
+                }
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(typ, ctx)));
                 self.add_instructions(f, ctx, local_map, expr)?;
