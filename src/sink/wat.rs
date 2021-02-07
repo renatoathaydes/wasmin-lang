@@ -10,11 +10,16 @@ const ONE_IDENT: &str = "  ";
 pub struct Wat {
     mod_name: String,
     ident: String,
+    block_level: usize,
 }
 
 impl Default for Wat {
     fn default() -> Self {
-        Wat { mod_name: String::from(""), ident: ONE_IDENT.to_owned() }
+        Wat {
+            mod_name: String::from(""),
+            ident: ONE_IDENT.to_owned(),
+            block_level: 0,
+        }
     }
 }
 
@@ -25,6 +30,14 @@ impl Wat {
 
     fn decrease_ident(&mut self) {
         (0..ONE_IDENT.len()).for_each(|_| { self.ident.remove(0); });
+    }
+
+    fn start_block(&mut self) {
+        self.block_level += 1;
+    }
+
+    fn end_block(&mut self) {
+        self.block_level -= 1;
     }
 
     fn write_global_assignment(
@@ -171,6 +184,11 @@ impl Wat {
             }
             Expression::Loop { expr, .. } => {
                 self.start_expr(w)?;
+                w.write_all(b"(block $block")?;
+                self.start_block();
+                self.increase_ident();
+                w.write_fmt(format_args!("{}", self.block_level))?;
+                self.start_expr(w)?;
                 w.write_all(b"(loop")?;
                 self.increase_ident();
                 self.start_expr(w)?;
@@ -179,10 +197,15 @@ impl Wat {
                 w.write_all(b"br 0")?;
                 self.decrease_ident();
                 self.start_expr(w)?;
+                w.write_all(b")")?;
+                self.decrease_ident();
+                self.end_block();
+                self.start_expr(w)?;
                 w.write_all(b")")
             }
             Expression::Br(_) => {
-                w.write_all(b"br 0")
+                w.write_all(b"br $block")?;
+                w.write_fmt(format_args!("{}", self.block_level))
             }
             Expression::Local(id, _) => {
                 w.write_all(b"local.get $")?;
