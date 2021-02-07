@@ -1,0 +1,23 @@
+ext console {
+    log[i32];
+}
+
+let FIZZ, BUZZ, FIZZ-BUZZ = -1, -2, -3;
+
+def is-fizz [i32] i32;
+fun is-fizz n = n, rem_u 3, eqz;
+
+def is-buzz [i32] i32;
+fun is-buzz n = n, rem_u 5, eqz;
+
+pub fun start = (
+    mut i = 1;
+    loop (
+        if i, gt_u 100; break;;
+        let fizz, buzz = is-fizz i, is-buzz i;
+        console.log if fizz, and buzz; FIZZ-BUZZ;
+                    if fizz; FIZZ; if buzz; BUZZ;
+                    else i;
+        set i = i, add 1
+    )
+)

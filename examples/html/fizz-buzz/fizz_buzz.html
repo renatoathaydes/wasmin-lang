@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wasmin HTML Harness</title>
+    <script type="module">
+      function createLog(root) {
+        return (arg) => {
+            let word;
+            switch(arg) {
+              case -1: word = 'FIZZ'; break;
+              case -2: word = 'BUZZ'; break;
+              case -3: word = 'FIZZ-BUZZ'; break;
+              default: word = arg;
+            }
+            console.log(word);
+            const div = document.createElement('div');
+            div.innerText = "* " + word;
+            root.append(div);
+        };
+      }
+
+      async function init() {
+        const root = document.getElementById('root');
+        const importObject = { console: { log: createLog(root) } };
+        const { instance } = await WebAssembly.instantiateStreaming(
+          fetch("/fizz_buzz.wasm"),
+          importObject);
+        instance.exports.start();
+      }
+      init();
+
+    </script>
+</head>
+<body>
+<h1>Wasmin Demo</h1>
+<h2>Fizz Buzz</h2>
+<div id="root"></div>
+</body>
+</html>
