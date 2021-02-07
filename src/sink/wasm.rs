@@ -132,7 +132,13 @@ impl Wasm {
                 Type::Fn(types) => {
                     for typ in types {
                         let type_idx = ctx.index_fun_type(&typ);
-                        ctx.imports.import(name, Some(&def.id), EntityType::Function(type_idx));
+                        let fun_name = format!("{}.{}", name, def.id);
+                        let fun_idx = ctx.fun_idx_by_name.len() as u32;
+                        // FIXME allow overloads
+                        if let Some(_) = ctx.fun_idx_by_name.insert(fun_name.clone(), fun_idx) {
+                            panic!("function '{}' duplicated, overload is not implemented yet", name);
+                        }
+                        ctx.imports.import(name, Some(&fun_name), EntityType::Function(type_idx));
                     }
                 }
                 Type::WasmFn(_) => {}
@@ -331,7 +337,8 @@ impl WasminSink<Context> for Wasm {
         match wasmparser::validate(&wasm) {
             Ok(_) => {}
             Err(e) => {
-                return Err(std::io::Error::new(ErrorKind::Other, format!("{}\n", e)));
+                return Err(std::io::Error::new(ErrorKind::Other,
+                                               format!("(WASM Validation) {}\n", e)));
             }
         }
         w.write_all(&wasm)
