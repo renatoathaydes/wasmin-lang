@@ -8,6 +8,7 @@ use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::sink::{expr_to_vec, WasminSink};
 use crate::sink::wasm_utils::{*};
 use crate::types::{FunType, Type, types_to_string};
+use crate::vec_utils::remove_last;
 
 #[derive(Default)]
 pub struct Wasm {
@@ -21,12 +22,30 @@ pub struct Context {
     globals: GlobalSection,
     funs: FunctionSection,
     code: CodeSection,
+    block_levels: Vec<bool>,
     fun_idx_by_name: HashMap<String, u32>,
     global_idx_by_name: HashMap<String, u32>,
     type_idx_by_type_str: HashMap<String, u32>,
 }
 
 impl Context {
+    fn start_block(&mut self, is_breakable: bool) {
+        self.block_levels.push(is_breakable);
+    }
+
+    fn end_block(&mut self) {
+        remove_last(&mut self.block_levels);
+    }
+
+    fn idx_of_breakable(&self) -> u32 {
+        let mut current: u32 = 0;
+        for is_breakable in self.block_levels.iter().rev() {
+            if *is_breakable { return current; }
+            current += 1;
+        }
+        panic!("No breakable level found");
+    }
+
     pub(crate) fn index_fun_type(&mut self, typ: &FunType) -> u32 {
         let types = vec![Type::Fn(vec![typ.clone()])];
         let key = types_to_string(&types);
@@ -194,23 +213,32 @@ impl Wasm {
             Expression::If(cond, then, els) => {
                 self.add_instructions(f, ctx, local_map, cond)?;
                 let typ = then.get_type();
-                f.instruction(Instruction::If(block_type(typ, ctx)));
+                f.instruction(Instruction::If(block_type(&typ, ctx)));
+                ctx.start_block(false);
                 self.add_instructions(f, ctx, local_map, then)?;
                 f.instruction(Instruction::Else);
                 self.add_instructions(f, ctx, local_map, els)?;
                 f.instruction(Instruction::End);
+                ctx.end_block();
             }
             Expression::Loop { expr, error } => {
                 if let Some(e) = error {
                     return self.error(&e.reason, e.pos);
                 }
                 let typ = expr.get_type();
-                f.instruction(Instruction::Block(block_type(typ, ctx)));
+                f.instruction(Instruction::Block(block_type(&typ, ctx)));
+                ctx.start_block(true);
+                f.instruction(Instruction::Loop(block_type(&typ, ctx)));
+                ctx.start_block(false);
                 self.add_instructions(f, ctx, local_map, expr)?;
+                f.instruction(Instruction::Br(0));
                 f.instruction(Instruction::End);
+                ctx.end_block();
+                f.instruction(Instruction::End);
+                ctx.end_block();
             }
             Expression::Br(_) => {
-                f.instruction(Instruction::Br(0));
+                f.instruction(Instruction::Br(ctx.idx_of_breakable()));
             }
             Expression::Group(exprs) => {
                 for expr in exprs {
@@ -221,7 +249,6 @@ impl Wasm {
                 if *is_wasm_fun {
                     f.instruction(map_to_wasm_fun(name.as_ref(), typ)?);
                 } else {
-                    // FIXME does not find imported function
                     let idx = ctx.fun_idx_by_name.get(name)
                         .expect("called function exists").clone();
                     f.instruction(Instruction::Call(idx));
@@ -297,6 +324,7 @@ impl WasminSink<Context> for Wasm {
             types: TypeSection::new(),
             funs: FunctionSection::new(),
             code: CodeSection::new(),
+            block_levels: Vec::new(),
             fun_idx_by_name: HashMap::default(),
             global_idx_by_name: HashMap::default(),
             type_idx_by_type_str: HashMap::default(),

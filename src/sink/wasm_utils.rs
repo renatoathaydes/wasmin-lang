@@ -111,12 +111,12 @@ fn cannot_find_fun(name: &str, fun_type: &FunType) -> ! {
            name, types_to_string(&fun_type.ins));
 }
 
-pub(crate) fn block_type(typ: Vec<Type>, ctx: &mut Context) -> BlockType {
+pub(crate) fn block_type(typ: &Vec<Type>, ctx: &mut Context) -> BlockType {
     if typ.is_empty() || typ.first().unwrap().is_empty() {
         BlockType::Empty
     } else if typ.len() == 1 {
         BlockType::Result(to_val_type(typ.first().unwrap()))
     } else {
-        to_multi_val_block_type(&typ, ctx)
+        to_multi_val_block_type(typ, ctx)
     }
 }
