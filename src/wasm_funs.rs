@@ -39,32 +39,33 @@ pub fn wasm_std_funs() -> Stack {
 
     // conversion functions
 
-    [(F32, I32), (F64, I32)].iter().for_each(|(from, to)| {
+    [(I32, F32), (I32, F64)].iter().for_each(|(from, to)| {
         vec!["convert_i32_u", "convert_i32_s"].drain(..).for_each(|name| {
             stack.push(name.to_owned(), Type::WasmFn(vec![fun_type!([from.clone()](to.clone()))]), true, false).unwrap();
         });
     });
 
-    [(F32, I64), (F64, I64)].iter().for_each(|(from, to)| {
+    [(I64, F32), (I64, F64)].iter().for_each(|(from, to)| {
         vec!["convert_i64_u", "convert_i64_s"].drain(..).for_each(|name| {
             stack.push(name.to_owned(), Type::WasmFn(vec![fun_type!([from.clone()](to.clone()))]), true, false).unwrap();
         });
     });
 
     [(F64, I32), (F64, I64)].iter().for_each(|(from, to)| {
-        vec!["trunc_f64_s", "trunc_f64_u", "trunc_sat_f64_s", "trunc_sat_f64_u"].drain(..).for_each(|name| {
+        vec!["trunc_f64_s", "trunc_f64_u"].drain(..).for_each(|name| {
             stack.push(name.to_owned(), Type::WasmFn(vec![fun_type!([from.clone()](to.clone()))]), true, false).unwrap();
         });
     });
 
     [(F32, I32), (F32, I64)].iter().for_each(|(from, to)| {
-        vec!["trunc_sat_f32_s", "trunc_sat_f32_u"].drain(..).for_each(|name| {
+        vec!["trunc_f32_s", "trunc_f32_u"].drain(..).for_each(|name| {
             stack.push(name.to_owned(), Type::WasmFn(vec![fun_type!([from.clone()](to.clone()))]), true, false).unwrap();
         });
     });
 
     stack.push("wrap_i64".to_owned(), Type::WasmFn(vec![fun_type!([I64](I32))]), true, false).unwrap();
-    stack.push("extend_32s".to_owned(), Type::WasmFn(vec![fun_type!([I64](I64))]), true, false).unwrap();
+    stack.push("extend_i32s".to_owned(), Type::WasmFn(vec![fun_type!([I32](I64))]), true, false).unwrap();
+    stack.push("extend_i32u".to_owned(), Type::WasmFn(vec![fun_type!([I32](I64))]), true, false).unwrap();
     stack.push("demote_f64".to_owned(), Type::WasmFn(vec![fun_type!([F64](F32))]), true, false).unwrap();
     stack.push("promote_f32".to_owned(), Type::WasmFn(vec![fun_type!([F32](F64))]), true, false).unwrap();
     stack.push("reinterpret_i32".to_owned(), Type::WasmFn(vec![fun_type!([I32](F32))]), true, false).unwrap();
