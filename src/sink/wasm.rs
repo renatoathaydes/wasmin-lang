@@ -1,10 +1,13 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::io::{ErrorKind, Result, Write};
+use std::io::{Write};
 
-use wasm_encoder::{CodeSection, EntityType, Export, ExportSection, Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection, ValType};
+use wasm_encoder::{CodeSection, EntityType, Export, ExportSection, Function, FunctionSection,
+                   GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection,
+                   ValType};
 
 use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
+use crate::errors::{Error, Result};
 use crate::sink::{expr_to_vec, WasminSink};
 use crate::sink::wasm_utils::{*};
 use crate::types::{FunType, Type, types_to_string};
@@ -137,7 +140,7 @@ impl Wasm {
             }
             Ok(())
         } else {
-            self.error("Non-constant global variables are not supported yet.", (0, 0))
+            self.tmp_error("Non-constant global variables are not supported yet.", (0, 0))
         }
     }
 
@@ -226,7 +229,7 @@ impl Wasm {
             }
             Expression::Loop { expr, error } => {
                 if let Some(e) = error {
-                    return self.error(&e.reason, e.pos);
+                    return self.tmp_error(&e.reason, e.pos);
                 }
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(&typ, ctx)));
@@ -258,20 +261,18 @@ impl Wasm {
                 }
             }
             Expression::FunCall { typ: Err(e), .. } => {
-                return self.error(e.reason.as_str(), e.pos);
+                return self.tmp_error(e.reason.as_str(), e.pos);
             }
             Expression::ExprError(e) => {
-                return self.error(e.reason.as_str(), e.pos);
+                return self.tmp_error(e.reason.as_str(), e.pos);
             }
         };
         Ok(())
     }
 
-    fn error<T>(&self, msg: &str, pos: (usize, usize)) -> Result<T> {
-        let (row, col) = pos;
-        Err(std::io::Error::new(
-            ErrorKind::Other,
-            format!("{}[{},{}]: {}\n", self.mod_name, row, col, msg)))
+    // FIXME remove this, parser should already return the correct Error type later
+    fn tmp_error<T>(&self, msg: &str, pos: (usize, usize)) -> Result<T> {
+        err_wasmin!(werr_unsupported_feature!(msg, pos))
     }
 
     fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
@@ -311,8 +312,9 @@ impl Wasm {
                 Ok((to_const(t, value), t))
             }
             Expression::ExprError(e) =>
-                self.error(e.reason.as_str(), e.pos),
-            _ => self.error("only constants are currently supported to initialize globals", (0, 0))
+                self.tmp_error(e.reason.as_str(), e.pos),
+            _ => err_wasmin!(werr_unsupported_feature!("only constants are currently supported to \
+                    initialize globals", (0, 0)))
         }
     }
 }
@@ -352,8 +354,8 @@ impl WasminSink<Context> for Wasm {
             TopLevelElement::Fun((name, args, body, typ), vis, _) => {
                 self.receive_fun(name, args, body, typ, vis, ctx)?;
             }
-            TopLevelElement::Error(reason, pos) => {
-                return self.error(reason.as_str(), pos);
+            TopLevelElement::Error(err) => {
+                return err_wasmin!(err);
             }
         };
         Ok(())
@@ -371,11 +373,10 @@ impl WasminSink<Context> for Wasm {
         match wasmparser::validate(&wasm) {
             Ok(_) => {}
             Err(e) => {
-                return Err(std::io::Error::new(ErrorKind::Other,
-                                               format!("(WASM Validation) {}\n", e)));
+                return Err(Error::Validation(format!("{}", e)));
             }
         }
-        w.write_all(&wasm)
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, e.to_string()))
+        w.write_all(&wasm)?;
+        Ok(())
     }
 }

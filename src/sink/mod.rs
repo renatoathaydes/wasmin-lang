@@ -1,6 +1,7 @@
-use std::io::{Result, Write};
+use std::io::{Write};
 
 use crate::ast::{Expression, TopLevelElement};
+use crate::errors::Result;
 
 pub mod wat;
 pub mod wasm;

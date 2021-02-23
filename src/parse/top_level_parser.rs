@@ -2,6 +2,7 @@ use Visibility::Public;
 
 use crate::ast::{TopLevelElement, Visibility};
 use crate::ast::Visibility::Private;
+use crate::errors::{unexpected_char, unexpected_word};
 use crate::parse::Parser;
 
 pub fn parse(parser: &mut Parser) {
@@ -13,19 +14,22 @@ pub fn parse(parser: &mut Parser) {
 }
 
 fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
+    let start_pos = parser.pos();
     let expr = match word.as_ref() {
         "pub" if !is_pub => {
             if let Some(w) = parser.parse_word() {
                 return parse_top(parser, &w, true);
             } else {
-                Some(TopLevelElement::Error(format!("Unexpected: '{}'. \
-                Expected let, mut or fun", word), parser.pos()))
+                let err = unexpected_char(
+                    parser, &format!("expected {}.", allowed_at_top(true)));
+                Some(TopLevelElement::Error(err))
             }
         }
         "def" if !is_pub => {
             parser.store_comments(false);
+            let pos = parser.pos();
             if let Err(e) = parser.parse_def() {
-                Some(e.into())
+                Some(TopLevelElement::Error(werr_syntax!(e.msg, pos, e.pos)))
             } else {
                 None
             }
@@ -41,7 +45,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                         Some(TopLevelElement::Let(items, visibility, comment))
                     }
                 }
-                Err(e) => Some(e.into())
+                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
             }
         }
         "fun" => {
@@ -49,7 +53,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
                 Ok(fun) => Some(TopLevelElement::Fun(fun, visibility, comment)),
-                Err(e) => Some(e.into())
+                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
             }
         }
         "ext" => {
@@ -58,17 +62,21 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             match parser.parse_ext() {
                 Ok((mod_name, defs)) =>
                     Some(TopLevelElement::Ext(mod_name, defs, visibility, comment)),
-                Err(e) => Some(e.into())
+                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
             }
         }
         _ => {
-            let allowed = format!("{}let, mut or fun", if is_pub { "" } else { "pub, def, " });
-            Some(TopLevelElement::Error(format!("Unexpected: '{}'. \
-                Expected {} here.", word, allowed), parser.pos()))
+            let err = unexpected_word(
+                word, start_pos, parser, &format!("expected {}.", allowed_at_top(true)));
+            Some(TopLevelElement::Error(err))
         }
     };
 
     if let Some(e) = expr {
         parser.sink().send(e).expect("Wasmin Program Receiver Error");
     }
+}
+
+fn allowed_at_top(is_pub: bool) -> String {
+    format!("{}let, mut or fun", if is_pub { "" } else { "pub, def, " })
 }

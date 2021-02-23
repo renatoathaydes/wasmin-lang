@@ -1,7 +1,8 @@
-use std::io::{ErrorKind, Result, Write};
+use std::io::Write;
 use std::iter::repeat;
 
 use crate::ast::{Assignment, Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
+use crate::errors::Result;
 use crate::sink::{expr_to_vec, sanitize_number, WasminSink};
 use crate::types::{FunType, Type};
 
@@ -59,6 +60,7 @@ impl Wat {
                 } else {
                     typ.to_string()
                 };
+
                 self.start_expr(w)?;
                 w.write_all(b"(global $")?;
                 w.write_all(name.as_bytes())?;
@@ -71,11 +73,12 @@ impl Wat {
                     w.write_all(b"\") ")?;
                 }
                 self.write_expr(&mut w, expr)?;
-                w.write_all(b")")?;
+                w.write_all(b")")?
             }
             Ok(())
         } else {
-            self.error("Non-constant global variables are not supported yet.", (0, 0))
+            err_wasmin!(werr_unsupported_feature!(
+                "Non-constant global variables are not supported yet.", (0, 0)))
         }
     }
 
@@ -146,11 +149,13 @@ impl Wat {
             Expression::Const(id, typ) => {
                 w.write_all(typ.to_string().as_bytes())?;
                 w.write_all(b".const ")?;
-                w.write_all(sanitize_number(id.as_str()).as_bytes())
+                w.write_all(sanitize_number(id.as_str()).as_bytes())?;
+                Ok(())
             }
             Expression::Global(id, _) => {
                 w.write_all(b"global.get $")?;
-                w.write_all(id.as_bytes())
+                w.write_all(id.as_bytes())?;
+                Ok(())
             }
             Expression::If(cond, then, els) => {
                 self.write_expr(w, cond)?;
@@ -180,7 +185,8 @@ impl Wat {
                     self.start_expr(w)?;
                     w.write_all(b")")?;
                 }
-                w.write_all(b")")
+                w.write_all(b")")?;
+                Ok(())
             }
             Expression::Loop { expr, .. } => {
                 self.start_expr(w)?;
@@ -201,15 +207,18 @@ impl Wat {
                 self.decrease_ident();
                 self.end_block();
                 self.start_expr(w)?;
-                w.write_all(b")")
+                w.write_all(b")")?;
+                Ok(())
             }
             Expression::Br(_) => {
                 w.write_all(b"br $block")?;
-                w.write_fmt(format_args!("{}", self.block_level))
+                w.write_fmt(format_args!("{}", self.block_level))?;
+                Ok(())
             }
             Expression::Local(id, _) => {
                 w.write_all(b"local.get $")?;
-                w.write_all(id.as_bytes())
+                w.write_all(id.as_bytes())?;
+                Ok(())
             }
             Expression::Let(assign) | Expression::Mut(assign) => {
                 let globals = repeat(false).take(assign.0.len()).collect();
@@ -229,22 +238,22 @@ impl Wat {
             }
             Expression::FunCall { name, is_wasm_fun, typ, fun_index } => {
                 if let Err(e) = typ {
-                    return self.error(e.reason.as_str(), e.pos);
+                    return err_wasmin!(werr_type!(e.reason, e.pos));
                 }
                 if *is_wasm_fun {
                     // this is safe because we checked for errors above and
                     // WASM functions always have at least one argument.
                     let t = typ.as_ref().unwrap().ins.get(0).unwrap();
-                    w.write_all(format!("{}.{}", t, name).as_bytes())
+                    w.write_all(format!("{}.{}", t, name).as_bytes())?;
                 } else {
                     w.write_all(b"call $")?;
                     w.write_all(name.as_bytes())?;
                     if fun_index != &0 { w.write_all(format!("${}", fun_index).as_bytes())?; }
-                    Ok(())
                 }
+                Ok(())
             }
             Expression::ExprError(e) =>
-                self.error(e.reason.as_str(), e.pos),
+                err_wasmin!(werr_type!(e.reason, e.pos))
         }
     }
 
@@ -283,7 +292,7 @@ impl Wat {
             vec![]
         };
         if !err.is_empty() {
-            return err.remove(0);
+            err.remove(0)?;
         }
         if !typ.outs.is_empty() {
             w.write_all(b" (result")?;
@@ -302,7 +311,8 @@ impl Wat {
             w.write_all(b"\n")?;
             w.write_all(self.ident.as_bytes())?;
         }
-        w.write_all(b")")
+        w.write_all(b")")?;
+        Ok(())
     }
 
     fn write_ext(&mut self,
@@ -339,7 +349,7 @@ impl Wat {
                 Type::I32 => Some(b"i32"),
                 Type::F64 => Some(b"f64"),
                 Type::F32 => Some(b"f32"),
-                Type::Error(e) => { return self.error(e.reason.as_str(), e.pos); }
+                Type::Error(e) => { return err_wasmin!(werr_type!(e.reason, e.pos)); }
             };
             if let Some(t) = type_to_write {
                 w.write_all(format!("(global ${}.{} (import \"{}\" \"{}\") ",
@@ -353,49 +363,46 @@ impl Wat {
 
     fn start_expr(&self, w: &mut Box<dyn Write>) -> Result<()> {
         w.write_all(b"\n")?;
-        w.write_all(self.ident.as_bytes())
+        w.write_all(self.ident.as_bytes())?;
+        Ok(())
     }
 
     fn start_texpr(w: &mut Box<dyn Write>) -> Result<()> {
         w.write_all(b"\n")?;
-        w.write_all(ONE_IDENT.as_bytes())
-    }
-
-    fn error(&self, msg: &str, pos: (usize, usize)) -> Result<()> {
-        let (row, col) = pos;
-        Err(std::io::Error::new(
-            ErrorKind::Other,
-            format!("{}[{},{}]: {}\n", self.mod_name, row, col, msg)))
+        w.write_all(ONE_IDENT.as_bytes())?;
+        Ok(())
     }
 }
 
 impl WasminSink<()> for Wat {
     fn start(&mut self, module_name: String, w: &mut Box<dyn Write>) -> Result<()> {
         self.mod_name = module_name;
-        w.write_all(b"(module\n")
+        w.write_all(b"(module\n")?;
+        Ok(())
     }
 
     fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>, _: &mut ()) -> Result<()> {
         Wat::start_texpr(w)?;
         match element {
             TopLevelElement::Let(assign, vis, _) => {
-                self.write_global_assignment(&mut w, &assign, &vis, false)
+                self.write_global_assignment(&mut w, &assign, &vis, false)?;
             }
             TopLevelElement::Mut(assign, vis, _) => {
-                self.write_global_assignment(&mut w, &assign, &vis, true)
+                self.write_global_assignment(&mut w, &assign, &vis, true)?;
             }
             TopLevelElement::Fun((id, args, body, typ), vis, _) => {
-                self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)
+                self.write_fun(w, id.as_str(), Some(args), Some(body), typ, vis)?;
             }
             TopLevelElement::Ext(mod_name, defs, ..) => {
-                self.write_ext(w, mod_name.as_str(), defs)
+                self.write_ext(w, mod_name.as_str(), defs)?;
             }
-            TopLevelElement::Error(e, pos) =>
-                self.error(e.as_str(), pos)
-        }
+            TopLevelElement::Error(e) => return err_wasmin!(e)
+        };
+        Ok(())
     }
 
     fn flush(&mut self, w: &mut Box<dyn Write>, _: ()) -> Result<()> {
-        w.write_all(b"\n)\n")
+        w.write_all(b"\n)\n")?;
+        Ok(())
     }
 }

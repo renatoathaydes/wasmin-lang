@@ -3,6 +3,7 @@ use std::sync::mpsc::channel;
 
 use wasmin::{*};
 use wasmin::ast::{*};
+use wasmin::errors::WasminError;
 use wasmin::parse::new_parser;
 use wasmin::types::{Type::*};
 
@@ -104,9 +105,9 @@ fn test_fun_without_def_calling_namespace_fun() {
 #[test]
 fn test_fun_without_def_must_not_return_value() {
     test_parser!("fun _start = add 1 2;";;
-        TopLevelElement::Error(
-            "fun '_start' missing def (body returns a value of type 'i32', hence the return type is mandatory)".to_owned(),
-            (0, 4))
+        TopLevelElement::Error(werr_syntax!(
+        "fun '_start' missing def (body returns a value of type 'i32', hence the return type is mandatory)",
+        (0, 4)))
     );
 }
 

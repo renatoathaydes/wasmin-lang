@@ -34,12 +34,6 @@ impl From<TypeError> for ParserError {
     }
 }
 
-impl Into<TopLevelElement> for ParserError {
-    fn into(self) -> TopLevelElement {
-        TopLevelElement::Error(self.msg, self.pos)
-    }
-}
-
 #[derive(Debug)]
 pub struct Parser<'s> {
     line: usize,

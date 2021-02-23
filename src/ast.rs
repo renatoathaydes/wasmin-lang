@@ -2,6 +2,7 @@ use Expression::{*};
 
 use crate::types::{FunType, Type, TypeError};
 use crate::vec_utils::{get_last, push_all, remove_last, remove_last_n};
+use crate::errors::WasminError;
 
 /// Assignment defines one or more Wasmin assignments.
 ///
@@ -84,7 +85,7 @@ pub enum TopLevelElement {
     Mut(Assignment, Visibility, Option<Comment>),
     Ext(String, Vec<ExtDef>, Visibility, Option<Comment>),
     Fun(Function, Visibility, Option<Comment>),
-    Error(String, (usize, usize)),
+    Error(WasminError),
 }
 
 impl Expression {
@@ -181,12 +182,6 @@ impl Expression {
             }
             _ => {}
         };
-    }
-}
-
-impl From<TypeError> for TopLevelElement {
-    fn from(e: TypeError) -> Self {
-        TopLevelElement::Error(e.reason, e.pos)
     }
 }
 
