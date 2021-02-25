@@ -3,6 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <title>Wasmin HTML Harness</title>
+    <style>
+     body {
+        background: purple;
+        color: pink;
+        max-width: 50em;
+        margin: auto;
+        font-family: "Gill Sans", sans-serif;
+     }
+    .fizz { background: blueviolet; }
+    .buzz { background: violet; }
+    .fizz-buzz { background: cornflowerblue; }
+     div { padding: 5px; }
+
+    </style>
     <script type="module">
       function createLog(root) {
         return (arg) => {
@@ -15,7 +29,10 @@
             }
             console.log(word);
             const div = document.createElement('div');
-            div.innerText = "* " + word;
+            if (typeof word == 'string') {
+                div.classList.add(word.toLowerCase());
+            }
+            div.innerText = word;
             root.append(div);
         };
       }
