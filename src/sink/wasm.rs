@@ -54,7 +54,7 @@ impl Context {
         let key = types_to_string(&types);
         let len = self.type_idx_by_type_str.len() as u32;
         match self.type_idx_by_type_str.entry(key) {
-            Entry::Occupied(e) => e.get().clone(),
+            Entry::Occupied(e) => *e.get(),
             Entry::Vacant(v) => {
                 v.insert(len);
                 self.types.function(to_val_types(&typ.ins), to_val_types(&typ.outs));
@@ -65,7 +65,7 @@ impl Context {
 
     fn index_fun(&mut self, fun_name: &str, type_index: u32, is_import: bool) -> u32 {
         let fun_idx = self.fun_idx_by_name.len() as u32;
-        if let Some(_) = self.fun_idx_by_name.insert(fun_name.to_owned(), fun_idx) {
+        if self.fun_idx_by_name.insert(fun_name.to_owned(), fun_idx).is_some() {
             // FIXME overloads should be supported
             panic!("function '{}' duplicated, overload is not implemented yet", fun_name);
         }
@@ -99,8 +99,8 @@ impl Wasm {
     fn create_fun(
         &self,
         ctx: &mut Context,
-        arg_types: &Vec<Type>,
-        arg_names: &Vec<String>,
+        arg_types: &[Type],
+        arg_names: &[String],
         body: &Expression,
     ) -> Result<Function> {
         let mut local_map = HashMap::with_capacity(arg_names.len() + 2);
@@ -148,7 +148,7 @@ impl Wasm {
     fn receive_ext(&mut self,
                    ctx: &mut Context,
                    mod_name: &str,
-                   defs: &Vec<ExtDef>,
+                   defs: &[ExtDef],
     ) -> Result<()> {
         for def in defs {
             let typ = &def.typ;
@@ -188,18 +188,18 @@ impl Wasm {
             }
             Expression::Local(name, ..) => {
                 f.instruction(Instruction::LocalGet(local_map.get(name)
-                    .expect("local name exists").0.clone()));
+                    .expect("local name exists").0));
             }
             Expression::Global(name, ..) => {
-                f.instruction(Instruction::GlobalGet(ctx.global_idx_by_name.get(name)
-                    .expect("global name exists").clone()));
+                f.instruction(Instruction::GlobalGet(*ctx.global_idx_by_name.get(name)
+                    .expect("global name exists")));
             }
             Expression::Let((names, values, ..)) |
             Expression::Mut((names, values, ..)) => {
                 self.add_instructions(f, ctx, local_map, values)?;
                 names.iter().rev().for_each(|name| {
                     f.instruction(Instruction::LocalSet(local_map.get(name)
-                        .expect("local name exists").0.clone()));
+                        .expect("local name exists").0));
                 });
             }
             Expression::Set(ReAssignment {
@@ -209,11 +209,11 @@ impl Wasm {
                 self.add_instructions(f, ctx, local_map, values)?;
                 names.iter().rev().zip(globals.iter().rev()).for_each(|(name, is_global)| {
                     if *is_global {
-                        f.instruction(Instruction::GlobalSet(ctx.global_idx_by_name.get(name)
-                            .expect("global name exists").clone()));
+                        f.instruction(Instruction::GlobalSet(*ctx.global_idx_by_name.get(name)
+                            .expect("global name exists")));
                     } else {
                         f.instruction(Instruction::LocalSet(local_map.get(name)
-                            .expect("local name exists").0.clone()));
+                            .expect("local name exists").0));
                     }
                 });
             }
@@ -256,8 +256,8 @@ impl Wasm {
                 if *is_wasm_fun {
                     f.instruction(map_to_wasm_fun(name.as_ref(), typ)?);
                 } else {
-                    let idx = ctx.fun_idx_by_name.get(name)
-                        .expect("called function exists").clone();
+                    let idx = *ctx.fun_idx_by_name.get(name)
+                        .expect("called function exists");
                     f.instruction(Instruction::Call(idx));
                 }
             }
