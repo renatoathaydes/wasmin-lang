@@ -12,6 +12,24 @@ use wasmin::ast::TopLevelElement;
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
 use wasmin::wasm_parse;
+use ansi_term::Colour::{Red, Yellow};
+use ansi_term::Style;
+
+fn err_style() -> Style { Style::new().bold().fg(Red) }
+
+fn warn_style() -> Style { Style::new().bold().fg(Yellow) }
+
+macro_rules! exit_with_error {
+    ($code:literal, $template:literal, $($args:expr)*) => {{
+       stderr().lock().write_all(format!("{}", err_style().paint("error: ")).as_bytes())
+            .expect("cannot write to stderr");
+       stderr().lock().write_all(format!($template, $($args),*).as_bytes())
+            .expect("cannot write to stderr");
+       stderr().lock().write_all(b"\n")
+            .expect("cannot write to stderr");
+       exit($code);
+    }};
+}
 
 fn main() {
     let opts: CliOptions = CliOptions::from_args();
@@ -20,23 +38,19 @@ fn main() {
             match build(&output_format, input, output) {
                 Ok(_) => {}
                 Err(e) => {
-                    stderr().lock().write_all(format!("ERROR: {}", e).as_bytes())
-                        .expect("cannot write to stderr");
-                    exit(-1);
+                    exit_with_error!(1, "{}", e);
                 }
             }
         }
         CliOptions::Run => {
-            println!("ERROR: the 'run' sub-command is not supported yet!");
-            exit(-1);
+            exit_with_error!(2, "the '{}' sub-command is not supported yet!",
+                warn_style().paint("run"));
         }
         CliOptions::Parse { file, verbose } => {
             match wasm_parse::parse(file, verbose) {
                 Ok(_) => {}
                 Err(e) => {
-                    stderr().lock().write_all(format!("ERROR: {}", e).as_bytes())
-                        .expect("cannot write to stderr");
-                    exit(-1);
+                    exit_with_error!(1, "{}", e);
                 }
             }
         }

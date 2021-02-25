@@ -73,7 +73,8 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
     };
 
     if let Some(e) = expr {
-        parser.sink().send(e).expect("Wasmin Program Receiver Error");
+        // errors are reported by the other thread
+        let _ = parser.sink().send(e);
     }
 }
 

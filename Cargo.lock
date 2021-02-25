@@ -212,6 +212,7 @@ dependencies = [
 name = "wasmin"
 version = "0.1.0"
 dependencies = [
+ "ansi_term",
  "structopt",
  "wasm-encoder",
  "wasmparser",
