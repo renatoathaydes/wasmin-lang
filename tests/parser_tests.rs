@@ -3,7 +3,6 @@ use std::sync::mpsc::channel;
 
 use wasmin::{*};
 use wasmin::ast::{*};
-use wasmin::errors::WasminError;
 use wasmin::parse::new_parser;
 use wasmin::types::{Type::*};
 

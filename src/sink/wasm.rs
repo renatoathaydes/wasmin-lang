@@ -140,7 +140,8 @@ impl Wasm {
             }
             Ok(())
         } else {
-            self.tmp_error("Non-constant global variables are not supported yet.", (0, 0))
+            err_wasmin!(werr_unsupported_feature!(
+                "Non-constant global variables are not supported yet.", (0, 0)))
         }
     }
 
@@ -229,7 +230,7 @@ impl Wasm {
             }
             Expression::Loop { expr, error } => {
                 if let Some(e) = error {
-                    return self.tmp_error(&e.reason, e.pos);
+                    return err_wasmin!(e.clone().into())
                 }
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(&typ, ctx)));
@@ -261,18 +262,13 @@ impl Wasm {
                 }
             }
             Expression::FunCall { typ: Err(e), .. } => {
-                return self.tmp_error(e.reason.as_str(), e.pos);
+                return err_wasmin!(e.clone().into());
             }
             Expression::ExprError(e) => {
-                return self.tmp_error(e.reason.as_str(), e.pos);
+                return err_wasmin!(e.clone().into());
             }
         };
         Ok(())
-    }
-
-    // FIXME remove this, parser should already return the correct Error type later
-    fn tmp_error<T>(&self, msg: &str, pos: (usize, usize)) -> Result<T> {
-        err_wasmin!(werr_unsupported_feature!(msg, pos))
     }
 
     fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
@@ -311,8 +307,7 @@ impl Wasm {
                 let t = to_val_type(typ);
                 Ok((to_const(t, value), t))
             }
-            Expression::ExprError(e) =>
-                self.tmp_error(e.reason.as_str(), e.pos),
+            Expression::ExprError(e) => err_wasmin!(e.clone().into()),
             _ => err_wasmin!(werr_unsupported_feature!("only constants are currently supported to \
                     initialize globals", (0, 0)))
         }

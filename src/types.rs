@@ -1,4 +1,5 @@
 use std::fmt;
+use crate::errors::WasminError;
 
 pub const NO_ARGS_OR_RETURNS_FUN_TYPE: FunType = FunType { ins: vec![], outs: vec![] };
 
@@ -113,6 +114,12 @@ impl FunType {
 impl TypeError {
     pub fn get_type(&self) -> Vec<Type> {
         vec![Type::Error(self.clone())]
+    }
+}
+
+impl Into<WasminError> for TypeError {
+    fn into(self) -> WasminError {
+        werr_type!(self.reason, self.pos)
     }
 }
 
