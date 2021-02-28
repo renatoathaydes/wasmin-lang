@@ -1,4 +1,5 @@
-use std::io::{Read, stdin, stdout, Write, BufWriter};
+use std::error::Error;
+use std::io::{BufWriter, Read, stdin, stdout, Write};
 use std::io::stderr;
 use std::process::exit;
 use std::str::FromStr;
@@ -6,28 +7,28 @@ use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
+use ansi_term::Colour::{Red, Yellow};
+use ansi_term::Style;
 use structopt::{*};
 
 use wasmin::ast::TopLevelElement;
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
 use wasmin::wasm_parse;
-use ansi_term::Colour::{Red, Yellow};
-use ansi_term::Style;
 
 fn err_style() -> Style { Style::new().bold().fg(Red) }
 
 fn warn_style() -> Style { Style::new().bold().fg(Yellow) }
 
 macro_rules! exit_with_error {
-    ($code:literal, $template:literal, $($args:expr)*) => {{
+    ($code:literal, $template:literal, $($args:expr),*) => {{
        stderr().lock().write_all(format!("{}", err_style().paint("error: ")).as_bytes())
             .expect("cannot write to stderr");
        stderr().lock().write_all(format!($template, $($args),*).as_bytes())
             .expect("cannot write to stderr");
        stderr().lock().write_all(b"\n")
             .expect("cannot write to stderr");
-       exit($code);
+       exit($code)
     }};
 }
 
@@ -62,7 +63,9 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
 
     let input_file = input.clone();
     let parser_handle = thread::spawn(move || {
-        let text = read_program(input_file);
+        let text = read_program(input_file).unwrap_or_else(|e| {
+            exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e.to_string())
+        });
         let mut chars = text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
@@ -71,7 +74,9 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
     {
         let mut writer: Box<dyn Write> = if let Some(out) = output {
             let out_file = std::fs::File::create(out)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    format!("I/O write error [{:?}]: {}", e.kind(), e.to_string())
+                })?;
             let w = BufWriter::new(out_file);
             Box::new(w)
         } else {
@@ -119,17 +124,15 @@ fn push_to_sink<T>(
     sink.flush(writer, ctx).map_err(|e| e.to_string())
 }
 
-fn read_program(file: Option<String>) -> String {
+fn read_program(file: Option<String>) -> std::io::Result<String> {
     match file {
         Some(f) => {
             std::fs::read_to_string(&f)
-                .unwrap_or_else(|_| panic!("could not read program from file {}", f))
         }
         None => {
             let mut text = String::with_capacity(512);
-            stdin().lock().read_to_string(&mut text)
-                .expect("could not read program from stdin");
-            text
+            stdin().lock().read_to_string(&mut text)?;
+            Ok(text)
         }
     }
 }
