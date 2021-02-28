@@ -103,7 +103,7 @@ impl Expression {
             }
             Group(es) => {
                 let ignore_stack = if !es.is_empty() {
-                    if let Br(..) = get_last(es) { true } else { false }
+                    matches!(get_last(es), Br(..))
                 } else { false };
                 if !ignore_stack {
                     for expr in es {

@@ -12,13 +12,13 @@ pub(crate) fn remove_last<T>(vec: &mut Vec<T>) -> T {
     vec.remove(len - 1)
 }
 
-pub(crate) fn push_all<T: Clone>(source: &Vec<T>, dest: &mut Vec<T>) {
+pub(crate) fn push_all<T: Clone>(source: &[T], dest: &mut Vec<T>) {
     for element in source {
         dest.push(element.clone());
     }
 }
 
-pub(crate) fn get_last<T>(vec: &Vec<T>) -> &T {
+pub(crate) fn get_last<T>(vec: &[T]) -> &T {
     let len = vec.len();
     vec.get(len - 1).unwrap()
 }

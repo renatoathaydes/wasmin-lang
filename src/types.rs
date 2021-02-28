@@ -123,7 +123,7 @@ impl Into<WasminError> for TypeError {
     }
 }
 
-pub(crate) fn type_refs_to_string(types: &Vec<&Type>) -> String {
+pub(crate) fn type_refs_to_string(types: &[&Type]) -> String {
     if types.is_empty() { return "()".to_owned(); }
     let mut res = String::new();
     let max = types.len() - 1;
@@ -136,12 +136,12 @@ pub(crate) fn type_refs_to_string(types: &Vec<&Type>) -> String {
     res
 }
 
-pub(crate) fn types_to_string(types: &Vec<Type>) -> String {
-    let v = types.iter().collect();
+pub(crate) fn types_to_string(types: &[Type]) -> String {
+    let v: Vec<_> = types.iter().collect();
     type_refs_to_string(&v)
 }
 
-pub(crate) fn has_error(types: &Vec<Type>) -> bool {
+pub(crate) fn has_error(types: &[Type]) -> bool {
     types.iter().any(|t| t.is_error())
 }
 

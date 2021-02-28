@@ -41,10 +41,8 @@ impl Context {
     }
 
     fn index_of_breakable(&self) -> u32 {
-        let mut current: u32 = 0;
-        for is_breakable in self.block_levels.iter().rev() {
-            if *is_breakable { return current; }
-            current += 1;
+        for (idx, is_breakable) in self.block_levels.iter().rev().enumerate() {
+            if *is_breakable { return idx as u32; }
         }
         panic!("No breakable level found");
     }

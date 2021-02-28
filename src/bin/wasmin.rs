@@ -105,8 +105,8 @@ fn push_to_sink<T>(
 ) -> Result<(), String> {
     let mut ctx = {
         let mod_name = file.map(|n|
-            n[0..n.rfind(".").unwrap_or(n.len())].to_owned()
-        ).unwrap_or("std_module".to_owned());
+            n[0..n.rfind('.').unwrap_or_else(|| n.len())].to_owned()
+        ).unwrap_or_else(|| "std_module".to_owned());
 
         sink.start(mod_name, writer).map_err(|e| e.to_string())?
     };
@@ -123,7 +123,7 @@ fn read_program(file: Option<String>) -> String {
     match file {
         Some(f) => {
             std::fs::read_to_string(&f)
-                .expect(&format!("could not read program from file {}", f))
+                .unwrap_or_else(|_| panic!("could not read program from file {}", f))
         }
         None => {
             let mut text = String::with_capacity(512);

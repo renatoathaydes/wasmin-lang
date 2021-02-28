@@ -17,7 +17,7 @@ pub fn parse_ext(parser: &mut Parser) -> Result<(String, Vec<ExtDef>), ParserErr
     }
 }
 
-fn parse_defs(parser: &mut Parser, mod_name: &String) -> Result<Vec<ExtDef>, ParserError> {
+fn parse_defs(parser: &mut Parser, mod_name: &str) -> Result<Vec<ExtDef>, ParserError> {
     let mod_pos = parser.pos();
     parser.stack_mut().new_def_only_level();
     loop {
@@ -36,7 +36,7 @@ fn parse_defs(parser: &mut Parser, mod_name: &String) -> Result<Vec<ExtDef>, Par
     let ext_defs = defs.iter()
         .map(|(name, typ)| ExtDef { id: name.clone(), typ: typ.clone() })
         .collect();
-    parser.stack_mut().push_namespace(mod_name.clone(), defs)
+    parser.stack_mut().push_namespace(mod_name.to_owned(), defs)
         .map_err(|msg| ParserError { pos: mod_pos, msg })?;
     Ok(ext_defs)
 }

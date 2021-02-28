@@ -30,7 +30,7 @@ impl Stack {
         s
     }
 
-    fn get_entry(&mut self, id: &String) -> Option<&mut StackEntry> {
+    fn get_entry(&mut self, id: &str) -> Option<&mut StackEntry> {
         for symbols in self.items.iter_mut().rev() {
             let value = symbols.get_mut(id);
             if value.is_some() { return value; }
@@ -130,7 +130,7 @@ impl Stack {
     }
 
     pub fn get_def(&self, id: &str) -> Option<&Type> {
-        self.items.get(self.items.len() - 1).and_then(|entries|
+        self.items.last().and_then(|entries|
             entries.get(id).filter(|e| e.is_def).map(|e| &e.typ))
     }
 

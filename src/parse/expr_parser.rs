@@ -98,13 +98,13 @@ fn skip_word_or_push(
     state: &mut ParsingState,
     skip_word: &'static str,
 ) -> bool {
-    if skip_word != "" {
+    if !skip_word.is_empty() {
         if let Some(word) = parser.parse_word() {
             if word == skip_word { return false; }
             return consume_expr_part(parser, state, word);
         }
     }
-    return false;
+    false
 }
 
 fn consume_expr_parts(parser: &mut Parser, state: &mut ParsingState) {
@@ -432,7 +432,7 @@ fn select_fun(
     })
 }
 
-fn fun_can_be_called(typ: &FunType, stack: &Vec<Type>) -> bool {
+fn fun_can_be_called(typ: &FunType, stack: &[Type]) -> bool {
     typ.ins.len() <= stack.len() && typ.ins.iter().zip(stack.iter())
         .all(|(t, s)| s.is_assignable_to(t))
 }

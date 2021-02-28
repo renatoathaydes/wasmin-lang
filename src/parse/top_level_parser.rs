@@ -15,7 +15,7 @@ pub fn parse(parser: &mut Parser) {
 
 fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
     let start_pos = parser.pos();
-    let expr = match word.as_ref() {
+    let expr = match word {
         "pub" if !is_pub => {
             if let Some(w) = parser.parse_word() {
                 return parse_top(parser, &w, true);
@@ -39,7 +39,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             match parser.parse_assignment(word.starts_with('m')) {
                 Ok(items) => {
                     let visibility = if is_pub { Public } else { Private };
-                    if word.starts_with("m") {
+                    if word.starts_with('m') {
                         Some(TopLevelElement::Mut(items, visibility, comment))
                     } else {
                         Some(TopLevelElement::Let(items, visibility, comment))

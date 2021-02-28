@@ -31,11 +31,9 @@ pub fn parse_buf(buf: &[u8], verbose: bool) -> Result<(), BinaryReaderError> {
             }
             Payload::TypeSection(t) => {
                 println!("------ Type Section");
-                let mut i = 0;
-                for typ in t {
+                for (i, typ) in t.into_iter().enumerate() {
                     let typ = typ?;
                     println!("  [{}] {:?}", i, typ);
-                    i += 1;
                 }
             }
             Payload::FunctionSection(f) => {
@@ -68,11 +66,9 @@ pub fn parse_buf(buf: &[u8], verbose: bool) -> Result<(), BinaryReaderError> {
             }
             Payload::GlobalSection(g) => {
                 println!("------ Globals Section");
-                let mut i = 0;
-                for global in g {
+                for (i, global) in g.into_iter().enumerate() {
                     let global = global?;
                     println!("  [{}] {:?} = {:?}", i, global.ty, global.init_expr.get_binary_reader().read_operator()?);
-                    i += 1;
                 }
             }
             Payload::End => {

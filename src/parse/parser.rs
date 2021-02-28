@@ -91,9 +91,9 @@ impl GroupingState {
 impl Display for GroupingState {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         for item in &self.items {
-            let str = match item {
-                &GroupingSymbol::Parens => "(",
-                &GroupingSymbol::SquareBracket => "[",
+            let str = match *item {
+                GroupingSymbol::Parens => "(",
+                GroupingSymbol::SquareBracket => "[",
             };
             f.write_str(str)?;
         }

@@ -26,10 +26,7 @@ pub(crate) enum ExprPart {
 
 impl ExprPart {
     pub(crate) fn is_expression(&self) -> bool {
-        match self {
-            ExprPart::Expr(_) => true,
-            _ => false,
-        }
+        matches!(self, ExprPart::Expr(_))
     }
 }
 

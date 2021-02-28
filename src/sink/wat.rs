@@ -86,7 +86,7 @@ impl Wat {
         &mut self,
         w: &mut Box<dyn Write>,
         assignment: &Assignment,
-        is_global: &Vec<bool>,
+        is_global: &[bool],
     ) -> Result<()> {
         let (names, value, type_conversion) = assignment;
         self.write_expr(w, value.as_ref())?;
@@ -221,7 +221,7 @@ impl Wat {
                 Ok(())
             }
             Expression::Let(assign) | Expression::Mut(assign) => {
-                let globals = repeat(false).take(assign.0.len()).collect();
+                let globals: Vec<_> = repeat(false).take(assign.0.len()).collect();
                 self.write_local_assignment(&mut w, &assign, &globals)
             }
             Expression::Set(ReAssignment { assignment, globals }) => {
@@ -329,8 +329,7 @@ impl Wat {
             let type_to_write = match def.typ {
                 Type::Empty | Type::WasmFn(_) => None,
                 Type::Fn(fn_types) => {
-                    let mut i = 0;
-                    for fn_type in fn_types {
+                    for (i, fn_type) in fn_types.into_iter().enumerate() {
                         let name = if i == 0 {
                             def.id.clone()
                         } else {
@@ -341,7 +340,6 @@ impl Wat {
                         self.write_fun(w, &format!("{}.{}", mod_name, name),
                                        None, None, fn_type, Visibility::Private)?;
                         w.write_all(b")")?;
-                        i += 1;
                     }
                     None
                 }
