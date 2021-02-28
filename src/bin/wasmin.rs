@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::io::{BufWriter, Read, stdin, stdout, Write};
 use std::io::stderr;
 use std::process::exit;
@@ -12,6 +11,7 @@ use ansi_term::Style;
 use structopt::{*};
 
 use wasmin::ast::TopLevelElement;
+use wasmin::errors::{Error as WError, Result as WResult};
 use wasmin::parse::new_parser;
 use wasmin::sink::{DebugSink, Wasm, WasminSink, Wat};
 use wasmin::wasm_parse;
@@ -61,12 +61,13 @@ fn main() {
 fn build(output_format: &FormatType, input: Option<String>, output: Option<String>) -> Result<(), String> {
     let (sender, rcvr) = mpsc::channel();
 
-    let input_file = input.clone();
+    let text = read_program(&input).unwrap_or_else(|e| {
+        exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e.to_string())
+    });
+    let parser_text = text.clone();
+
     let parser_handle = thread::spawn(move || {
-        let text = read_program(input_file).unwrap_or_else(|e| {
-            exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e.to_string())
-        });
-        let mut chars = text.chars();
+        let mut chars = parser_text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
     });
@@ -85,13 +86,13 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
 
         match output_format {
             FormatType::DEBUG => {
-                push_to_sink(DebugSink::default(), input, rcvr, &mut writer)?;
+                push_to_sink(DebugSink::default(), input, &text, rcvr, &mut writer)?;
             }
             FormatType::WAT => {
-                push_to_sink(Wat::default(), input, rcvr, &mut writer)?;
+                push_to_sink(Wat::default(), input, &text, rcvr, &mut writer)?;
             }
             FormatType::WASM => {
-                push_to_sink(Wasm::default(), input, rcvr, &mut writer)?;
+                push_to_sink(Wasm::default(), input, &text, rcvr, &mut writer)?;
             }
         };
 
@@ -103,31 +104,49 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
 }
 
 fn push_to_sink<T>(
+    sink: impl WasminSink<T>,
+    file: Option<String>,
+    text: &str,
+    rcvr: Receiver<TopLevelElement>,
+    writer: &mut Box<dyn Write>,
+) -> Result<(), String> {
+    push_to_sink_internal(sink, file, rcvr, writer).map_err(|e| {
+        match e {
+            WError::IO(e) => e.to_string(),
+            WError::Wasmin(werr) => {
+                let relevant_text = werr.relevant_text(text);
+                format!("{}\n\n{}", werr, relevant_text)
+            }
+            WError::Validation(e) => e.to_string(),
+        }
+    })
+}
+
+fn push_to_sink_internal<T>(
     mut sink: impl WasminSink<T>,
     file: Option<String>,
     rcvr: Receiver<TopLevelElement>,
     writer: &mut Box<dyn Write>,
-) -> Result<(), String> {
+) -> WResult<()> {
     let mut ctx = {
         let mod_name = file.map(|n|
             n[0..n.rfind('.').unwrap_or_else(|| n.len())].to_owned()
         ).unwrap_or_else(|| "std_module".to_owned());
 
-        sink.start(mod_name, writer).map_err(|e| e.to_string())?
+        sink.start(mod_name, writer)?
     };
 
     for expr in rcvr {
-        sink.receive(expr, writer, &mut ctx)
-            .map_err(|e| e.to_string())?
+        sink.receive(expr, writer, &mut ctx)?
     }
 
-    sink.flush(writer, ctx).map_err(|e| e.to_string())
+    sink.flush(writer, ctx)
 }
 
-fn read_program(file: Option<String>) -> std::io::Result<String> {
+fn read_program(file: &Option<String>) -> std::io::Result<String> {
     match file {
         Some(f) => {
-            std::fs::read_to_string(&f)
+            std::fs::read_to_string(f)
         }
         None => {
             let mut text = String::with_capacity(512);

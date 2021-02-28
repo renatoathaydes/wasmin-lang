@@ -114,6 +114,24 @@ pub enum WasminError {
     },
 }
 
+impl WasminError {
+    pub fn pos(&self) -> &ErrorPosition {
+        match self {
+            WasminError::SyntaxError { pos, .. } => pos,
+            WasminError::TypeError { pos, .. } => pos,
+            WasminError::UnsupportedFeatureError { pos, .. } => pos,
+        }
+    }
+
+    pub fn relevant_text(&self, text: &str) -> String {
+        let pos = self.pos();
+        let line = text.lines().skip(pos.start.0).next().unwrap();
+        let index = format!("[{}, {}]", pos.start.0, pos.start.1);
+        let pointer_line = " ".repeat(pos.start.1 + index.len() + 2);
+        format!("{} {}\n{}^\n", index, line, pointer_line)
+    }
+}
+
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
