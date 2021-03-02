@@ -36,12 +36,7 @@ fn main() {
     let opts: CliOptions = CliOptions::from_args();
     match opts {
         CliOptions::Build { output_format, input, output } => {
-            match build(&output_format, input, output) {
-                Ok(_) => {}
-                Err(e) => {
-                    exit_with_error!(1, "{}", e);
-                }
-            }
+            build(&output_format, input, output);
         }
         CliOptions::Run => {
             exit_with_error!(2, "the '{}' sub-command is not supported yet!",
@@ -58,11 +53,11 @@ fn main() {
     }
 }
 
-fn build(output_format: &FormatType, input: Option<String>, output: Option<String>) -> Result<(), String> {
+fn build(output_format: &FormatType, input: Option<String>, output: Option<String>) {
     let (sender, rcvr) = mpsc::channel();
 
     let text = read_program(&input).unwrap_or_else(|e| {
-        exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e.to_string())
+        exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e)
     });
     let parser_text = text.clone();
 
@@ -75,9 +70,9 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
     {
         let mut writer: Box<dyn Write> = if let Some(out) = output {
             let out_file = std::fs::File::create(out)
-                .map_err(|e| {
-                    format!("I/O write error [{:?}]: {}", e.kind(), e.to_string())
-                })?;
+                .unwrap_or_else(|e| {
+                    exit_with_error!(2, "I/O write error [{:?}]: {}", e.kind(), e)
+                });
             let w = BufWriter::new(out_file);
             Box::new(w)
         } else {
@@ -86,46 +81,46 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
 
         match output_format {
             FormatType::DEBUG => {
-                push_to_sink(DebugSink::default(), input, &text, rcvr, &mut writer)?;
+                connect_sink_to_receiver(DebugSink::default(), rcvr, &text, input, &mut writer);
             }
             FormatType::WAT => {
-                push_to_sink(Wat::default(), input, &text, rcvr, &mut writer)?;
+                connect_sink_to_receiver(Wat::default(), rcvr, &text, input, &mut writer);
             }
             FormatType::WASM => {
-                push_to_sink(Wasm::default(), input, &text, rcvr, &mut writer)?;
+                connect_sink_to_receiver(Wasm::default(), rcvr, &text, input, &mut writer);
             }
         };
 
-        writer.flush().map_err(|e| e.to_string())?;
+        writer.flush().unwrap_or_else(|e|
+            exit_with_error!(2, "I/O write error [{:?}]: {}", e.kind(), e));
     }
 
     parser_handle.join().expect("ERROR: parser thread error.");
-    Ok(())
 }
 
-fn push_to_sink<T>(
+fn connect_sink_to_receiver<T>(
     sink: impl WasminSink<T>,
-    file: Option<String>,
-    text: &str,
     rcvr: Receiver<TopLevelElement>,
+    text: &str,
+    file: Option<String>,
     writer: &mut Box<dyn Write>,
-) -> Result<(), String> {
-    push_to_sink_internal(sink, file, rcvr, writer).map_err(|e| {
+) {
+    sink_to_receiver(sink, rcvr, file, writer).map_err(|e| {
         match e {
-            WError::IO(e) => e.to_string(),
+            WError::IO(e) => exit_with_error!(3, "{}", e),
             WError::Wasmin(werr) => {
                 let relevant_text = werr.relevant_text(text);
-                format!("{}\n\n{}", werr, relevant_text)
+                exit_with_error!(1, "{}\n\n{}", werr, relevant_text)
             }
-            WError::Validation(e) => e.to_string(),
+            WError::Validation(e) => exit_with_error!(1, "{}", e),
         }
-    })
+    });
 }
 
-fn push_to_sink_internal<T>(
+fn sink_to_receiver<T>(
     mut sink: impl WasminSink<T>,
-    file: Option<String>,
     rcvr: Receiver<TopLevelElement>,
+    file: Option<String>,
     writer: &mut Box<dyn Write>,
 ) -> WResult<()> {
     let mut ctx = {
