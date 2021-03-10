@@ -1,9 +1,10 @@
 use crate::ast::Function;
+use crate::errors::WasminError;
 use crate::parse::Parser;
 use crate::parse::parser::ParserError;
-use crate::types::{FunType, Type, Type::Fn, types_to_string, NO_ARGS_OR_RETURNS_FUN_TYPE};
+use crate::types::{FunType, NO_ARGS_OR_RETURNS_FUN_TYPE, Type, Type::Fn, types_to_string};
 
-pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
+pub fn parse_fun(parser: &mut Parser) -> Result<Function, WasminError> {
     let mut left = Vec::new();
     let pos = parser.pos();
     while let Some(item) = parser.parse_word() {
@@ -12,15 +13,18 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
     parser.skip_spaces();
     match parser.curr_char() {
         Some('=') => parser.next(),
-        Some(c) => return Err(parser.error_unexpected_char(
-            c, "expected function assignment '=' character").into()),
-        None => return Err(ParserError { msg: "unexpected EOF".to_owned(), pos })
+        Some(c) => return Err(werr_syntax!(
+            format!("expected function assignment '=' character, got '{}'", c),
+            parser.pos())),
+        None => return Err(werr_syntax!("expected function assignment '=' character, got EOF", pos))
     };
     if left.is_empty() {
         let err = if let Some(c) = parser.curr_char() {
-            parser.error_unexpected_char(c, "expected function name").into()
+            werr_syntax!(
+                format!("expected function name, got '{}'", c),
+                parser.pos())
         } else {
-            ParserError { msg: "unexpected EOF".to_owned(), pos }
+            werr_syntax!("expected function name, got EOF", pos)
         };
         return Err(err);
     }
@@ -29,6 +33,7 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
         Some(Fn(types)) => {
             parser.stack_mut().new_level();
             let bind_result = bind_args(parser, &types, &left);
+            let args_end_pos = parser.pos();
             let body = parser.parse_expr();
             parser.stack_mut().drop_level();
             match bind_result {
@@ -40,30 +45,29 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
                         if typ.outs.len() == actual_type.len() {
                             Ok((name, left, body, typ.clone()))
                         } else {
-                            Err(ParserError {
-                                msg: format!("fun '{}' should have type(s) {} \
-                                but its body has type {}", name, typ, types_to_string(&actual_type)),
-                                pos,
-                            })
+                            Err(werr_type!(
+                                    format!("fun '{}' should have type(s) {} \
+                                        but its body has type {}", name, typ,
+                                         types_to_string(&actual_type)),
+                                pos, parser.pos()))
                         }
                     } else {
                         let len = typ.ins.len();
                         let s = if len == 1 { "" } else { "s" };
-                        Err(ParserError {
-                            msg: format!("fun '{}' should have {} arguments{} \
+                        Err(werr_type!(
+                            format!("fun '{}' should have {} arguments{} \
                                 but it has {}", name, len, s, left.len()),
-                            pos,
-                        })
+                            pos, parser.pos()))
                     }
                 }
-                Err(e) => Err(ParserError { msg: e, pos }),
+                Err(e) => Err(werr_type!(e, pos, args_end_pos))
             }
         }
         Some(typ) => {
             parser.stack_mut().new_level();
             let _ = parser.parse_expr();
             parser.stack_mut().drop_level();
-            Err(ParserError { msg: format!("fun '{}' cannot implement type '{}'", name, typ), pos })
+            Err(werr_type!(format!("fun '{}' cannot implement type '{}'", name, typ), pos))
         }
         None if left.is_empty() => {
             parser.stack_mut().new_level();
@@ -73,18 +77,19 @@ pub fn parse_fun(parser: &mut Parser) -> Result<Function, ParserError> {
             if typ.is_empty() {
                 Ok((name, left, body, NO_ARGS_OR_RETURNS_FUN_TYPE))
             } else {
-                Err(ParserError {
-                    msg: format!("fun '{}' missing def (body returns a value of type '{}', \
-                    hence the return type is mandatory)", name, types_to_string(&typ)),
-                    pos,
-                })
+                Err(werr_type!(
+                    format!("fun '{}' missing def (body returns a value of type '{}', \
+                        hence the return type is mandatory)", name, types_to_string(&typ)),
+                    pos))
             }
         }
         None => {
             parser.stack_mut().new_level();
             let _ = parser.parse_expr();
             parser.stack_mut().drop_level();
-            Err(ParserError { msg: format!("fun '{}' missing def (arg types cannot be inferred)", name), pos })
+            Err(werr_type!(
+                format!("fun '{}' missing def (arg types cannot be inferred)", name),
+                pos))
         }
     }
 }

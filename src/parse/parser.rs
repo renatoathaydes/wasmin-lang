@@ -5,6 +5,7 @@ use std::sync::mpsc::Sender;
 
 use crate::ast::{Assignment, Comment, Expression, ExtDef, Function, TopLevelElement};
 use crate::ast::Expression::ExprError;
+use crate::errors::WasminError;
 use crate::parse::{expr_parser, ext_parser, fun_parser, top_level_parser, type_parser};
 pub use crate::parse::stack::{*};
 use crate::types::{*};
@@ -19,12 +20,6 @@ impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "[{}, {}]: {}", self.pos.0, self.pos.1, self.msg)?;
         Ok(())
-    }
-}
-
-impl Into<TypeError> for ParserError {
-    fn into(self) -> TypeError {
-        TypeError { reason: self.msg, pos: self.pos }
     }
 }
 
@@ -140,14 +135,6 @@ impl Parser<'_> {
         &mut self.stack
     }
 
-    pub fn error(&self, reason: &str) -> TypeError {
-        TypeError { reason: reason.to_string(), pos: self.pos() }
-    }
-
-    pub fn error_unexpected_char(&self, c: char, reason: &str) -> TypeError {
-        self.error(&format!("unexpected char: '{}' ({})", c, reason))
-    }
-
     fn next_after_comment(&mut self) -> Option<char> {
         let next = self.chars.next();
         let end_char = if let Some(c) = next {
@@ -236,21 +223,25 @@ impl Parser<'_> {
         }
     }
 
-    pub fn parse_def(&mut self) -> Result<(), ParserError> {
+    pub fn parse_def(&mut self) -> Result<(), WasminError> {
+        let start_pos = self.pos();
         if let Some(id) = self.parse_word() {
             let typ = self.parse_type();
             if let Err(msg) = self.stack.push(id, typ, true, false) {
-                self.parser_err(msg)
+                Err(werr_syntax!(msg, start_pos, self.pos()))
             } else {
-                Result::Ok(())
+                Ok(())
             }
         } else {
-            let curr = self.curr_char.map_or("EOF".to_string(), |c| { format!("'{}'", c) });
-            self.parser_err(format!("Expected identifier after def, but got {}", curr))
+            let curr = self.curr_char.map_or("EOF".to_string(),
+                                             |c| { format!("'{}'", c) });
+            Err(werr_syntax!(
+                format!("Expected identifier after def, but got {}", curr),
+                self.pos()))
         }
     }
 
-    pub fn parse_assignment(&mut self, is_mut: bool) -> Result<Assignment, ParserError> {
+    pub fn parse_assignment(&mut self, is_mut: bool) -> Result<Assignment, WasminError> {
         expr_parser::parse_assignment(self, is_mut)
     }
 
@@ -258,15 +249,15 @@ impl Parser<'_> {
         type_parser::parse_type(self)
     }
 
-    pub fn parse_fun(&mut self) -> Result<Function, ParserError> {
+    pub fn parse_fun(&mut self) -> Result<Function, WasminError> {
         fun_parser::parse_fun(self)
     }
 
     pub fn parse_expr(&mut self) -> Expression {
-        expr_parser::parse_expr(self).unwrap_or_else(|e| ExprError(e.into()))
+        expr_parser::parse_expr(self).unwrap_or_else(|e| ExprError(e))
     }
 
-    pub fn parse_ext(&mut self) -> Result<(String, Vec<ExtDef>), ParserError> {
+    pub fn parse_ext(&mut self) -> Result<(String, Vec<ExtDef>), WasminError> {
         ext_parser::parse_ext(self)
     }
 

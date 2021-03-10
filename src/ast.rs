@@ -1,8 +1,11 @@
+use std::rc::Rc;
+
 use Expression::{*};
 
-use crate::types::{FunType, Type, TypeError};
-use crate::vec_utils::{get_last, push_all, remove_last, remove_last_n};
 use crate::errors::WasminError;
+use crate::errors::WasminError::TypeError;
+use crate::types::{FunType, Type};
+use crate::vec_utils::{get_last, push_all, remove_last, remove_last_n};
 
 /// Assignment defines one or more Wasmin assignments.
 ///
@@ -54,16 +57,16 @@ pub enum Expression {
     Mut(Assignment),
     Set(ReAssignment),
     If(Box<Expression>, Box<Expression>, Box<Expression>),
-    Loop { expr: Box<Expression>, error: Option<TypeError> },
+    Loop { expr: Box<Expression>, error: Option<WasminError> },
     Br(Break),
     Group(Vec<Expression>),
     FunCall {
         name: String,
-        typ: Result<FunType, TypeError>,
+        typ: Result<FunType, WasminError>,
         fun_index: usize,
         is_wasm_fun: bool,
     },
-    ExprError(TypeError),
+    ExprError(WasminError),
 }
 
 /// Visibility determines the level of visibility of a Wasmin program element.
@@ -117,7 +120,8 @@ impl Expression {
                     push_all(&t.outs, result);
                 }
                 Err(e) => {
-                    push_all(&e.get_type(), result)
+                    let t = Rc::new(Type::Error(e.clone()));
+                    push_all(&t, result)
                 }
             },
             If(_, then, ..) => {

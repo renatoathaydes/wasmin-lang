@@ -1,4 +1,5 @@
 use std::fmt;
+
 use crate::errors::WasminError;
 
 pub const NO_ARGS_OR_RETURNS_FUN_TYPE: FunType = FunType { ins: vec![], outs: vec![] };
@@ -10,12 +11,6 @@ pub struct FunType {
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct TypeError {
-    pub reason: String,
-    pub pos: (usize, usize),
-}
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
     I64,
     I32,
@@ -24,7 +19,7 @@ pub enum Type {
     Empty,
     Fn(Vec<FunType>),
     WasmFn(Vec<FunType>),
-    Error(TypeError),
+    Error(WasminError),
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
@@ -97,8 +92,8 @@ impl fmt::Display for Type {
                     .collect::<Vec<_>>().join(" | ");
                 write!(f, "{})", text)?;
             }
-            Type::Error(TypeError { reason, pos, .. }) => {
-                write!(f, "ERROR([{}, {}] {})", pos.0, pos.1, reason)?
+            Type::Error(err) => {
+                write!(f, "ERROR({})", err.cause())?
             }
         };
         Ok(())
@@ -108,18 +103,6 @@ impl fmt::Display for Type {
 impl FunType {
     pub fn get_type(&self) -> Vec<Type> {
         self.outs.clone()
-    }
-}
-
-impl TypeError {
-    pub fn get_type(&self) -> Vec<Type> {
-        vec![Type::Error(self.clone())]
-    }
-}
-
-impl Into<WasminError> for TypeError {
-    fn into(self) -> WasminError {
-        werr_type!(self.reason, self.pos)
     }
 }
 
@@ -192,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_type_is_error() {
-        let error = || { Error(TypeError { pos: (0, 0), reason: "".to_string() }) };
+        let error = || { Error(werr_type!("", (0, 0))) };
         assert_eq!(I32.is_error(), false);
         assert_eq!(I64.is_error(), false);
         assert_eq!(F32.is_error(), false);

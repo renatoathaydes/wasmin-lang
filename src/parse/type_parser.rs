@@ -8,27 +8,34 @@ pub fn parse_type(parser: &mut Parser) -> Type {
     parser.skip_spaces();
     if let Some(';') = parser.curr_char() { parser.next(); }
     if state.is_empty() { typ } else {
-        Type::Error(parser.error(&format!("Unclosed '{}' in type definition", state)))
+        Type::Error(werr_syntax!(
+            format!("Unclosed '{}' in type definition", state),
+            parser.pos()))
     }
 }
 
 fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
+    let start_pos = parser.pos();
     if let Some(word) = parser.parse_word() {
         match word.as_ref() {
             "i32" => Type::I32,
             "f32" => Type::F32,
             "i64" => Type::I64,
             "f64" => Type::F64,
-            _ => Type::Error(parser.error(&format!("type does not exist: {}", word.clone())))
+            _ => Type::Error(werr_type!(
+                format!("type does not exist: {}", word),
+                start_pos, parser.pos()))
         }
     } else if let Some('[') = parser.curr_char() {
         parser.next();
         state.enter(GroupingSymbol::SquareBracket);
         parse_fn_type(parser, state)
     } else if let Some(c) = parser.curr_char() {
-        Type::Error(parser.error(&format!("unexpected character: '{}'", c)))
+        Type::Error(werr_syntax!(
+            format!("unexpected character '{}', expected type", c),
+            parser.pos()))
     } else {
-        Type::Error(parser.error("EOF reached (type was expected)"))
+        Type::Error(werr_syntax!("EOF reached (type was expected)", parser.pos()))
     }
 }
 

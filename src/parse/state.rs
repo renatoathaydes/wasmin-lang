@@ -19,9 +19,9 @@ struct BlockInfo {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub(crate) enum ExprPart {
-    Arg(String),
-    Fun(String),
-    Expr(Expression),
+    Arg(String, (usize, usize)),
+    Fun(String, (usize, usize)),
+    Expr(Expression, (usize, usize)),
 }
 
 impl ExprPart {

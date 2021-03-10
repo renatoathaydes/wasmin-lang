@@ -123,6 +123,14 @@ impl WasminError {
         }
     }
 
+    pub fn cause(&self) -> &str {
+        match self {
+            WasminError::SyntaxError { cause, .. } => cause,
+            WasminError::TypeError { cause, .. } => cause,
+            WasminError::UnsupportedFeatureError { cause, .. } => cause,
+        }
+    }
+
     pub fn relevant_text(&self, text: &str) -> String {
         let pos = self.pos();
         let line = text.lines().skip(pos.start.0).next().unwrap();
