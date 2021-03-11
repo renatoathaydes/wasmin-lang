@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::mpsc::channel;
 
-use wasmin::{*};
-use wasmin::ast::{*};
+use wasmin::ast::*;
 use wasmin::parse::new_parser;
-use wasmin::types::{Type::*};
+use wasmin::types::Type::*;
+use wasmin::*;
 
 macro_rules! test_parser {
     ($program:literal ; $($ns:literal: $( $id:literal => $ns_expr:expr ),+ )* ; $($e:expr),+) => {{
@@ -43,17 +43,23 @@ fn test_let() {
 #[test]
 fn test_multi_let() {
     test_parser!("let x, y, z = 1, 0.1, 10i64; pub let PI, E = 3.14, 2.16f64";;
-        top_let!("x", "y", "z" =
-            expr_const!("1" I32), expr_const!("0.1" F32), expr_const!("10i64" I64)),
-            top_let!(p "PI", "E" = expr_const!("3.14" F32), expr_const!("2.16f64" F64))
-        );
+    top_let!("x", "y", "z" =
+        expr_const!("1" I32), expr_const!("0.1" F32), expr_const!("10i64" I64)),
+        top_let!(p "PI", "E" = expr_const!("3.14" F32), expr_const!("2.16f64" F64))
+    );
 }
 
 #[test]
 fn test_def_then_let() {
-    let bar = TopLevelElement::Let((vec!["bar".to_owned()],
-                                    Box::new(expr_const!("3" I32)), vec![Some(I64)]),
-                                   Visibility::Private, None);
+    let bar = TopLevelElement::Let(
+        (
+            vec!["bar".to_owned()],
+            Box::new(expr_const!("3" I32)),
+            vec![Some(I64)],
+        ),
+        Visibility::Private,
+        None,
+    );
 
     test_parser!("def foo i32; let foo = 0; def bar i64; let bar = 3";;
         top_let!("foo" = expr_const!("0" I32)),
@@ -175,7 +181,8 @@ fn test_ext_module() {
             warn [i32 i32];
             a_number i32;
         }
-    ".chars();
+    "
+        .chars();
     let (sender, rcv) = channel();
 
     // let the sender "drop" so the channel is closed

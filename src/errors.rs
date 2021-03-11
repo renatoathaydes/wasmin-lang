@@ -1,11 +1,9 @@
-use crate::parse::Parser;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[macro_export]
 macro_rules! err_wasmin {
     ($e:expr) => {{
-        use crate::errors::{Error};
+        use crate::errors::Error;
         Err(Error::Wasmin($e))
     }};
 }
@@ -13,7 +11,7 @@ macro_rules! err_wasmin {
 #[macro_export]
 macro_rules! err_io {
     ($e:expr) => {{
-        use crate::errors::{Error};
+        use crate::errors::Error;
         Err(Error::IO($e))
     }};
 }
@@ -21,18 +19,21 @@ macro_rules! err_io {
 #[macro_export]
 macro_rules! werr_syntax {
     ($cause:expr, $start:expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         let end = $start.clone();
         WasminError::SyntaxError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end }
+            pos: ErrorPosition { start: $start, end },
         }
     }};
     ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         WasminError::SyntaxError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end: $end }
+            pos: ErrorPosition {
+                start: $start,
+                end: $end,
+            },
         }
     }};
 }
@@ -40,18 +41,21 @@ macro_rules! werr_syntax {
 #[macro_export]
 macro_rules! werr_type {
     ($cause:expr, $start:expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         let end = $start.clone();
         WasminError::TypeError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end }
+            pos: ErrorPosition { start: $start, end },
         }
     }};
     ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         WasminError::TypeError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end: $end }
+            pos: ErrorPosition {
+                start: $start,
+                end: $end,
+            },
         }
     }};
 }
@@ -59,18 +63,21 @@ macro_rules! werr_type {
 #[macro_export]
 macro_rules! werr_unsupported_feature {
     ($cause:expr, $start:expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         let end = $start.clone();
         WasminError::UnsupportedFeatureError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end }
+            pos: ErrorPosition { start: $start, end },
         }
     }};
     ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{WasminError, ErrorPosition};
+        use crate::errors::{ErrorPosition, WasminError};
         WasminError::UnsupportedFeatureError {
             cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end: $end }
+            pos: ErrorPosition {
+                start: $start,
+                end: $end,
+            },
         }
     }};
 }
@@ -96,22 +103,13 @@ pub enum Error {
 #[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
 pub enum WasminError {
     /// Wasmin program contains a syntax error.
-    SyntaxError {
-        cause: String,
-        pos: ErrorPosition,
-    },
+    SyntaxError { cause: String, pos: ErrorPosition },
 
     /// Wasmin program contains a type error.
-    TypeError {
-        cause: String,
-        pos: ErrorPosition,
-    },
+    TypeError { cause: String, pos: ErrorPosition },
 
     /// Wasmin program is using an unsupported feature.
-    UnsupportedFeatureError {
-        cause: String,
-        pos: ErrorPosition,
-    },
+    UnsupportedFeatureError { cause: String, pos: ErrorPosition },
 }
 
 impl WasminError {
@@ -144,8 +142,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::IO(e) => e.source(),
-            Error::Validation(_) |
-            Error::Wasmin(_) => None
+            Error::Validation(_) | Error::Wasmin(_) => None,
         }
     }
 }
@@ -192,23 +189,4 @@ impl std::fmt::Display for WasminError {
             }
         }
     }
-}
-
-pub fn unexpected_char(parser: &Parser, message: &str) -> WasminError {
-    let msg = if let Some(ch) = parser.curr_char() {
-        format!("unexpected character: '{}' - {}", ch, message)
-    } else {
-        format!("unexpected EOF - {}", message)
-    };
-    werr_syntax!(msg, parser.pos())
-}
-
-pub fn unexpected_word(
-    word: &str,
-    start_pos: (usize, usize),
-    parser: &Parser,
-    message: &str,
-) -> WasminError {
-    let msg = format!("unexpected word: '{}' - {}", word, message);
-    werr_syntax!(msg, start_pos, parser.pos())
 }

@@ -7,27 +7,8 @@ use crate::ast::{Assignment, Comment, Expression, ExtDef, Function, TopLevelElem
 use crate::ast::Expression::ExprError;
 use crate::errors::WasminError;
 use crate::parse::{expr_parser, ext_parser, fun_parser, top_level_parser, type_parser};
-pub use crate::parse::stack::{*};
-use crate::types::{*};
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct ParserError {
-    pub pos: (usize, usize),
-    pub msg: String,
-}
-
-impl Display for ParserError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "[{}, {}]: {}", self.pos.0, self.pos.1, self.msg)?;
-        Ok(())
-    }
-}
-
-impl From<TypeError> for ParserError {
-    fn from(e: TypeError) -> Self {
-        ParserError { msg: format!("(type error) {}", e.reason), pos: e.pos }
-    }
-}
+pub use crate::parse::stack::*;
+use crate::types::*;
 
 #[derive(Debug)]
 pub struct Parser<'s> {
@@ -50,19 +31,27 @@ pub enum GroupingSymbol {
 impl Display for GroupingSymbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            GroupingSymbol::Parens => { f.write_str("parenthesis")?; }
-            GroupingSymbol::SquareBracket => { f.write_str("square-bracket")?; }
+            GroupingSymbol::Parens => {
+                f.write_str("parenthesis")?;
+            }
+            GroupingSymbol::SquareBracket => {
+                f.write_str("square-bracket")?;
+            }
         };
         Ok(())
     }
 }
 
 #[derive(Debug)]
-pub struct GroupingState { items: Vec<GroupingSymbol> }
+pub struct GroupingState {
+    items: Vec<GroupingSymbol>,
+}
 
 impl GroupingState {
     pub fn new() -> GroupingState {
-        GroupingState { items: Vec::with_capacity(2) }
+        GroupingState {
+            items: Vec::with_capacity(2),
+        }
     }
 
     pub fn is_inside(&self, symbol: &GroupingSymbol) -> bool {
@@ -139,13 +128,18 @@ impl Parser<'_> {
         let next = self.chars.next();
         let end_char = if let Some(c) = next {
             self.update_pos(c);
-            if c == '{' { '}' } else { '\n' }
+            if c == '{' {
+                '}'
+            } else {
+                '\n'
+            }
         } else {
             return None;
         };
         if self.remember_comments {
             let mut comment = String::with_capacity(32);
-            if end_char == '\n' { // skip the '{' if it was given
+            if end_char == '\n' {
+                // skip the '{' if it was given
                 comment.push(next.unwrap());
             }
             while let Some(c) = self.chars.next() {
@@ -197,11 +191,6 @@ impl Parser<'_> {
         &self.sink
     }
 
-    pub fn parser_err<T>(&mut self, msg: String) -> Result<T, ParserError> {
-        let pos = self.pos();
-        Result::Err(ParserError { pos, msg })
-    }
-
     pub fn parse_word(&mut self) -> Option<String> {
         self.skip_spaces();
         let c = self.curr_char?;
@@ -209,17 +198,27 @@ impl Parser<'_> {
         let mut word = String::with_capacity(8);
         word.push(c);
         while let Some(c) = self.next() {
-            space_sep_or!(c, { break; }, { word.push(c) });
+            space_sep_or!(
+                c,
+                {
+                    break;
+                },
+                { word.push(c) }
+            );
         }
         Some(word)
     }
 
     pub fn skip_spaces(&mut self) {
         if let Some(c) = self.curr_char {
-            space_or!(c, {}, { return; });
+            space_or!(c, {}, {
+                return;
+            });
         }
         while let Some(c) = self.next() {
-            space_or!(c, {}, { break; });
+            space_or!(c, {}, {
+                break;
+            });
         }
     }
 
@@ -233,11 +232,13 @@ impl Parser<'_> {
                 Ok(())
             }
         } else {
-            let curr = self.curr_char.map_or("EOF".to_string(),
-                                             |c| { format!("'{}'", c) });
+            let curr = self
+                .curr_char
+                .map_or("EOF".to_string(), |c| format!("'{}'", c));
             Err(werr_syntax!(
                 format!("Expected identifier after def, but got {}", curr),
-                self.pos()))
+                self.pos()
+            ))
         }
     }
 

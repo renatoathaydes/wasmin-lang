@@ -5,7 +5,7 @@ macro_rules! space_or {
     ( $c:expr, $space:expr, $other:expr ) => {
         match $c {
             ' ' | '\n' | '\t' | '\r' => $space,
-            _ => $other
+            _ => $other,
         }
     };
 }
@@ -16,9 +16,9 @@ macro_rules! space_or {
 macro_rules! sep_or {
     ( $c:expr, $sep:expr, $other:expr ) => {
         match $c {
-            '[' | ']' | '(' | ')' | '{' | '}' | '=' | '"' |
-            ',' | ';' | ':' | '<' | '>' | '#' | '|' => $sep,
-            _ => $other
+            '[' | ']' | '(' | ')' | '{' | '}' | '=' | '"' | ',' | ';' | ':' | '<' | '>' | '#'
+            | '|' => $sep,
+            _ => $other,
         }
     };
 }

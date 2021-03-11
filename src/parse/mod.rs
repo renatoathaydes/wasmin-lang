@@ -7,16 +7,16 @@ use crate::parse::parser::Stack;
 #[macro_use]
 mod macros;
 
+mod expr_parser;
+mod ext_parser;
+mod fun_parser;
+mod parser;
+pub(crate) mod stack;
+mod state;
 #[cfg(test)]
 mod tests;
-mod type_parser;
-mod parser;
-mod expr_parser;
-mod fun_parser;
 mod top_level_parser;
-mod ext_parser;
-mod state;
-pub(crate) mod stack;
+mod type_parser;
 
 /// Parser of Wasmin programs.
 pub type Parser<'s> = parser::Parser<'s>;

@@ -1,16 +1,17 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::io::{Write};
+use std::io::Write;
 
-use wasm_encoder::{CodeSection, EntityType, Export, ExportSection, Function, FunctionSection,
-                   GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection,
-                   ValType};
+use wasm_encoder::{
+    CodeSection, EntityType, Export, ExportSection, Function, FunctionSection, GlobalSection,
+    GlobalType, ImportSection, Instruction, Module, TypeSection, ValType,
+};
 
 use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::errors::{Error, Result};
+use crate::sink::wasm_utils::*;
 use crate::sink::{expr_to_vec, WasminSink};
-use crate::sink::wasm_utils::{*};
-use crate::types::{FunType, Type, types_to_string};
+use crate::types::{types_to_string, FunType, Type};
 use crate::vec_utils::remove_last;
 
 #[derive(Default)]
@@ -42,7 +43,9 @@ impl Context {
 
     fn index_of_breakable(&self) -> u32 {
         for (idx, is_breakable) in self.block_levels.iter().rev().enumerate() {
-            if *is_breakable { return idx as u32; }
+            if *is_breakable {
+                return idx as u32;
+            }
         }
         panic!("No breakable level found");
     }
@@ -55,7 +58,8 @@ impl Context {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(v) => {
                 v.insert(len);
-                self.types.function(to_val_types(&typ.ins), to_val_types(&typ.outs));
+                self.types
+                    .function(to_val_types(&typ.ins), to_val_types(&typ.outs));
                 len
             }
         }
@@ -63,9 +67,16 @@ impl Context {
 
     fn index_fun(&mut self, fun_name: &str, type_index: u32, is_import: bool) -> u32 {
         let fun_idx = self.fun_idx_by_name.len() as u32;
-        if self.fun_idx_by_name.insert(fun_name.to_owned(), fun_idx).is_some() {
+        if self
+            .fun_idx_by_name
+            .insert(fun_name.to_owned(), fun_idx)
+            .is_some()
+        {
             // FIXME overloads should be supported
-            panic!("function '{}' duplicated, overload is not implemented yet", fun_name);
+            panic!(
+                "function '{}' duplicated, overload is not implemented yet",
+                fun_name
+            );
         }
         if !is_import {
             self.funs.function(type_index);
@@ -113,12 +124,13 @@ impl Wasm {
         Ok(f)
     }
 
-    fn receive_assignment(&mut self,
-                          ctx: &mut Context,
-                          names: Vec<String>,
-                          value: Expression,
-                          vis: Visibility,
-                          is_mut: bool,
+    fn receive_assignment(
+        &mut self,
+        ctx: &mut Context,
+        names: Vec<String>,
+        value: Expression,
+        vis: Visibility,
+        is_mut: bool,
     ) -> Result<()> {
         let values = expr_to_vec(value);
 
@@ -129,25 +141,27 @@ impl Wasm {
                 let global_idx = ctx.global_idx_by_name.len() as u32;
                 ctx.global_idx_by_name.insert(name.to_string(), global_idx);
                 if vis == Visibility::Public {
-                    ctx.exports.export(name.as_str(), Export::Global(global_idx));
+                    ctx.exports
+                        .export(name.as_str(), Export::Global(global_idx));
                 }
-                ctx.globals.global(GlobalType {
-                    val_type: typ,
-                    mutable: is_mut,
-                }, instr);
+                ctx.globals.global(
+                    GlobalType {
+                        val_type: typ,
+                        mutable: is_mut,
+                    },
+                    instr,
+                );
             }
             Ok(())
         } else {
             err_wasmin!(werr_unsupported_feature!(
-                "Non-constant global variables are not supported yet.", (0, 0)))
+                "Non-constant global variables are not supported yet.",
+                (0, 0)
+            ))
         }
     }
 
-    fn receive_ext(&mut self,
-                   ctx: &mut Context,
-                   mod_name: &str,
-                   defs: &[ExtDef],
-    ) -> Result<()> {
+    fn receive_ext(&mut self, ctx: &mut Context, mod_name: &str, defs: &[ExtDef]) -> Result<()> {
         for def in defs {
             let typ = &def.typ;
             match typ {
@@ -162,7 +176,8 @@ impl Wasm {
                         let type_idx = ctx.index_fun_type(&typ);
                         let fun_name = format!("{}.{}", mod_name, def.id);
                         ctx.index_fun(&fun_name, type_idx, true);
-                        ctx.imports.import(mod_name, Some(&def.id), EntityType::Function(type_idx));
+                        ctx.imports
+                            .import(mod_name, Some(&def.id), EntityType::Function(type_idx));
                     }
                 }
                 Type::WasmFn(_) => {}
@@ -185,19 +200,23 @@ impl Wasm {
                 f.instruction(to_const(to_val_type(typ), value.as_ref()));
             }
             Expression::Local(name, ..) => {
-                f.instruction(Instruction::LocalGet(local_map.get(name)
-                    .expect("local name exists").0));
+                f.instruction(Instruction::LocalGet(
+                    local_map.get(name).expect("local name exists").0,
+                ));
             }
             Expression::Global(name, ..) => {
-                f.instruction(Instruction::GlobalGet(*ctx.global_idx_by_name.get(name)
-                    .expect("global name exists")));
+                f.instruction(Instruction::GlobalGet(
+                    *ctx.global_idx_by_name
+                        .get(name)
+                        .expect("global name exists"),
+                ));
             }
-            Expression::Let((names, values, ..)) |
-            Expression::Mut((names, values, ..)) => {
+            Expression::Let((names, values, ..)) | Expression::Mut((names, values, ..)) => {
                 self.add_instructions(f, ctx, local_map, values)?;
                 names.iter().rev().for_each(|name| {
-                    f.instruction(Instruction::LocalSet(local_map.get(name)
-                        .expect("local name exists").0));
+                    f.instruction(Instruction::LocalSet(
+                        local_map.get(name).expect("local name exists").0,
+                    ));
                 });
             }
             Expression::Set(ReAssignment {
@@ -205,15 +224,23 @@ impl Wasm {
                                 globals,
                             }) => {
                 self.add_instructions(f, ctx, local_map, values)?;
-                names.iter().rev().zip(globals.iter().rev()).for_each(|(name, is_global)| {
-                    if *is_global {
-                        f.instruction(Instruction::GlobalSet(*ctx.global_idx_by_name.get(name)
-                            .expect("global name exists")));
-                    } else {
-                        f.instruction(Instruction::LocalSet(local_map.get(name)
-                            .expect("local name exists").0));
-                    }
-                });
+                names
+                    .iter()
+                    .rev()
+                    .zip(globals.iter().rev())
+                    .for_each(|(name, is_global)| {
+                        if *is_global {
+                            f.instruction(Instruction::GlobalSet(
+                                *ctx.global_idx_by_name
+                                    .get(name)
+                                    .expect("global name exists"),
+                            ));
+                        } else {
+                            f.instruction(Instruction::LocalSet(
+                                local_map.get(name).expect("local name exists").0,
+                            ));
+                        }
+                    });
             }
             Expression::If(cond, then, els) => {
                 self.add_instructions(f, ctx, local_map, cond)?;
@@ -228,7 +255,7 @@ impl Wasm {
             }
             Expression::Loop { expr, error } => {
                 if let Some(e) = error {
-                    return err_wasmin!(e.clone().into())
+                    return err_wasmin!(e.clone().into());
                 }
                 let typ = expr.get_type();
                 f.instruction(Instruction::Block(block_type(&typ, ctx)));
@@ -250,11 +277,18 @@ impl Wasm {
                     self.add_instructions(f, ctx, local_map, expr)?;
                 }
             }
-            Expression::FunCall { name, fun_index, is_wasm_fun, typ: Ok(typ) } => {
+            Expression::FunCall {
+                name,
+                fun_index,
+                is_wasm_fun,
+                typ: Ok(typ),
+            } => {
                 if *is_wasm_fun {
                     f.instruction(map_to_wasm_fun(name.as_ref(), typ)?);
                 } else {
-                    let idx = *ctx.fun_idx_by_name.get(name)
+                    let idx = *ctx
+                        .fun_idx_by_name
+                        .get(name)
                         .expect("called function exists");
                     f.instruction(Instruction::Call(idx));
                 }
@@ -271,8 +305,7 @@ impl Wasm {
 
     fn collect_locals(&self, body: &Expression, res: &mut HashMap<String, (u32, ValType)>) {
         match body {
-            Expression::Let((names, values, ..)) |
-            Expression::Mut((names, values, ..)) => {
+            Expression::Let((names, values, ..)) | Expression::Mut((names, values, ..)) => {
                 let types = values.get_type();
                 names.iter().zip(types.iter()).for_each(|(name, typ)| {
                     res.insert(name.clone(), (res.len() as u32, to_val_type(typ)));
@@ -288,14 +321,16 @@ impl Wasm {
                     self.collect_locals(expr, res)
                 }
             }
-            Expression::Loop { expr, .. } => {
-                self.collect_locals(expr, res)
-            }
+            Expression::Loop { expr, .. } => self.collect_locals(expr, res),
             _ => {}
         };
     }
 
-    fn expr_to_value<'a>(&self, expr: &'a Expression, ctx: &Context) -> Result<(Instruction<'a>, ValType)> {
+    fn expr_to_value<'a>(
+        &self,
+        expr: &'a Expression,
+        ctx: &Context,
+    ) -> Result<(Instruction<'a>, ValType)> {
         match expr {
             Expression::Global(name, typ) => {
                 let idx = ctx.global_idx_by_name.get(name).unwrap();
@@ -306,8 +341,11 @@ impl Wasm {
                 Ok((to_const(t, value), t))
             }
             Expression::ExprError(e) => err_wasmin!(e.clone().into()),
-            _ => err_wasmin!(werr_unsupported_feature!("only constants are currently supported to \
-                    initialize globals", (0, 0)))
+            _ => err_wasmin!(werr_unsupported_feature!(
+                "only constants are currently supported to \
+                    initialize globals",
+                (0, 0)
+            )),
         }
     }
 }
@@ -329,10 +367,11 @@ impl WasminSink<Context> for Wasm {
         })
     }
 
-    fn receive(&mut self,
-               elem: TopLevelElement,
-               mut _w: &mut Box<dyn Write>,
-               ctx: &mut Context,
+    fn receive(
+        &mut self,
+        elem: TopLevelElement,
+        mut _w: &mut Box<dyn Write>,
+        ctx: &mut Context,
     ) -> Result<()> {
         match elem {
             TopLevelElement::Let((names, values, ..), vis, ..) => {

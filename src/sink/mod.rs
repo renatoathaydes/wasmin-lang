@@ -1,12 +1,12 @@
-use std::io::{Write};
+use std::io::Write;
 
 use crate::ast::{Expression, TopLevelElement};
 use crate::errors::Result;
 
-pub mod wat;
-pub mod wasm;
 pub mod debug;
+pub mod wasm;
 pub(crate) mod wasm_utils;
+pub mod wat;
 
 pub type Wat = wat::Wat;
 pub type Wasm = wasm::Wasm;
@@ -27,7 +27,12 @@ pub trait WasminSink<Context> {
     /// If the sink is an interpreter, the bytes may be the output of the program.
     ///
     /// If an [`ErrorCode`] is returned, the Wasmin CLI exits immediately with the provided code.
-    fn receive(&mut self, element: TopLevelElement, w: &mut Box<dyn Write>, ctx: &mut Context) -> Result<()>;
+    fn receive(
+        &mut self,
+        element: TopLevelElement,
+        w: &mut Box<dyn Write>,
+        ctx: &mut Context,
+    ) -> Result<()>;
 
     /// Flush any state that may be pending after receiving a full Wasmin program.
     ///
@@ -41,12 +46,19 @@ pub trait WasminSink<Context> {
 }
 
 fn expr_to_vec(expr: Expression) -> Vec<Expression> {
-    if let Expression::Group(e) = expr { e } else { vec![expr] }
+    if let Expression::Group(e) = expr {
+        e
+    } else {
+        vec![expr]
+    }
 }
 
 pub(crate) fn sanitize_number(text: &str) -> String {
-    let without_type = if text.ends_with("i32") || text.ends_with("i64") ||
-        text.ends_with("f32") || text.ends_with("f64") {
+    let without_type = if text.ends_with("i32")
+        || text.ends_with("i64")
+        || text.ends_with("f32")
+        || text.ends_with("f64")
+    {
         &text[0..text.len() - 3]
     } else {
         text

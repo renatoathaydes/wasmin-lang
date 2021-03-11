@@ -1,16 +1,21 @@
-use crate::parse::parser::{*};
 use crate::parse::parser::GroupingSymbol::{Parens, SquareBracket};
-use crate::types::{*, Type::*};
+use crate::parse::parser::*;
+use crate::types::{Type::*, *};
 
 pub fn parse_type(parser: &mut Parser) -> Type {
     let mut state = GroupingState::new();
     let typ = parse_type_internal(parser, &mut state);
     parser.skip_spaces();
-    if let Some(';') = parser.curr_char() { parser.next(); }
-    if state.is_empty() { typ } else {
+    if let Some(';') = parser.curr_char() {
+        parser.next();
+    }
+    if state.is_empty() {
+        typ
+    } else {
         Type::Error(werr_syntax!(
             format!("Unclosed '{}' in type definition", state),
-            parser.pos()))
+            parser.pos()
+        ))
     }
 }
 
@@ -24,7 +29,9 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
             "f64" => Type::F64,
             _ => Type::Error(werr_type!(
                 format!("type does not exist: {}", word),
-                start_pos, parser.pos()))
+                start_pos,
+                parser.pos()
+            )),
         }
     } else if let Some('[') = parser.curr_char() {
         parser.next();
@@ -33,9 +40,13 @@ fn parse_type_internal(parser: &mut Parser, state: &mut GroupingState) -> Type {
     } else if let Some(c) = parser.curr_char() {
         Type::Error(werr_syntax!(
             format!("unexpected character '{}', expected type", c),
-            parser.pos()))
+            parser.pos()
+        ))
     } else {
-        Type::Error(werr_syntax!("EOF reached (type was expected)", parser.pos()))
+        Type::Error(werr_syntax!(
+            "EOF reached (type was expected)",
+            parser.pos()
+        ))
     }
 }
 
@@ -57,7 +68,9 @@ fn parse_fn_ins(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
         let typ = parse_type_internal(parser, state);
         let is_error = typ.is_error();
         ins.push(typ);
-        if is_error { break; }
+        if is_error {
+            break;
+        }
     }
     ins
 }
@@ -71,7 +84,7 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
             parser.next();
             true
         }
-        _ => false
+        _ => false,
     };
     loop {
         parser.skip_spaces();
@@ -102,7 +115,9 @@ fn parse_fn_outs(parser: &mut Parser, state: &mut GroupingState) -> Vec<Type> {
         let typ = parse_type_internal(parser, state);
         let is_error = typ.is_error();
         outs.push(typ);
-        if is_error { break; }
+        if is_error {
+            break;
+        }
     }
     outs
 }

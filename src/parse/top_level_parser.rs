@@ -1,8 +1,7 @@
 use Visibility::Public;
 
-use crate::ast::{TopLevelElement, Visibility};
 use crate::ast::Visibility::Private;
-use crate::errors::{unexpected_char, unexpected_word};
+use crate::ast::{TopLevelElement, Visibility};
 use crate::parse::Parser;
 
 pub fn parse(parser: &mut Parser) {
@@ -14,22 +13,26 @@ pub fn parse(parser: &mut Parser) {
 }
 
 fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
-    let start_pos = parser.pos();
     let expr = match word {
         "pub" if !is_pub => {
             if let Some(w) = parser.parse_word() {
                 return parse_top(parser, &w, true);
             } else {
-                let err = unexpected_char(
-                    parser, &format!("expected {}.", allowed_at_top(true)));
+                let c = parser
+                    .curr_char()
+                    .map(|c| c.to_string())
+                    .unwrap_or("EOF".to_owned());
+                let err = werr_syntax!(
+                    format!("{} was expected, but got {}", allowed_at_top(true), c),
+                    parser.pos()
+                );
                 Some(TopLevelElement::Error(err))
             }
         }
         "def" if !is_pub => {
             parser.store_comments(false);
-            let pos = parser.pos();
             if let Err(e) = parser.parse_def() {
-                Some(TopLevelElement::Error(werr_syntax!(e.msg, pos, e.pos)))
+                Some(TopLevelElement::Error(e))
             } else {
                 None
             }
@@ -45,7 +48,7 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
                         Some(TopLevelElement::Let(items, visibility, comment))
                     }
                 }
-                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
+                Err(e) => Some(TopLevelElement::Error(e)),
             }
         }
         "fun" => {
@@ -53,21 +56,24 @@ fn parse_top(parser: &mut Parser, word: &str, is_pub: bool) {
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_fun() {
                 Ok(fun) => Some(TopLevelElement::Fun(fun, visibility, comment)),
-                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
+                Err(e) => Some(TopLevelElement::Error(e)),
             }
         }
         "ext" => {
             let comment = parser.take_comment();
             let visibility = if is_pub { Public } else { Private };
             match parser.parse_ext() {
-                Ok((mod_name, defs)) =>
-                    Some(TopLevelElement::Ext(mod_name, defs, visibility, comment)),
-                Err(e) => Some(TopLevelElement::Error(werr_syntax!(e.msg, e.pos)))
+                Ok((mod_name, defs)) => {
+                    Some(TopLevelElement::Ext(mod_name, defs, visibility, comment))
+                }
+                Err(e) => Some(TopLevelElement::Error(e)),
             }
         }
         _ => {
-            let err = unexpected_word(
-                word, start_pos, parser, &format!("expected {}.", allowed_at_top(true)));
+            let err = werr_syntax!(
+                format!("{} was expected, but got {}", allowed_at_top(true), word),
+                parser.pos()
+            );
             Some(TopLevelElement::Error(err))
         }
     };

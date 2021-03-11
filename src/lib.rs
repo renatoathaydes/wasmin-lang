@@ -2,12 +2,12 @@
 pub mod errors;
 #[macro_use]
 pub mod ast;
-pub mod types;
 pub mod parse;
 pub mod sink;
-pub mod wasm_parse;
-mod wasm_funs;
+pub mod types;
 mod vec_utils;
+mod wasm_funs;
+pub mod wasm_parse;
 
 #[cfg(test)]
 mod tests;

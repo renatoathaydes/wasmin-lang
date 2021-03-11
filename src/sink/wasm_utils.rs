@@ -4,7 +4,7 @@ use wasm_encoder::{BlockType, Instruction, ValType};
 
 use crate::sink::sanitize_number;
 use crate::sink::wasm::Context;
-use crate::types::{FunType, Type, types_to_string};
+use crate::types::{types_to_string, FunType, Type};
 
 pub fn to_val_types(types: &[Type]) -> Vec<ValType> {
     types.iter().map(|t| to_val_type(t)).collect()
@@ -16,13 +16,16 @@ pub fn to_val_type(typ: &Type) -> ValType {
         Type::I32 => ValType::I32,
         Type::F64 => ValType::F64,
         Type::F32 => ValType::F32,
-        _ => panic!("cannot convert to value type: {}", typ)
+        _ => panic!("cannot convert to value type: {}", typ),
     }
 }
 
 pub fn to_multi_val_block_type(typ: &[Type], ctx: &mut Context) -> BlockType {
     let types: Vec<_> = typ.to_vec();
-    let fun_type = FunType { ins: vec![], outs: types };
+    let fun_type = FunType {
+        ins: vec![],
+        outs: types,
+    };
     let fun_idx = ctx.index_fun_type(&fun_type);
     BlockType::FunctionType(fun_idx)
 }
@@ -34,7 +37,7 @@ pub fn to_const(typ: ValType, text: &str) -> Instruction {
         ValType::I64 => Instruction::I64Const(n.parse::<i64>().unwrap()),
         ValType::F32 => Instruction::F32Const(n.parse::<f32>().unwrap()),
         ValType::F64 => Instruction::F64Const(n.parse::<f64>().unwrap()),
-        _ => panic!("cannot convert to const: {:?}", typ)
+        _ => panic!("cannot convert to const: {:?}", typ),
     }
 }
 
@@ -77,7 +80,7 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             Type::F64 if name == "trunc" => Instruction::F64Trunc,
             Type::F32 if name == "nearest" => Instruction::F32Nearest,
             Type::F64 if name == "nearest" => Instruction::F64Nearest,
-            _ => cannot_find_fun(name, fun_type)
+            _ => cannot_find_fun(name, fun_type),
         }
     } else if is_op2 {
         match *ins.get(0).unwrap() {
@@ -177,7 +180,7 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             Type::F64 if name == "copysign" => Instruction::F64Copysign,
             Type::F32 if name == "copysign" => Instruction::F32Copysign,
 
-            _ => cannot_find_fun(name, fun_type)
+            _ => cannot_find_fun(name, fun_type),
         }
     } else if is_conv {
         match (ins.get(0).unwrap(), outs.get(0).unwrap()) {
@@ -209,7 +212,7 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
             (&Type::I64, &Type::F64) if name == "reinterpret_i64" => Instruction::F64ReinterpretI64,
             (&Type::F64, &Type::I64) if name == "reinterpret_f64" => Instruction::I64ReinterpretF64,
 
-            _ => cannot_find_fun(name, fun_type)
+            _ => cannot_find_fun(name, fun_type),
         }
     } else {
         cannot_find_fun(name, fun_type)
@@ -218,8 +221,11 @@ pub fn map_to_wasm_fun<'a>(name: &'a str, fun_type: &'a FunType) -> Result<Instr
 }
 
 fn cannot_find_fun(name: &str, fun_type: &FunType) -> ! {
-    panic!("Cannot find WASM fun '{}' taking arguments {:?}",
-           name, types_to_string(&fun_type.ins));
+    panic!(
+        "Cannot find WASM fun '{}' taking arguments {:?}",
+        name,
+        types_to_string(&fun_type.ins)
+    );
 }
 
 pub(crate) fn block_type(typ: &[Type], ctx: &mut Context) -> BlockType {

@@ -17,14 +17,23 @@ pub fn parse_buf(buf: &[u8], verbose: bool) -> Result<(), BinaryReaderError> {
                 println!("------ Exports Section");
                 for export in s {
                     let export = export?;
-                    println!("  Export {} {:?} [{}]", export.field, export.kind, export.index);
+                    println!(
+                        "  Export {} {:?} [{}]",
+                        export.field, export.kind, export.index
+                    );
                 }
             }
             Payload::ImportSection(s) => {
                 println!("------ Imports Section");
                 for import in s {
                     let import = import?;
-                    println!("  [{}] Function {}::{} -> {:?}", fun_index, import.module, import.field.unwrap(), import.ty);
+                    println!(
+                        "  [{}] Function {}::{} -> {:?}",
+                        fun_index,
+                        import.module,
+                        import.field.unwrap(),
+                        import.ty
+                    );
                     fun_index += 1;
                     imported_funs += 1;
                 }
@@ -68,7 +77,12 @@ pub fn parse_buf(buf: &[u8], verbose: bool) -> Result<(), BinaryReaderError> {
                 println!("------ Globals Section");
                 for (i, global) in g.into_iter().enumerate() {
                     let global = global?;
-                    println!("  [{}] {:?} = {:?}", i, global.ty, global.init_expr.get_binary_reader().read_operator()?);
+                    println!(
+                        "  [{}] {:?} = {:?}",
+                        i,
+                        global.ty,
+                        global.init_expr.get_binary_reader().read_operator()?
+                    );
                 }
             }
             Payload::End => {

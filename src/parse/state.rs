@@ -14,7 +14,7 @@ pub struct ParsingState<'s> {
 
 #[derive(Debug, Clone)]
 struct BlockInfo {
-    type_count_at_start: usize
+    type_count_at_start: usize,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -26,7 +26,7 @@ pub(crate) enum ExprPart {
 
 impl ExprPart {
     pub(crate) fn is_expression(&self) -> bool {
-        matches!(self, ExprPart::Expr(_))
+        matches!(self, ExprPart::Expr(..))
     }
 }
 
@@ -59,7 +59,9 @@ impl<'s> ParsingState<'s> {
     }
 
     pub fn has_non_expr_part(&self) -> bool {
-        get_last(&self.expr_parts).iter().any(|e| !e.is_expression())
+        get_last(&self.expr_parts)
+            .iter()
+            .any(|e| !e.is_expression())
     }
 
     pub fn enter_level(&mut self, symbol: GroupingSymbol) {
@@ -69,14 +71,15 @@ impl<'s> ParsingState<'s> {
         self.block_info.push(None);
     }
 
-    pub fn exit_level(&mut self,
-                      symbol: GroupingSymbol,
-    ) -> Result<bool, String> {
+    pub fn exit_level(&mut self, symbol: GroupingSymbol) -> Result<bool, String> {
         if self.symbols.is_inside(&symbol) {
             self.symbols.exit_symbol();
             let parts = self.end_expr();
             if !parts.is_empty() {
-                panic!("Exiting level without consuming expression parts first: {:?}", parts)
+                panic!(
+                    "Exiting level without consuming expression parts first: {:?}",
+                    parts
+                )
             }
             remove_last_n(&mut self.expr_parts, 1);
             remove_last_n(&mut self.block_info, 1);
@@ -99,12 +102,15 @@ impl<'s> ParsingState<'s> {
     }
 
     pub(crate) fn start_block(&mut self) {
-        get_last_mut(&mut self.block_info)
-            .replace(BlockInfo { type_count_at_start: self.stack.len() });
+        get_last_mut(&mut self.block_info).replace(BlockInfo {
+            type_count_at_start: self.stack.len(),
+        });
     }
 
     pub(crate) fn get_stack_count_at_block_start(&self) -> Option<usize> {
-        self.block_info.iter().rfind(|info| info.is_some())
+        self.block_info
+            .iter()
+            .rfind(|info| info.is_some())
             .map(|info| info.as_ref().unwrap().type_count_at_start)
     }
 
@@ -127,21 +133,33 @@ impl<'s> ParsingState<'s> {
 
     pub fn verify_end_state(&mut self) {
         if self.expr_parts.len() != 1 {
-            panic!("Expected one level of expression parts left, but got {:?}", self.expr_parts);
+            panic!(
+                "Expected one level of expression parts left, but got {:?}",
+                self.expr_parts
+            );
         }
         if self.exprs.len() != 1 {
-            panic!("Expected one level of expressions left, but got {:?}", self.exprs);
+            panic!(
+                "Expected one level of expressions left, but got {:?}",
+                self.exprs
+            );
         }
         let parts = self.expr_parts.remove(0);
         if !parts.is_empty() {
-            panic!("Expected all expression parts to have been consumed, but still have parts \
-                remaining: {:?}", parts)
+            panic!(
+                "Expected all expression parts to have been consumed, but still have parts \
+                remaining: {:?}",
+                parts
+            )
         }
 
         let level = self.exprs.remove(0);
         if !level.is_empty() {
-            panic!("Expected all expressions to have been consumed, but still have expressions \
-                remaining: {:?}", level)
+            panic!(
+                "Expected all expressions to have been consumed, but still have expressions \
+                remaining: {:?}",
+                level
+            )
         }
     }
 }
@@ -156,20 +174,35 @@ fn group_exprs(mut exprs: Vec<Expression>) -> Expression {
 
 #[cfg(test)]
 mod state_tests {
-    use crate::types::{Type::{*}};
+    use crate::types::Type::*;
 
     use super::*;
 
     macro_rules! arg {
-        ($id:literal) => { ExprPart::Arg($id.to_owned()) };
+        ($id:literal) => {
+            ExprPart::Arg($id.to_owned(), (0, 0))
+        };
+        ($id:literal, $pos:expr) => {
+            ExprPart::Arg($id.to_owned(), $pos)
+        };
     }
 
     macro_rules! fun {
-        ($id:literal) => { ExprPart::Fun($id.to_owned()) };
+        ($id:literal) => {
+            ExprPart::Fun($id.to_owned(), (0, 0))
+        };
+        ($id:literal, $pos:expr) => {
+            ExprPart::Fun($id.to_owned(), $pos)
+        };
     }
 
     macro_rules! expr {
-        ($e:expr) => { ExprPart::Expr($e) };
+        ($e:expr) => {
+            ExprPart::Expr($e, (0, 0))
+        };
+        ($e:expr, $pos:expr) => {
+            ExprPart::Expr($e, $pos)
+        };
     }
 
     #[test]
@@ -179,7 +212,10 @@ mod state_tests {
 
         state.push_expr_part(fun!("hi"));
         state.push_expr_part(expr!(expr_const!("3" I32)));
-        assert_eq!(state.end_expr(), vec![fun!("hi"), expr!(expr_const!("3" I32))]);
+        assert_eq!(
+            state.end_expr(),
+            vec![fun!("hi"), expr!(expr_const!("3" I32))]
+        );
 
         // shouldn't panic
         state.verify_end_state();
@@ -195,19 +231,32 @@ mod state_tests {
         state.push_expr_part(arg!("3"));
         state.push_expr_part(expr!(expr_const!("4" I32)));
 
-        assert_eq!(state.end_expr(), vec![arg!("3"), expr!(expr_const!("4" I32))]);
+        assert_eq!(
+            state.end_expr(),
+            vec![arg!("3"), expr!(expr_const!("4" I32))]
+        );
 
         state.push_exprs(vec![expr_const!("3" I32), expr_const!("4" I32)]);
 
         assert!(state.exit_level(GroupingSymbol::Parens).unwrap());
 
-        assert_eq!(state.curr_level(), &vec![
-            expr_const!("2" I32), expr_const!("3" I32), expr_const!("4" I32)
-        ]);
+        assert_eq!(
+            state.curr_level(),
+            &vec![
+                expr_const!("2" I32),
+                expr_const!("3" I32),
+                expr_const!("4" I32)
+            ]
+        );
 
-        assert_eq!(state.finish_off(), Expression::Group(vec![
-            expr_const!("2" I32), expr_const!("3" I32), expr_const!("4" I32)
-        ]));
+        assert_eq!(
+            state.finish_off(),
+            Expression::Group(vec![
+                expr_const!("2" I32),
+                expr_const!("3" I32),
+                expr_const!("4" I32)
+            ])
+        );
 
         // shouldn't panic
         state.verify_end_state();

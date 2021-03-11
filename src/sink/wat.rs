@@ -30,7 +30,9 @@ impl Wat {
     }
 
     fn decrease_ident(&mut self) {
-        (0..ONE_IDENT.len()).for_each(|_| { self.ident.remove(0); });
+        (0..ONE_IDENT.len()).for_each(|_| {
+            self.ident.remove(0);
+        });
     }
 
     fn start_block(&mut self) {
@@ -78,7 +80,9 @@ impl Wat {
             Ok(())
         } else {
             err_wasmin!(werr_unsupported_feature!(
-                "Non-constant global variables are not supported yet.", (0, 0)))
+                "Non-constant global variables are not supported yet.",
+                (0, 0)
+            ))
         }
     }
 
@@ -102,16 +106,14 @@ impl Wat {
         Ok(())
     }
 
-    fn write_variables(
-        &mut self,
-        mut w: &mut Box<dyn Write>,
-        expr: &Expression,
-    ) -> Result<()> {
+    fn write_variables(&mut self, mut w: &mut Box<dyn Write>, expr: &Expression) -> Result<()> {
         match expr {
             Expression::Let(assignment) | Expression::Mut(assignment) => {
                 let (names, value, type_conversion) = assignment;
-                for (name, (typ, new_type)) in names.iter()
-                    .zip(value.get_type().iter().zip(type_conversion.iter())) {
+                for (name, (typ, new_type)) in names
+                    .iter()
+                    .zip(value.get_type().iter().zip(type_conversion.iter()))
+                {
                     let t = if let Some(t) = new_type { t } else { typ };
                     self.start_expr(&mut w)?;
                     w.write_all(b"(local $")?;
@@ -139,11 +141,7 @@ impl Wat {
         Ok(())
     }
 
-    fn write_expr(
-        &mut self,
-        mut w: &mut Box<dyn Write>,
-        expr: &Expression,
-    ) -> Result<()> {
+    fn write_expr(&mut self, mut w: &mut Box<dyn Write>, expr: &Expression) -> Result<()> {
         match expr {
             Expression::Empty => Ok(()),
             Expression::Const(id, typ) => {
@@ -163,8 +161,14 @@ impl Wat {
                 w.write_all(b"(if ")?;
                 if !then.get_type().is_empty() {
                     w.write_all(b"(result ")?;
-                    w.write_all(then.get_type().iter().map(|t| t.to_string())
-                        .collect::<Vec<_>>().join(" ").as_bytes())?;
+                    w.write_all(
+                        then.get_type()
+                            .iter()
+                            .map(|t| t.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .as_bytes(),
+                    )?;
                     w.write_all(b") ")?;
                 }
                 w.write_all(b"(then")?;
@@ -224,21 +228,29 @@ impl Wat {
                 let globals: Vec<_> = repeat(false).take(assign.0.len()).collect();
                 self.write_local_assignment(&mut w, &assign, &globals)
             }
-            Expression::Set(ReAssignment { assignment, globals }) => {
-                self.write_local_assignment(&mut w, &assignment, globals)
-            }
+            Expression::Set(ReAssignment {
+                                assignment,
+                                globals,
+                            }) => self.write_local_assignment(&mut w, &assignment, globals),
             Expression::Group(exprs) => {
                 let mut is_first = true;
                 for expr in exprs {
-                    if !is_first { self.start_expr(w)?; }
+                    if !is_first {
+                        self.start_expr(w)?;
+                    }
                     self.write_expr(w, expr)?;
                     is_first = false;
                 }
                 Ok(())
             }
-            Expression::FunCall { name, is_wasm_fun, typ, fun_index } => {
+            Expression::FunCall {
+                name,
+                is_wasm_fun,
+                typ,
+                fun_index,
+            } => {
                 if let Err(e) = typ {
-                    return err_wasmin!(werr_type!(e.reason, e.pos));
+                    return err_wasmin!(e.clone());
                 }
                 if *is_wasm_fun {
                     // this is safe because we checked for errors above and
@@ -248,22 +260,24 @@ impl Wat {
                 } else {
                     w.write_all(b"call $")?;
                     w.write_all(name.as_bytes())?;
-                    if fun_index != &0 { w.write_all(format!("${}", fun_index).as_bytes())?; }
+                    if fun_index != &0 {
+                        w.write_all(format!("${}", fun_index).as_bytes())?;
+                    }
                 }
                 Ok(())
             }
-            Expression::ExprError(e) =>
-                err_wasmin!(werr_type!(e.reason, e.pos))
+            Expression::ExprError(e) => err_wasmin!(e.clone()),
         }
     }
 
-    fn write_fun(&mut self,
-                 w: &mut Box<dyn Write>,
-                 id: &str,
-                 args: Option<Vec<String>>,
-                 body: Option<Expression>,
-                 typ: FunType,
-                 vis: Visibility,
+    fn write_fun(
+        &mut self,
+        w: &mut Box<dyn Write>,
+        id: &str,
+        args: Option<Vec<String>>,
+        body: Option<Expression>,
+        typ: FunType,
+        vis: Visibility,
     ) -> Result<()> {
         w.write_all(b"(func $")?;
         w.write_all(id.as_bytes())?;
@@ -273,17 +287,23 @@ impl Wat {
             w.write_all(b"\")")?;
         }
         let mut err: Vec<_> = if let Some(a) = args {
-            a.iter().zip(typ.ins).map(|(name, t)| {
-                w.write_all(b" (param $")?;
-                w.write_all(name.as_bytes())?;
-                w.write_all(b" ")?;
-                w.write_all(t.to_string().as_bytes())?;
-                w.write_all(b")")
-            }).filter(|r| r.is_err())
-                .take(1).collect()
+            a.iter()
+                .zip(typ.ins)
+                .map(|(name, t)| {
+                    w.write_all(b" (param $")?;
+                    w.write_all(name.as_bytes())?;
+                    w.write_all(b" ")?;
+                    w.write_all(t.to_string().as_bytes())?;
+                    w.write_all(b")")
+                })
+                .filter(|r| r.is_err())
+                .take(1)
+                .collect()
         } else {
             w.write_all(b" (param ")?;
-            let types = typ.ins.iter()
+            let types = typ
+                .ins
+                .iter()
                 .map(|t| t.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -315,10 +335,11 @@ impl Wat {
         Ok(())
     }
 
-    fn write_ext(&mut self,
-                 w: &mut Box<dyn Write>,
-                 mod_name: &str,
-                 defs: Vec<ExtDef>,
+    fn write_ext(
+        &mut self,
+        w: &mut Box<dyn Write>,
+        mod_name: &str,
+        defs: Vec<ExtDef>,
     ) -> Result<()> {
         let mut is_first = true;
         for def in defs {
@@ -336,9 +357,17 @@ impl Wat {
                             self.start_expr(w)?;
                             format!("{}${}", def.id, i)
                         };
-                        w.write_all(format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes())?;
-                        self.write_fun(w, &format!("{}.{}", mod_name, name),
-                                       None, None, fn_type, Visibility::Private)?;
+                        w.write_all(
+                            format!("(import \"{}\" \"{}\" ", mod_name, def.id).as_bytes(),
+                        )?;
+                        self.write_fun(
+                            w,
+                            &format!("{}.{}", mod_name, name),
+                            None,
+                            None,
+                            fn_type,
+                            Visibility::Private,
+                        )?;
                         w.write_all(b")")?;
                     }
                     None
@@ -347,11 +376,18 @@ impl Wat {
                 Type::I32 => Some(b"i32"),
                 Type::F64 => Some(b"f64"),
                 Type::F32 => Some(b"f32"),
-                Type::Error(e) => { return err_wasmin!(werr_type!(e.reason, e.pos)); }
+                Type::Error(e) => {
+                    return err_wasmin!(e.clone());
+                }
             };
             if let Some(t) = type_to_write {
-                w.write_all(format!("(global ${}.{} (import \"{}\" \"{}\") ",
-                                    mod_name, &def.id, mod_name, &def.id).as_bytes())?;
+                w.write_all(
+                    format!(
+                        "(global ${}.{} (import \"{}\" \"{}\") ",
+                        mod_name, &def.id, mod_name, &def.id
+                    )
+                        .as_bytes(),
+                )?;
                 w.write_all(t)?;
                 w.write_all(b")")?;
             }
@@ -379,7 +415,12 @@ impl WasminSink<()> for Wat {
         Ok(())
     }
 
-    fn receive(&mut self, element: TopLevelElement, mut w: &mut Box<dyn Write>, _: &mut ()) -> Result<()> {
+    fn receive(
+        &mut self,
+        element: TopLevelElement,
+        mut w: &mut Box<dyn Write>,
+        _: &mut (),
+    ) -> Result<()> {
         Wat::start_texpr(w)?;
         match element {
             TopLevelElement::Let(assign, vis, _) => {
@@ -394,7 +435,7 @@ impl WasminSink<()> for Wat {
             TopLevelElement::Ext(mod_name, defs, ..) => {
                 self.write_ext(w, mod_name.as_str(), defs)?;
             }
-            TopLevelElement::Error(e) => return err_wasmin!(e)
+            TopLevelElement::Error(e) => return err_wasmin!(e),
         };
         Ok(())
     }

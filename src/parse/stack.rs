@@ -33,7 +33,9 @@ impl Stack {
     fn get_entry(&mut self, id: &str) -> Option<&mut StackEntry> {
         for symbols in self.items.iter_mut().rev() {
             let value = symbols.get_mut(id);
-            if value.is_some() { return value; }
+            if value.is_some() {
+                return value;
+            }
         }
         None
     }
@@ -46,11 +48,12 @@ impl Stack {
     /// it existed but [is_mut] was true,
     /// otherwise this is considered as a direct implementation, hence it will be accepted
     /// if either the type matches a previous definition or if no definition exists yet.
-    pub fn push(&mut self,
-                id: String,
-                typ: Type,
-                is_def: bool,
-                is_mut: bool,
+    pub fn push(
+        &mut self,
+        id: String,
+        typ: Type,
+        is_def: bool,
+        is_mut: bool,
     ) -> Result<Option<Type>, String> {
         let is_def_only_level = self.def_only_level;
         if let Some(mut entry) = self.get_entry(&id) {
@@ -75,8 +78,11 @@ impl Stack {
                 // was def, is def, is mut, ...
                 (true, false, _, _) | (false, false, true, _) => {
                     if !typ.is_assignable_to(&entry.typ) {
-                        return Err(format!("Cannot implement '{}' with type '{}' because its \
-                      defined type '{}' does not match", &id, &typ, &entry.typ));
+                        return Err(format!(
+                            "Cannot implement '{}' with type '{}' because its \
+                      defined type '{}' does not match",
+                            &id, &typ, &entry.typ
+                        ));
                     }
                     entry.is_def = is_def;
                     if typ == entry.typ {
@@ -91,20 +97,29 @@ impl Stack {
                     add_function_overload(id.as_str(), current_types, typ)
                 }
                 // was def, is def, is mut, ...
-                (true, true, _, &mut Type::Fn(ref mut current_types))
-                if is_def_only_level => {
+                (true, true, _, &mut Type::Fn(ref mut current_types)) if is_def_only_level => {
                     add_function_overload(id.as_str(), current_types, typ)
                 }
                 // was def, is def, is mut, ...
-                (true, true, _, _) => Err(format!("Cannot re-define '{}'. Try implementing it first, \
-                    then re-defining it with different types.", &id)),
+                (true, true, _, _) => Err(format!(
+                    "Cannot re-define '{}'. Try implementing it first, \
+                    then re-defining it with different types.",
+                    &id
+                )),
                 // was def, is def, is mut, ...
-                _ => Err(format!("Cannot re-implement '{}'", &id))
+                _ => Err(format!("Cannot re-implement '{}'", &id)),
             }
         } else {
             let last_index = self.items.len() - 1;
             let symbols = self.items.get_mut(last_index).unwrap();
-            symbols.insert(id, StackEntry { typ, is_def, is_mut });
+            symbols.insert(
+                id,
+                StackEntry {
+                    typ,
+                    is_def,
+                    is_mut,
+                },
+            );
             Ok(None)
         }
     }
@@ -116,12 +131,16 @@ impl Stack {
                 let elem = &elem[1..];
                 return if let Some(ns) = self.namespaces.get(mod_name) {
                     ns.get(elem).map(|e| (e, true))
-                } else { None };
+                } else {
+                    None
+                };
             }
             let symbols = self.items.get(i).unwrap();
             if let Some(entry) = symbols.get(id) {
                 Some((&entry.typ, i == 0))
-            } else { None }
+            } else {
+                None
+            }
         })
     }
 
@@ -130,8 +149,9 @@ impl Stack {
     }
 
     pub fn get_def(&self, id: &str) -> Option<&Type> {
-        self.items.last().and_then(|entries|
-            entries.get(id).filter(|e| e.is_def).map(|e| &e.typ))
+        self.items
+            .last()
+            .and_then(|entries| entries.get(id).filter(|e| e.is_def).map(|e| &e.typ))
     }
 
     pub fn new_level(&mut self) {
@@ -163,7 +183,11 @@ impl Stack {
         self.namespaces.get(namespace)
     }
 
-    pub fn push_namespace(&mut self, namespace: String, mut entries: Vec<(String, Type)>) -> Result<(), String> {
+    pub fn push_namespace(
+        &mut self,
+        namespace: String,
+        mut entries: Vec<(String, Type)>,
+    ) -> Result<(), String> {
         if self.namespaces.contains_key(namespace.as_str()) {
             return Err(format!("namespace '{}' already exists", &namespace));
         }
@@ -177,16 +201,19 @@ impl Stack {
 
     pub fn drop_level_and_get_its_defs(&mut self) -> Vec<(String, Type)> {
         self.def_only_level = false;
-        self.items.remove(self.items.len() - 1).drain()
+        self.items
+            .remove(self.items.len() - 1)
+            .drain()
             .filter(|(_, entry)| entry.is_def)
             .map(|(id, entry)| (id, entry.typ))
             .collect()
     }
 }
 
-fn add_function_overload(id: &str,
-                         current_types: &mut Vec<FunType>,
-                         typ: Type,
+fn add_function_overload(
+    id: &str,
+    current_types: &mut Vec<FunType>,
+    typ: Type,
 ) -> Result<Option<Type>, String> {
     let t = match typ {
         Type::Fn(mut new_type) => {
@@ -196,7 +223,7 @@ fn add_function_overload(id: &str,
             assert_eq!(new_type.len(), 1);
             new_type.remove(0)
         }
-        _ => return Err(format!("Cannot re-implement '{}' as a non-function", id))
+        _ => return Err(format!("Cannot re-implement '{}' as a non-function", id)),
     };
     current_types.push(t);
     Ok(None)
@@ -210,7 +237,7 @@ impl Default for Stack {
 
 #[cfg(test)]
 mod stack_tests {
-    use crate::types::{FunType, Type::{*}};
+    use crate::types::{FunType, Type::*};
 
     use super::*;
 
@@ -218,9 +245,13 @@ mod stack_tests {
     fn stack_can_have_bindings() {
         let mut stack = Stack::new();
         assert_eq!(stack.get(&"foo"), None);
-        stack.push("foo".to_string(), Type::Empty, false, false).unwrap();
+        stack
+            .push("foo".to_string(), Type::Empty, false, false)
+            .unwrap();
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
-        stack.push("bar".to_string(), Type::I64, false, false).unwrap();
+        stack
+            .push("bar".to_string(), Type::I64, false, false)
+            .unwrap();
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         assert_eq!(stack.get(&"z"), None);
@@ -229,15 +260,21 @@ mod stack_tests {
     #[test]
     fn stack_can_have_multi_level_bindings() {
         let mut stack = Stack::new();
-        stack.push("foo".to_string(), Type::Empty, false, false).unwrap();
+        stack
+            .push("foo".to_string(), Type::Empty, false, false)
+            .unwrap();
         stack.new_level();
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         stack.new_level();
-        stack.push("bar".to_string(), Type::I64, false, false).unwrap();
+        stack
+            .push("bar".to_string(), Type::I64, false, false)
+            .unwrap();
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
         stack.new_level();
-        stack.push("z".to_string(), Type::F32, false, false).unwrap();
+        stack
+            .push("z".to_string(), Type::F32, false, false)
+            .unwrap();
         assert_eq!(stack.get(&"z"), Some(&Type::F32));
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::Empty));
@@ -255,12 +292,20 @@ mod stack_tests {
     #[test]
     fn stack_knows_globals_and_locals() {
         let mut stack = Stack::new();
-        stack.push("foo".to_string(), Type::I64, false, false).unwrap();
-        stack.push("bar".to_string(), Type::I32, false, false).unwrap();
+        stack
+            .push("foo".to_string(), Type::I64, false, false)
+            .unwrap();
+        stack
+            .push("bar".to_string(), Type::I32, false, false)
+            .unwrap();
         stack.new_level();
-        stack.push("zed".to_string(), Type::I64, false, false).unwrap();
+        stack
+            .push("zed".to_string(), Type::I64, false, false)
+            .unwrap();
         stack.new_level();
-        stack.push("zort".to_string(), Type::F64, false, false).unwrap();
+        stack
+            .push("zort".to_string(), Type::F64, false, false)
+            .unwrap();
 
         assert_eq!(stack.get_is_global(&"foo"), Some((&Type::I64, true)));
         assert_eq!(stack.get_is_global(&"bar"), Some((&Type::I32, true)));
@@ -280,9 +325,13 @@ mod stack_tests {
     #[test]
     fn stack_can_set_mut_globals() {
         let mut stack = Stack::new();
-        stack.push("counter".to_string(), Type::I32, false, true).unwrap();
+        stack
+            .push("counter".to_string(), Type::I32, false, true)
+            .unwrap();
         stack.new_level();
-        stack.push("counter".to_string(), Type::I32, false, true).unwrap();
+        stack
+            .push("counter".to_string(), Type::I32, false, true)
+            .unwrap();
 
         assert_eq!(stack.get_is_global(&"counter"), Some((&Type::I32, true)));
         stack.drop_level();
@@ -294,12 +343,20 @@ mod stack_tests {
         let mut stack = Stack::new();
 
         // same type
-        stack.push("foo".to_string(), Type::I32, true, false).unwrap();
-        stack.push("foo".to_string(), Type::I32, false, false).unwrap();
+        stack
+            .push("foo".to_string(), Type::I32, true, false)
+            .unwrap();
+        stack
+            .push("foo".to_string(), Type::I32, false, false)
+            .unwrap();
 
         // convertible type
-        stack.push("bar".to_string(), Type::I64, true, false).unwrap();
-        stack.push("bar".to_string(), Type::I32, false, false).unwrap();
+        stack
+            .push("bar".to_string(), Type::I64, true, false)
+            .unwrap();
+        stack
+            .push("bar".to_string(), Type::I32, false, false)
+            .unwrap();
 
         assert_eq!(stack.get(&"bar"), Some(&Type::I64));
         assert_eq!(stack.get(&"foo"), Some(&Type::I32));
@@ -310,17 +367,66 @@ mod stack_tests {
         let mut stack = Stack::new();
 
         // first fun types
-        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![], outs: vec![] }]), true, false).unwrap();
-        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![], outs: vec![] }]), false, false).unwrap();
+        stack
+            .push(
+                "foo".to_string(),
+                Type::Fn(vec![FunType {
+                    ins: vec![],
+                    outs: vec![],
+                }]),
+                true,
+                false,
+            )
+            .unwrap();
+        stack
+            .push(
+                "foo".to_string(),
+                Type::Fn(vec![FunType {
+                    ins: vec![],
+                    outs: vec![],
+                }]),
+                false,
+                false,
+            )
+            .unwrap();
 
         // second fun types
-        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![Type::I32], outs: vec![] }]), true, false).unwrap();
-        stack.push("foo".to_string(), Type::Fn(vec![FunType { ins: vec![Type::I32], outs: vec![] }]), false, false).unwrap();
+        stack
+            .push(
+                "foo".to_string(),
+                Type::Fn(vec![FunType {
+                    ins: vec![Type::I32],
+                    outs: vec![],
+                }]),
+                true,
+                false,
+            )
+            .unwrap();
+        stack
+            .push(
+                "foo".to_string(),
+                Type::Fn(vec![FunType {
+                    ins: vec![Type::I32],
+                    outs: vec![],
+                }]),
+                false,
+                false,
+            )
+            .unwrap();
 
-        assert_eq!(stack.get(&"foo"), Some(&Type::Fn(vec![
-            FunType { ins: vec![], outs: vec![] },
-            FunType { ins: vec![Type::I32], outs: vec![] },
-        ])));
+        assert_eq!(
+            stack.get(&"foo"),
+            Some(&Type::Fn(vec![
+                FunType {
+                    ins: vec![],
+                    outs: vec![],
+                },
+                FunType {
+                    ins: vec![Type::I32],
+                    outs: vec![],
+                },
+            ]))
+        );
     }
 
     #[test]
@@ -328,16 +434,23 @@ mod stack_tests {
         let mut stack = Stack::new();
         let entries = vec![
             ("number".to_owned(), Type::I32),
-            ("function".to_owned(), Type::Fn(vec![fun_type!([I64 I32](I64)), fun_type!([I64](I64))])),
+            (
+                "function".to_owned(),
+                Type::Fn(vec![fun_type!([I64 I32](I64)), fun_type!([I64](I64))]),
+            ),
         ];
         stack.push_namespace("env".to_owned(), entries).unwrap();
 
         let ns = stack.get_namespace("env").unwrap();
         assert_eq!(ns.get("number"), Some(Type::I32).as_ref());
-        assert_eq!(ns.get("function"), Some(Type::Fn(vec![
-            fun_type!([I64 I32](I64)),
-            fun_type!([I64](I64))
-        ])).as_ref());
+        assert_eq!(
+            ns.get("function"),
+            Some(Type::Fn(vec![
+                fun_type!([I64 I32](I64)),
+                fun_type!([I64](I64))
+            ]))
+                .as_ref()
+        );
         assert_eq!(ns.get("func"), None.as_ref());
         assert_eq!(ns.get("other"), None.as_ref());
         assert_eq!(stack.get_namespace("other"), None.as_ref());

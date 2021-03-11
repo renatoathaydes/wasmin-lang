@@ -1,8 +1,8 @@
-use std::io::{Write};
+use std::io::Write;
 
 use crate::ast::TopLevelElement;
-use crate::sink::WasminSink;
 use crate::errors::Result;
+use crate::sink::WasminSink;
 
 #[derive(Default)]
 pub struct DebugSink;
