@@ -2,6 +2,7 @@
 pub mod errors;
 #[macro_use]
 pub mod ast;
+mod lexer;
 pub mod parse;
 pub mod sink;
 pub mod types;
