@@ -8,14 +8,29 @@ use crate::errors::WasminError;
 /// Expression is the basic unit of Wasmin code.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression<'s> {
-    Empty,
-    Simple(&'s str),
-    Group(Vec<Expression<'s>>),
-    Multi(Vec<Expression<'s>>),
+    Empty(Option<NestingElement>),
+    Simple(&'s str, Option<NestingElement>),
+    Group(Vec<Expression<'s>>, Option<NestingElement>),
+    Multi(Vec<Expression<'s>>, Option<NestingElement>),
+}
+
+impl<'s> Expression<'s> {
+    fn nesting(self, nesting: Option<NestingElement>) -> Expression<'s> {
+        // only replace the nesting if one is given
+        if let None = nesting {
+            return self;
+        }
+        match self {
+            Expression::Empty(_) => Expression::Empty(nesting),
+            Expression::Simple(t, _) => Expression::Simple(t, nesting),
+            Expression::Group(e, _) => Expression::Group(e, nesting),
+            Expression::Multi(e, _) => Expression::Multi(e, nesting)
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-enum NestingElement {
+pub enum NestingElement {
     Parens,
     Square,
     Curly,
@@ -84,6 +99,21 @@ macro_rules! start_nesting {
     }};
 }
 
+macro_rules! end_nesting {
+    ($e:expr, $token:expr, $tokens:expr, $state:expr, $exprs:expr) => {{
+        return if let Some(n) = $state.nesting.pop() {
+            if n.elem == $e {
+                Ok(join_exprs($exprs, Some(n.elem)))
+            } else {
+                Err(werr_syntax!(format!("misplaced '{}', expecting '{}', which started at {}",
+                    $token, n.closing_char(), n.pos_str()), $state.pos()))
+            }
+        } else {
+            Err(werr_syntax!(format!("misplaced '{}', closing nothing", $token), $state.pos()))
+        }
+    }};
+}
+
 fn lexer<'s>(tokens: &mut UWordBounds<'s>, state: &mut LexerState) -> Result<Expression<'s>, WasminError> {
     // let file = fs::read_to_string("ex.wasmin").unwrap();
     // let tokens = UnicodeSegmentation::split_word_bounds(&file);
@@ -107,24 +137,17 @@ fn lexer<'s>(tokens: &mut UWordBounds<'s>, state: &mut LexerState) -> Result<Exp
             "(" => start_nesting!(NestingElement::Parens, tokens, state, exprs),
             "[" => start_nesting!(NestingElement::Square, tokens, state, exprs),
             "{" => start_nesting!(NestingElement::Curly, tokens, state, exprs),
-            ")" => {
-                if let Some(n) = state.nesting.pop() {
-                    return if n.elem == NestingElement::Parens {
-                        Ok(join_exprs(exprs))
-                    } else {
-                        Err(werr_syntax!(format!("misplaced ')', expecting '{}', which started at {}",
-                            n.closing_char(), n.pos_str()), state.pos()))
-                    };
-                } else {
-                    return Err(werr_syntax!("misplaced ')', closing nothing", state.pos()));
-                };
-            }
-            _ => exprs.push(Expression::Simple(token)),
+            ")" => end_nesting!(NestingElement::Parens, token, tokens, state, exprs),
+            "]" => end_nesting!(NestingElement::Square, token, tokens, state, exprs),
+            "}" => end_nesting!(NestingElement::Curly, token, tokens, state, exprs),
+            ";" => todo!(),
+            "," => todo!(),
+            _ => exprs.push(Expression::Simple(token, None)),
         };
     }
     // tokens ended, emit expression if nothing is waiting to be closed
     if state.nesting.is_empty() {
-        Ok(join_exprs(exprs))
+        Ok(join_exprs(exprs, None))
     } else {
         let last_n = state.nesting.last().unwrap();
         Err(werr_syntax!(format!("unexpected EOF, unmatched '{}', which started at {}",
@@ -132,11 +155,11 @@ fn lexer<'s>(tokens: &mut UWordBounds<'s>, state: &mut LexerState) -> Result<Exp
     }
 }
 
-fn join_exprs(mut exprs: Vec<Expression>) -> Expression {
+fn join_exprs(mut exprs: Vec<Expression>, nesting: Option<NestingElement>) -> Expression {
     match exprs.len() {
-        0 => Expression::Empty,
-        1 => exprs.remove(0),
-        _ => Expression::Group(exprs)
+        0 => Expression::Empty(nesting),
+        1 => exprs.remove(0).nesting(nesting),
+        _ => Expression::Group(exprs, nesting)
     }
 }
 
@@ -149,15 +172,24 @@ mod tests {
     use super::*;
 
     macro_rules! group_expr {
-        ($($a:expr), +) => {Expression::Group(vec![ $( $a ), + ])};
+        ($($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], None)};
+        (p $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(NestingElement::Parens))};
+        (s $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(NestingElement::Square))};
+        (c $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(NestingElement::Curly))};
     }
 
     macro_rules! empty_expr {
-        () => {Expression::Empty};
+        () => {Expression::Empty(None)};
+        (p) => {Expression::Empty(Some(NestingElement::Parens))};
+        (s) => {Expression::Empty(Some(NestingElement::Square))};
+        (c) => {Expression::Empty(Some(NestingElement::Curly))};
     }
 
     macro_rules! str_expr {
-        ($e:literal) => {Expression::Simple($e)};
+        ($e:literal) => {Expression::Simple($e, None)};
+        (p $e:literal) => {Expression::Simple($e, Some(NestingElement::Parens))};
+        (s $e:literal) => {Expression::Simple($e, Some(NestingElement::Square))};
+        (c $e:literal) => {Expression::Simple($e, Some(NestingElement::Curly))};
     }
 
     macro_rules! lex {
@@ -173,39 +205,57 @@ mod tests {
 
     #[test]
     fn test_empty_expr() {
-        assert_ok!(lex!("()"), empty_expr!());
-        assert_ok!(lex!("( )"), empty_expr!());
-        assert_ok!(lex!("  (    )   "), empty_expr!());
+        assert_ok!(lex!(""), empty_expr!());
+        assert_ok!(lex!("()"), empty_expr!(p));
+        assert_ok!(lex!("( )"), empty_expr!(p));
+        assert_ok!(lex!("  [    ]   "), empty_expr!(s));
+        assert_ok!(lex!("  \n{ \n  }\n   "), empty_expr!(c));
     }
 
     #[test]
     fn test_simple_expr() {
         assert_ok!(lex!("hello"), str_expr!("hello"));
-        assert_ok!(lex!("(hello_world)"), str_expr!("hello_world"));
+        assert_ok!(lex!("(hello_world)"), str_expr!(p "hello_world"));
     }
 
     #[test]
     fn test_group_expr() {
-        assert_ok!(lex!("(foo bar)"), group_expr!(str_expr!("foo"), str_expr!("bar")));
+        assert_ok!(lex!("foo bar"), group_expr!(str_expr!("foo"), str_expr!("bar")));
+        assert_ok!(lex!("(foo bar)"), group_expr!(p str_expr!("foo"), str_expr!("bar")));
         assert_ok!(lex!("(+ 1 2 3)"),
-                   group_expr!(str_expr!("+"), str_expr!("1"), str_expr!("2"), str_expr!("3")));
+                   group_expr!(p str_expr!("+"), str_expr!("1"), str_expr!("2"), str_expr!("3")));
+    }
+
+    #[test]
+    fn test_group_expr_square_brackets() {
+        assert_ok!(lex!("foo[bar]"), group_expr!(str_expr!("foo"), str_expr!(s "bar")));
+        assert_ok!(lex!("[+ 1 2 3]"),
+                   group_expr!(s str_expr!("+"), str_expr!("1"), str_expr!("2"), str_expr!("3")));
+    }
+
+    #[test]
+    fn test_nested_empty_expr() {
+        assert_ok!(lex!("(())"), empty_expr!(p));
+        assert_ok!(lex!("([])"), empty_expr!(p));
+        assert_ok!(lex!("{([])}"), empty_expr!(c));
+        assert_ok!(lex!("[{([])}]"), empty_expr!(s));
     }
 
     #[test]
     fn test_nested_group_expr() {
-        assert_ok!(lex!("foo(bar)"), group_expr!(str_expr!("foo"), str_expr!("bar")));
+        assert_ok!(lex!("foo(bar)"), group_expr!(str_expr!("foo"), str_expr!(p "bar")));
         assert_ok!(lex!("(+ (1 (2 3)))"),
-                   group_expr!(str_expr!("+"),
-                       group_expr!(str_expr!("1"),
-                           group_expr!(str_expr!("2"), str_expr!("3")))));
+                   group_expr!(p str_expr!("+"),
+                       group_expr!(p str_expr!("1"),
+                           group_expr!(p str_expr!("2"), str_expr!("3")))));
     }
 
     #[test]
     fn test_iterator_can_be_reused_and_pos() {
         let mut state = LexerState::default();
         let mut iter = "(a)\n(b)".split_word_bounds();
-        assert_ok!(lexer(&mut iter, &mut state), str_expr!("a"));
-        assert_ok!(lexer(&mut iter, &mut state), str_expr!("b"));
+        assert_ok!(lexer(&mut iter, &mut state), str_expr!(p "a"));
+        assert_ok!(lexer(&mut iter, &mut state), str_expr!(p "b"));
         assert_eq!(state.pos(), (2, 3));
     }
 
