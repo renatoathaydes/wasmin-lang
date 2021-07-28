@@ -92,10 +92,12 @@ impl NestingToken {
 }
 
 macro_rules! start_nesting {
-    ($e:expr, $tokens:expr, $state:expr, $exprs:expr) => {{
+    ($e:expr, $tokens:expr, $state:expr, $exprs:expr, $nested:expr) => {{
+        // remember if this expression started with nesting as if it did, we must terminate it
+        let terminate = if $nested.is_none() { $nested = Some(Some($e)); true } else { false };
         $state.nesting.push(NestingToken { elem: $e, pos: $state.pos() });
         $exprs.push(lexer($tokens, $state)?);
-        if $state.nesting.is_empty() { break; }
+        if terminate { break; }
     }};
 }
 
@@ -118,6 +120,11 @@ fn lexer<'s>(tokens: &mut UWordBounds<'s>, state: &mut LexerState) -> Result<Exp
     // let file = fs::read_to_string("ex.wasmin").unwrap();
     // let tokens = UnicodeSegmentation::split_word_bounds(&file);
     let mut exprs = Vec::<Expression>::new();
+    let mut eof = true;
+    // This must be set on the first non-empty token so we know when to terminate the expression.
+    // If '(', '[' or '{' start the expression, then we terminate it as soon as we handle the
+    // nesting, otherwise we go all the way down to either ';' or EOF.
+    let mut nested: Option<Option<NestingElement>> = None;
     loop {
         let token;
         if let Some(t) = tokens.next() {
@@ -133,26 +140,29 @@ fn lexer<'s>(tokens: &mut UWordBounds<'s>, state: &mut LexerState) -> Result<Exp
         }
         let token = token.trim();
         if token.is_empty() { continue; }
+        if !matches!(token, "(" | "[" | "{") { nested = Some(None); }
         match token {
-            "(" => start_nesting!(NestingElement::Parens, tokens, state, exprs),
-            "[" => start_nesting!(NestingElement::Square, tokens, state, exprs),
-            "{" => start_nesting!(NestingElement::Curly, tokens, state, exprs),
+            "(" => start_nesting!(NestingElement::Parens, tokens, state, exprs, nested),
+            "[" => start_nesting!(NestingElement::Square, tokens, state, exprs, nested),
+            "{" => start_nesting!(NestingElement::Curly, tokens, state, exprs, nested),
             ")" => end_nesting!(NestingElement::Parens, token, tokens, state, exprs),
             "]" => end_nesting!(NestingElement::Square, token, tokens, state, exprs),
             "}" => end_nesting!(NestingElement::Curly, token, tokens, state, exprs),
-            ";" => todo!(),
+            ";" => {
+                eof = false;
+                break;
+            }
             "," => todo!(),
             _ => exprs.push(Expression::Simple(token, None)),
         };
     }
-    // tokens ended, emit expression if nothing is waiting to be closed
-    if state.nesting.is_empty() {
-        Ok(join_exprs(exprs, None))
-    } else {
-        let last_n = state.nesting.last().unwrap();
-        Err(werr_syntax!(format!("unexpected EOF, unmatched '{}', which started at {}",
-                last_n.elem, last_n.pos_str()), state.pos()))
-    }
+    Ok(join_exprs(exprs, nested.unwrap_or(None)))
+    // } else {
+    //     let last_n = state.nesting.last().unwrap();
+    //     let err = if eof { "EOF" } else { "';'" };
+    //     Err(werr_syntax!(format!("unexpected {}, unmatched '{}', which started at {}",
+    //             err , last_n.elem, last_n.pos_str()), state.pos()))
+    // }
 }
 
 fn join_exprs(mut exprs: Vec<Expression>, nesting: Option<NestingElement>) -> Expression {
@@ -248,6 +258,30 @@ mod tests {
                    group_expr!(p str_expr!("+"),
                        group_expr!(p str_expr!("1"),
                            group_expr!(p str_expr!("2"), str_expr!("3")))));
+    }
+
+    #[test]
+    fn test_naked_expr() {
+        assert_ok!(lex!(";"), empty_expr!());
+        assert_ok!(lex!("foo;"), str_expr!("foo"));
+        assert_ok!(lex!("foo ; ignored"), str_expr!("foo"));
+        assert_ok!(lex!("foo bar 1 2 3; ignored"),
+            group_expr!(str_expr!("foo"), str_expr!("bar"),
+                str_expr!("1"), str_expr!("2"), str_expr!("3")));
+    }
+
+    #[test]
+    fn test_naked_expr_with_nested_exprs() {
+        assert_ok!(lex!("foo(bar); ignored"),
+            group_expr!(str_expr!("foo"),str_expr!(p "bar")));
+        assert_ok!(lex!("foo (bar 1) 2; ignored"),
+            group_expr!(str_expr!("foo"),
+                group_expr!(p str_expr!("bar"), str_expr!("1")),
+                str_expr!("2")));
+        assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
+            group_expr!(str_expr!("foo"),
+                group_expr!(p str_expr!("bar"), str_expr!("1")),
+                str_expr!(s "2"), str_expr!(c "3")));
     }
 
     #[test]
