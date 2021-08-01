@@ -100,7 +100,7 @@ impl NestingToken {
 
 /// ExprOrComma allows the lexer to keep track of where each expression is split up
 /// into multi-values.
-#[derive(Debug)]
+#[cfg_attr(test, derive(Debug, PartialEq, Clone, Hash, Eq))]
 enum ExpOrComma<'s> {
     Exp(Expression<'s>),
     Comma,
@@ -222,14 +222,15 @@ fn lexer<'s>(tokens: &mut Tokens<'s>, state: &mut LexerState)
             (Some(n), ")") => end_nesting!(NestingElement::Parens, token, n, state),
             (Some(n), "]") => end_nesting!(NestingElement::Square, token, n, state),
             (Some(n), "}") => end_nesting!(NestingElement::Curly, token, n, state),
-            // TODO
-            (Some(_), ";") => panic!("need to group current contents and then continue?"),
+            // interrupting expression within nested expression
+            (Some(_), ";") => end_exp(&mut exprs),
             // multi expression
             (_, ",") => exprs.push(ExpOrComma::Comma),
             // simple expression
             _ => exprs.push(ExpOrComma::Exp(Expression::Simple(token, None))),
         };
     }
+    end_exp(&mut exprs);
     Ok(join_exprs(exprs, nesting.map(|n| n.elem)))
     // FIXME caller needs to do this in the top-level scope
     // } else {
@@ -238,6 +239,24 @@ fn lexer<'s>(tokens: &mut Tokens<'s>, state: &mut LexerState)
     //     Err(werr_syntax!(format!("unexpected {}, unmatched '{}', which started at {}",
     //             err , last_n.elem, last_n.pos_str()), state.pos()))
     // }
+}
+
+fn end_exp(exprs: &mut Vec<ExpOrComma>) {
+    // we need to get the "lose" Simple expressions and group them together when an expression
+    // is ended so we can keep the nesting information exact.
+    if exprs.len() < 2 { return; }
+    let idx = exprs.iter().enumerate().rev().find_map(|(i, e)| match e {
+        ExpOrComma::Exp(Expression::Simple(..)) => None,
+        _ => Some(i + 1),
+    }).unwrap_or(0);
+
+    // no point grouping nothing or a single expression
+    if idx >= exprs.len() - 1 { return; }
+
+    let grouping: Vec<_> = exprs.drain(idx..).collect();
+    if !grouping.is_empty() {
+        exprs.push(ExpOrComma::Exp(join_exprs(grouping, None)));
+    }
 }
 
 fn join_exprs(exprs: Vec<ExpOrComma>, nesting: Option<NestingElement>) -> Expression {
@@ -288,6 +307,11 @@ mod tests {
         (p) => {NestingElement::Parens};
         (s) => {NestingElement::Square};
         (c) => {NestingElement::Curly};
+    }
+
+    macro_rules! exp_or_c {
+        ($e:expr) => { ExpOrComma::Exp($e) };
+        () => { ExpOrComma::Comma };
     }
 
     macro_rules! group_expr {
@@ -441,7 +465,19 @@ mod tests {
         assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
             group_expr!(str_expr!("foo"),
                 group_expr!(p str_expr!("bar"), str_expr!("1")),
-                str_expr!(s "2"), str_expr!(c "3")));
+                group_expr!(str_expr!(s "2"), str_expr!(c "3"))));
+    }
+
+    #[test]
+    fn test_naked_exprs_within_nested_exprs() {
+        assert_ok!(lex!("(foo;bar)"),
+            group_expr!(p str_expr!("foo"), str_expr!("bar")));
+        assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
+            // parsed as ( | let x = 1 |, | let y = 2 |, | + x y | )
+            group_expr!(p
+                group_expr!(str_expr!("let"), str_expr!("x"), str_expr!("="), str_expr!("1")),
+                group_expr!(str_expr!("let"), str_expr!("y"), str_expr!("="), str_expr!("2")),
+                group_expr!(str_expr!("+"), str_expr!("x"), str_expr!("y"))));
     }
 
     #[test]
@@ -460,5 +496,54 @@ mod tests {
         assert_ok!(lexer(&mut iter, &mut state),
             group_expr!(str_expr!("foo"), str_expr!("b"), str_expr!("a"), str_expr!("r")));
         assert_eq!(state.pos(), (4, 5));
+    }
+
+    #[test]
+    fn does_not_interrupt_simple_expr() {
+        let mut e = vec![exp_or_c!(str_expr!("hi"))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(str_expr!("hi"))])
+    }
+
+    #[test]
+    fn does_not_interrupt_comma_then_simple_expr() {
+        let mut e = vec![exp_or_c!(), exp_or_c!(str_expr!("hi"))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(), exp_or_c!(str_expr!("hi"))])
+    }
+
+    #[test]
+    fn does_not_interrupt_groups() {
+        let mut e = vec![
+            exp_or_c!(group_expr!(str_expr!("h"))),
+            exp_or_c!(group_expr!(str_expr!("h")))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(group_expr!(str_expr!("h"))),
+                           exp_or_c!(group_expr!(str_expr!("h")))])
+    }
+
+    #[test]
+    fn interrupts_simple_exprs() {
+        let mut e = vec![exp_or_c!(str_expr!("hi")), exp_or_c!(str_expr!("ho"))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(group_expr!(str_expr!("hi"), str_expr!("ho")))]);
+    }
+
+    #[test]
+    fn interrupts_group_then_simple_exprs() {
+        let mut e = vec![exp_or_c!(group_expr!(empty_expr!())),
+                         exp_or_c!(str_expr!("hi")), exp_or_c!(str_expr!("ho"))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(group_expr!(empty_expr!())),
+                           exp_or_c!(group_expr!(str_expr!("hi"), str_expr!("ho")))]);
+    }
+
+    #[test]
+    fn interrupts_comma_then_simple_exprs() {
+        let mut e = vec![exp_or_c!(),
+                         exp_or_c!(str_expr!("1")), exp_or_c!(str_expr!("2"))];
+        end_exp(&mut e);
+        assert_eq!(e, vec![exp_or_c!(),
+                           exp_or_c!(group_expr!(str_expr!("1"), str_expr!("2")))]);
     }
 }
