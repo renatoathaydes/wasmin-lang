@@ -142,7 +142,18 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             ";" => ASTNode::End,
             "," => ASTNode::Split,
             "let" => ASTNode::Let,
+            "mut" => ASTNode::Mut,
+            "set" => ASTNode::Set,
+            "fun" => ASTNode::Fun,
+            "pub" => ASTNode::Pub,
+            "use" => ASTNode::Use,
+            "if" => ASTNode::If,
+            "then" => ASTNode::Then,
+            "else" => ASTNode::Else,
+            "def" => ASTNode::Def,
+            "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
+            "@" => ASTNode::At,
             _ => ASTNode::Str(token),
         });
     }
@@ -199,7 +210,18 @@ mod tests {
     macro_rules! split { () => {ASTNode::Split} }
     macro_rules! end { () => {ASTNode::End} }
     macro_rules! _let { () => {ASTNode::Let} }
-    macro_rules! eq { () => {ASTNode::Eq} }
+    macro_rules! _mut { () => {ASTNode::Mut} }
+    macro_rules! _set { () => {ASTNode::Set} }
+    macro_rules! _fun { () => {ASTNode::Fun} }
+    macro_rules! _pub { () => {ASTNode::Pub} }
+    macro_rules! _use { () => {ASTNode::Use} }
+    macro_rules! _if { () => {ASTNode::If} }
+    macro_rules! _then { () => {ASTNode::Then} }
+    macro_rules! _else { () => {ASTNode::Else} }
+    macro_rules! _def { () => {ASTNode::Def} }
+    macro_rules! _ext { () => {ASTNode::Ext} }
+    macro_rules! _at { () => {ASTNode::At} }
+    macro_rules! _eq { () => {ASTNode::Eq} }
 
     macro_rules! lex {
         ($input:literal) => {{
@@ -327,8 +349,8 @@ mod tests {
             group!(p str!("foo"), end!(), str!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
             group!(p
-                _let!(), str!("x"), eq!(), str!("1"), end!(),
-                _let!(), str!("y"), eq!(), str!("2"), end!(),
+                _let!(), str!("x"), _eq!(), str!("1"), end!(),
+                _let!(), str!("y"), _eq!(), str!("2"), end!(),
                 str!("+"), str!("x"), str!("y")));
     }
 
@@ -340,6 +362,27 @@ mod tests {
                 group!(s str!("add"), str!("2"),
                     group!(p str!("3"), end!(), str!("sub"), str!("2"))),
                 str!("5")));
+    }
+
+    #[test]
+    fn test_keywords() {
+        assert_ok!(lex!("let x = 1, mut y = 2, set y=add x y;"),
+            group!(_let!(), str!("x"), _eq!(), str!("1"), split!(),
+                _mut!(), str!("y"), _eq!(), str!("2"), split!(),
+                _set!(), str!("y"), _eq!(), str!("add"), str!("x"), str!("y"), end!()));
+        assert_ok!(lex!("ext mod {
+            add [u32] u32;
+            mul [f32] f32;
+            }"), group!(_ext!(), str!("mod"), group!(c
+                str!("add"), group!(s str!("u32")), str!("u32"), end!(),
+                str!("mul"), group!(s str!("f32")), str!("f32"), end!())));
+        assert_ok!(lex!("if cond then x else y"),
+            group!(_if!(), str!("cond"), _then!(), str!("x"), _else!(), str!("y")));
+        assert_ok!(lex!("pub fun f x = (sqrt x)"),
+            group!(_pub!(), _fun!(), str!("f"), str!("x"), _eq!(),
+                group!(p str!("sqrt"), str!("x"))));
+        assert_ok!(lex!("@macro x"), group!(_at!(), str!("macro"), str!("x")));
+        assert_ok!(lex!("use foo, bar;"), group!(_use!(), str!("foo"), split!(), str!("bar"), end!()));
     }
 
     #[test]

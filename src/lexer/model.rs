@@ -13,8 +13,30 @@ pub enum ASTNode<'s> {
     End,
     /// let keyword
     Let,
+    /// mut keyword
+    Mut,
+    /// set keyword
+    Set,
+    /// fun keyword
+    Fun,
+    /// pub keyword
+    Pub,
+    /// use keyword
+    Use,
+    /// if keyword
+    If,
+    /// then keyword
+    Then,
+    /// else keyword
+    Else,
+    /// def keyword
+    Def,
+    /// ext keyword
+    Ext,
     /// '=' symbol
     Eq,
+    /// '@' symbol
+    At,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
