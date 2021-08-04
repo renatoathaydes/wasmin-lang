@@ -3,8 +3,8 @@ use std::fmt::{Display, Formatter};
 /// Expression is the basic unit of Wasmin code.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum ASTNode<'s> {
-    /// Basic word.
-    Str(&'s str),
+    /// Basic identifier.
+    Id(&'s str),
     /// Number.
     Num(&'s str),
     /// Grouped expression that introduces nesting.

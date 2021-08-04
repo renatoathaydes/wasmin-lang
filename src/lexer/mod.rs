@@ -84,17 +84,17 @@ mod is_terminated_test {
         assert_eq!(is_terminated(&vec![]), true);
         assert_eq!(is_terminated(&vec![Group(vec![], None)]), true);
         assert_eq!(is_terminated(&vec![Group(vec![], Some(Parens))]), true);
-        assert_eq!(is_terminated(&vec![Str(""), End]), true);
-        assert_eq!(is_terminated(&vec![Str(""), Str(""), End]), true);
-        assert_eq!(is_terminated(&vec![Let, Str(""), End]), true);
+        assert_eq!(is_terminated(&vec![Id(""), End]), true);
+        assert_eq!(is_terminated(&vec![Id(""), Id(""), End]), true);
+        assert_eq!(is_terminated(&vec![Let, Id(""), End]), true);
         assert_eq!(is_terminated(&vec![End]), true);
 
-        assert_eq!(is_terminated(&vec![Str("")]), false);
+        assert_eq!(is_terminated(&vec![Id("")]), false);
         assert_eq!(is_terminated(&vec![Split]), false);
-        assert_eq!(is_terminated(&vec![Split, Str("")]), false);
-        assert_eq!(is_terminated(&vec![Str(""), Group(vec![], None)]), false);
-        assert_eq!(is_terminated(&vec![Str(""), Group(vec![], Some(Parens))]), false);
-        assert_eq!(is_terminated(&vec![Let, Str(""), Eq, Group(vec![], Some(Parens))]), false);
+        assert_eq!(is_terminated(&vec![Split, Id("")]), false);
+        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], None)]), false);
+        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], Some(Parens))]), false);
+        assert_eq!(is_terminated(&vec![Let, Id(""), Eq, Group(vec![], Some(Parens))]), false);
     }
 }
 
@@ -160,7 +160,7 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
             _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
-            _ => ASTNode::Str(token),
+            _ => ASTNode::Id(token),
         });
     }
     Ok(nodes)
@@ -207,7 +207,7 @@ mod tests {
         (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(c)))};
     }
 
-    macro_rules! str { ($e:literal) => {ASTNode::Str($e)} }
+    macro_rules! id { ($e:literal) => {ASTNode::Id($e)} }
     macro_rules! num { ($e:literal) => {ASTNode::Num($e)} }
     macro_rules! split { () => {ASTNode::Split} }
     macro_rules! end { () => {ASTNode::End} }
@@ -256,29 +256,29 @@ mod tests {
 
     #[test]
     fn test_simple_expr() {
-        assert_ok!(lex!("hello"), str!("hello"));
-        assert_ok!(lex!("hello_world"), str!("hello_world"));
+        assert_ok!(lex!("hello"), id!("hello"));
+        assert_ok!(lex!("hello_world"), id!("hello_world"));
     }
 
     #[test]
     fn test_group_expr() {
-        assert_ok!(lex!("(hello_world)"), group!(p str!("hello_world")));
-        assert_ok!(lex!("foo bar"), group!(str!("foo"), str!("bar")));
-        assert_ok!(lex!("(foo bar)"), group!(p str!("foo"), str!("bar")));
-        assert_ok!(lex!("[foo]"), group!(s str!("foo")));
+        assert_ok!(lex!("(hello_world)"), group!(p id!("hello_world")));
+        assert_ok!(lex!("foo bar"), group!(id!("foo"), id!("bar")));
+        assert_ok!(lex!("(foo bar)"), group!(p id!("foo"), id!("bar")));
+        assert_ok!(lex!("[foo]"), group!(s id!("foo")));
         assert_ok!(lex!("(+ 1 2 3)"),
-                   group!(p str!("+"), num!("1"), num!("2"), num!("3")));
+                   group!(p id!("+"), num!("1"), num!("2"), num!("3")));
     }
 
     #[test]
     fn test_group() {
-        assert_ok!(lex!("foo, bar"), group!(str!("foo"), split!(), str!("bar")));
-        assert_ok!(lex!("(foo, bar)"), group!(p str!("foo"), split!(), str!("bar")));
+        assert_ok!(lex!("foo, bar"), group!(id!("foo"), split!(), id!("bar")));
+        assert_ok!(lex!("(foo, bar)"), group!(p id!("foo"), split!(), id!("bar")));
         assert_ok!(lex!("foo, bar 1, zort 2"),
-            group!(str!("foo"), split!(),
-                str!("bar"), num!("1"), split!(),
-                str!("zort"), num!("2")));
-        assert_ok!(lex!("[foo,]"), group!(s str!("foo"), split!()));
+            group!(id!("foo"), split!(),
+                id!("bar"), num!("1"), split!(),
+                id!("zort"), num!("2")));
+        assert_ok!(lex!("[foo,]"), group!(s id!("foo"), split!()));
         assert_ok!(lex!("{,}"), group!(c split!()));
         assert_ok!(lex!("1, 2 ,3; ignore"),
             group!(num!("1"), split!(), num!("2"), split!(), num!("3"), end!()));
@@ -288,9 +288,9 @@ mod tests {
 
     #[test]
     fn test_group_expr_square_brackets() {
-        assert_ok!(lex!("foo[bar]"), group!(str!("foo"), group!(s str!("bar"))));
+        assert_ok!(lex!("foo[bar]"), group!(id!("foo"), group!(s id!("bar"))));
         assert_ok!(lex!("[+ 1 2 3]"),
-                   group!(s str!("+"), num!("1"), num!("2"), num!("3")));
+                   group!(s id!("+"), num!("1"), num!("2"), num!("3")));
     }
 
     #[test]
@@ -303,97 +303,97 @@ mod tests {
 
     #[test]
     fn test_nested_group_expr() {
-        assert_ok!(lex!("foo(bar)"), group!(str!("foo"), group!(p str!("bar"))));
-        assert_ok!(lex!("((foo)(bar))"), group!(p group!(p str!("foo")), group!(p str!("bar"))));
-        assert_ok!(lex!("foo[(bar) zort]"), group!(str!("foo"),
-            group!(s group!(p str!("bar")), str!("zort"))));
+        assert_ok!(lex!("foo(bar)"), group!(id!("foo"), group!(p id!("bar"))));
+        assert_ok!(lex!("((foo)(bar))"), group!(p group!(p id!("foo")), group!(p id!("bar"))));
+        assert_ok!(lex!("foo[(bar) zort]"), group!(id!("foo"),
+            group!(s group!(p id!("bar")), id!("zort"))));
         assert_ok!(lex!("(+ (1 (2 3)))"),
-                   group!(p str!("+"),
+                   group!(p id!("+"),
                        group!(p num!("1"),
                            group!(p num!("2"), num!("3")))));
     }
 
     #[test]
     fn test_nested_group() {
-        assert_ok!(lex!("foo, (bar)"), group!(str!("foo"), split!(), group!(p str!("bar"))));
+        assert_ok!(lex!("foo, (bar)"), group!(id!("foo"), split!(), group!(p id!("bar"))));
         assert_ok!(lex!("(foo, (bar, zort))"),
-            group!(p str!("foo"), split!(), group!(p str!("bar"), split!(), str!("zort"))));
+            group!(p id!("foo"), split!(), group!(p id!("bar"), split!(), id!("zort"))));
         assert_ok!(lex!("[1,foo(z,2)]"),
-            group!(s num!("1"), split!(), str!("foo"),
-                group!(p str!("z"), split!(), num!("2"))));
+            group!(s num!("1"), split!(), id!("foo"),
+                group!(p id!("z"), split!(), num!("2"))));
         assert_ok!(lex!("{[1,foo(z,2)], [(4,  89), 6]}"),
             group!(c
-                group!(s num!("1"), split!(), str!("foo"),
-                    group!(p str!("z"), split!(), num!("2"))), split!(),
+                group!(s num!("1"), split!(), id!("foo"),
+                    group!(p id!("z"), split!(), num!("2"))), split!(),
                 group!(s group!(p num!("4"), split!(), num!("89")), split!(), num!("6"))));
     }
 
     #[test]
     fn test_naked_expr() {
         assert_ok!(lex!(";"), end!());
-        assert_ok!(lex!("foo;"), group!(str!("foo"), end!()));
-        assert_ok!(lex!("foo ; ignored"), group!(str!("foo"), end!()));
+        assert_ok!(lex!("foo;"), group!(id!("foo"), end!()));
+        assert_ok!(lex!("foo ; ignored"), group!(id!("foo"), end!()));
         assert_ok!(lex!("foo bar 1 2 3; ignored"),
-            group!(str!("foo"), str!("bar"),
+            group!(id!("foo"), id!("bar"),
                 num!("1"), num!("2"), num!("3"), end!()));
     }
 
     #[test]
     fn test_naked_expr_with_nested_exprs() {
         assert_ok!(lex!("foo(bar); ignored"),
-            group!(str!("foo"), group!(p str!("bar")), end!()));
+            group!(id!("foo"), group!(p id!("bar")), end!()));
         assert_ok!(lex!("foo(); ignored"),
-            group!(str!("foo"), group!(p), end!()));
+            group!(id!("foo"), group!(p), end!()));
         assert_ok!(lex!("foo (bar 1) 2; ignored"),
-            group!(str!("foo"),
-                group!(p str!("bar"), num!("1")),
+            group!(id!("foo"),
+                group!(p id!("bar"), num!("1")),
                 num!("2"), end!()));
         assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
-            group!(str!("foo"),
-                group!(p str!("bar"), num!("1")),
+            group!(id!("foo"),
+                group!(p id!("bar"), num!("1")),
                 group!(s num!("2")), group!(c num!("3")), end!()));
     }
 
     #[test]
     fn test_naked_exprs_within_nested_let_exprs() {
         assert_ok!(lex!("(foo;bar)"),
-            group!(p str!("foo"), end!(), str!("bar")));
+            group!(p id!("foo"), end!(), id!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
             group!(p
-                _let!(), str!("x"), _eq!(), num!("1"), end!(),
-                _let!(), str!("y"), _eq!(), num!("2"), end!(),
-                str!("+"), str!("x"), str!("y")));
+                _let!(), id!("x"), _eq!(), num!("1"), end!(),
+                _let!(), id!("y"), _eq!(), num!("2"), end!(),
+                id!("+"), id!("x"), id!("y")));
     }
 
     #[test]
     fn test_nested_exprs_within_nested_exprs() {
         assert_ok!(lex!("mul [add 2 (3; sub 2)] 5"),
             group!(
-                str!("mul"),
-                group!(s str!("add"), num!("2"),
-                    group!(p num!("3"), end!(), str!("sub"), num!("2"))),
+                id!("mul"),
+                group!(s id!("add"), num!("2"),
+                    group!(p num!("3"), end!(), id!("sub"), num!("2"))),
                 num!("5")));
     }
 
     #[test]
     fn test_keywords() {
         assert_ok!(lex!("let x = 1, mut y = 2, set y=add x y;"),
-            group!(_let!(), str!("x"), _eq!(), num!("1"), split!(),
-                _mut!(), str!("y"), _eq!(), num!("2"), split!(),
-                _set!(), str!("y"), _eq!(), str!("add"), str!("x"), str!("y"), end!()));
+            group!(_let!(), id!("x"), _eq!(), num!("1"), split!(),
+                _mut!(), id!("y"), _eq!(), num!("2"), split!(),
+                _set!(), id!("y"), _eq!(), id!("add"), id!("x"), id!("y"), end!()));
         assert_ok!(lex!("ext mod {
             add [u32] u32;
             mul [f32] f32;
-            }"), group!(_ext!(), str!("mod"), group!(c
-                str!("add"), group!(s str!("u32")), str!("u32"), end!(),
-                str!("mul"), group!(s str!("f32")), str!("f32"), end!())));
+            }"), group!(_ext!(), id!("mod"), group!(c
+                id!("add"), group!(s id!("u32")), id!("u32"), end!(),
+                id!("mul"), group!(s id!("f32")), id!("f32"), end!())));
         assert_ok!(lex!("if cond then x else y"),
-            group!(_if!(), str!("cond"), _then!(), str!("x"), _else!(), str!("y")));
+            group!(_if!(), id!("cond"), _then!(), id!("x"), _else!(), id!("y")));
         assert_ok!(lex!("pub fun f x = (sqrt x)"),
-            group!(_pub!(), _fun!(), str!("f"), str!("x"), _eq!(),
-                group!(p str!("sqrt"), str!("x"))));
-        assert_ok!(lex!("@macro x"), group!(_at!(), str!("macro"), str!("x")));
-        assert_ok!(lex!("use foo, bar;"), group!(_use!(), str!("foo"), split!(), str!("bar"), end!()));
+            group!(_pub!(), _fun!(), id!("f"), id!("x"), _eq!(),
+                group!(p id!("sqrt"), id!("x"))));
+        assert_ok!(lex!("@macro x"), group!(_at!(), id!("macro"), id!("x")));
+        assert_ok!(lex!("use foo, bar;"), group!(_use!(), id!("foo"), split!(), id!("bar"), end!()));
     }
 
     #[test]
@@ -411,9 +411,9 @@ mod tests {
 
     #[test]
     fn test_not_numbers() {
-        assert_ok!(lex!("a0"), str!("a0"));
-        assert_ok!(lex!("_1"), str!("_1"));
-        assert_ok!(lex!("@b4"), group!(_at!(), str!("b4")));
+        assert_ok!(lex!("a0"), id!("a0"));
+        assert_ok!(lex!("_1"), id!("_1"));
+        assert_ok!(lex!("@b4"), group!(_at!(), id!("b4")));
     }
 
     #[test]
@@ -441,8 +441,8 @@ mod tests {
     fn test_iterator_can_be_reused_and_pos() {
         let words = "(a)\n(b)";
         let mut state = LexerState::new(words.split_word_bounds());
-        assert_ok!(lexer(&mut state), group!(p str!("a")));
-        assert_ok!(lexer(&mut state), group!(p str!("b")));
+        assert_ok!(lexer(&mut state), group!(p id!("a")));
+        assert_ok!(lexer(&mut state), group!(p id!("b")));
         assert_eq!(state.pos(), (2, 3));
     }
 
@@ -451,7 +451,7 @@ mod tests {
         let words = "\n \r\n foo\nb a r";
         let mut state = LexerState::new(words.split_word_bounds());
         assert_ok!(lexer(&mut state),
-            group!(str!("foo"), str!("b"), str!("a"), str!("r")));
+            group!(id!("foo"), id!("b"), id!("a"), id!("r")));
         assert_eq!(state.pos(), (4, 5));
     }
 }
