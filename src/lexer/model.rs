@@ -5,6 +5,8 @@ use std::fmt::{Display, Formatter};
 pub enum ASTNode<'s> {
     /// Basic word.
     Str(&'s str),
+    /// Number.
+    Num(&'s str),
     /// Grouped expression that introduces nesting.
     Group(Vec<ASTNode<'s>>, Option<NestingElement>),
     /// A comma splitting an expression into a multi-value expression.

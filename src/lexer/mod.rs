@@ -159,6 +159,7 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
+            _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
             _ => ASTNode::Str(token),
         });
     }
@@ -207,6 +208,7 @@ mod tests {
     }
 
     macro_rules! str { ($e:literal) => {ASTNode::Str($e)} }
+    macro_rules! num { ($e:literal) => {ASTNode::Num($e)} }
     macro_rules! split { () => {ASTNode::Split} }
     macro_rules! end { () => {ASTNode::End} }
     macro_rules! _let { () => {ASTNode::Let} }
@@ -265,7 +267,7 @@ mod tests {
         assert_ok!(lex!("(foo bar)"), group!(p str!("foo"), str!("bar")));
         assert_ok!(lex!("[foo]"), group!(s str!("foo")));
         assert_ok!(lex!("(+ 1 2 3)"),
-                   group!(p str!("+"), str!("1"), str!("2"), str!("3")));
+                   group!(p str!("+"), num!("1"), num!("2"), num!("3")));
     }
 
     #[test]
@@ -274,21 +276,21 @@ mod tests {
         assert_ok!(lex!("(foo, bar)"), group!(p str!("foo"), split!(), str!("bar")));
         assert_ok!(lex!("foo, bar 1, zort 2"),
             group!(str!("foo"), split!(),
-                str!("bar"), str!("1"), split!(),
-                str!("zort"), str!("2")));
+                str!("bar"), num!("1"), split!(),
+                str!("zort"), num!("2")));
         assert_ok!(lex!("[foo,]"), group!(s str!("foo"), split!()));
         assert_ok!(lex!("{,}"), group!(c split!()));
         assert_ok!(lex!("1, 2 ,3; ignore"),
-            group!(str!("1"), split!(), str!("2"), split!(), str!("3"), end!()));
+            group!(num!("1"), split!(), num!("2"), split!(), num!("3"), end!()));
         assert_ok!(lex!("1 2 ,3; ignore"),
-            group!(str!("1"), str!("2"), split!(), str!("3"), end!()));
+            group!(num!("1"), num!("2"), split!(), num!("3"), end!()));
     }
 
     #[test]
     fn test_group_expr_square_brackets() {
         assert_ok!(lex!("foo[bar]"), group!(str!("foo"), group!(s str!("bar"))));
         assert_ok!(lex!("[+ 1 2 3]"),
-                   group!(s str!("+"), str!("1"), str!("2"), str!("3")));
+                   group!(s str!("+"), num!("1"), num!("2"), num!("3")));
     }
 
     #[test]
@@ -307,8 +309,8 @@ mod tests {
             group!(s group!(p str!("bar")), str!("zort"))));
         assert_ok!(lex!("(+ (1 (2 3)))"),
                    group!(p str!("+"),
-                       group!(p str!("1"),
-                           group!(p str!("2"), str!("3")))));
+                       group!(p num!("1"),
+                           group!(p num!("2"), num!("3")))));
     }
 
     #[test]
@@ -317,13 +319,13 @@ mod tests {
         assert_ok!(lex!("(foo, (bar, zort))"),
             group!(p str!("foo"), split!(), group!(p str!("bar"), split!(), str!("zort"))));
         assert_ok!(lex!("[1,foo(z,2)]"),
-            group!(s str!("1"), split!(), str!("foo"),
-                group!(p str!("z"), split!(), str!("2"))));
+            group!(s num!("1"), split!(), str!("foo"),
+                group!(p str!("z"), split!(), num!("2"))));
         assert_ok!(lex!("{[1,foo(z,2)], [(4,  89), 6]}"),
             group!(c
-                group!(s str!("1"), split!(), str!("foo"),
-                    group!(p str!("z"), split!(), str!("2"))), split!(),
-                group!(s group!(p str!("4"), split!(), str!("89")), split!(), str!("6"))));
+                group!(s num!("1"), split!(), str!("foo"),
+                    group!(p str!("z"), split!(), num!("2"))), split!(),
+                group!(s group!(p num!("4"), split!(), num!("89")), split!(), num!("6"))));
     }
 
     #[test]
@@ -333,7 +335,7 @@ mod tests {
         assert_ok!(lex!("foo ; ignored"), group!(str!("foo"), end!()));
         assert_ok!(lex!("foo bar 1 2 3; ignored"),
             group!(str!("foo"), str!("bar"),
-                str!("1"), str!("2"), str!("3"), end!()));
+                num!("1"), num!("2"), num!("3"), end!()));
     }
 
     #[test]
@@ -344,12 +346,12 @@ mod tests {
             group!(str!("foo"), group!(p), end!()));
         assert_ok!(lex!("foo (bar 1) 2; ignored"),
             group!(str!("foo"),
-                group!(p str!("bar"), str!("1")),
-                str!("2"), end!()));
+                group!(p str!("bar"), num!("1")),
+                num!("2"), end!()));
         assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
             group!(str!("foo"),
-                group!(p str!("bar"), str!("1")),
-                group!(s str!("2")), group!(c str!("3")), end!()));
+                group!(p str!("bar"), num!("1")),
+                group!(s num!("2")), group!(c num!("3")), end!()));
     }
 
     #[test]
@@ -358,8 +360,8 @@ mod tests {
             group!(p str!("foo"), end!(), str!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
             group!(p
-                _let!(), str!("x"), _eq!(), str!("1"), end!(),
-                _let!(), str!("y"), _eq!(), str!("2"), end!(),
+                _let!(), str!("x"), _eq!(), num!("1"), end!(),
+                _let!(), str!("y"), _eq!(), num!("2"), end!(),
                 str!("+"), str!("x"), str!("y")));
     }
 
@@ -368,16 +370,16 @@ mod tests {
         assert_ok!(lex!("mul [add 2 (3; sub 2)] 5"),
             group!(
                 str!("mul"),
-                group!(s str!("add"), str!("2"),
-                    group!(p str!("3"), end!(), str!("sub"), str!("2"))),
-                str!("5")));
+                group!(s str!("add"), num!("2"),
+                    group!(p num!("3"), end!(), str!("sub"), num!("2"))),
+                num!("5")));
     }
 
     #[test]
     fn test_keywords() {
         assert_ok!(lex!("let x = 1, mut y = 2, set y=add x y;"),
-            group!(_let!(), str!("x"), _eq!(), str!("1"), split!(),
-                _mut!(), str!("y"), _eq!(), str!("2"), split!(),
+            group!(_let!(), str!("x"), _eq!(), num!("1"), split!(),
+                _mut!(), str!("y"), _eq!(), num!("2"), split!(),
                 _set!(), str!("y"), _eq!(), str!("add"), str!("x"), str!("y"), end!()));
         assert_ok!(lex!("ext mod {
             add [u32] u32;
@@ -392,6 +394,26 @@ mod tests {
                 group!(p str!("sqrt"), str!("x"))));
         assert_ok!(lex!("@macro x"), group!(_at!(), str!("macro"), str!("x")));
         assert_ok!(lex!("use foo, bar;"), group!(_use!(), str!("foo"), split!(), str!("bar"), end!()));
+    }
+
+    #[test]
+    fn test_numbers() {
+        assert_ok!(lex!("0"), num!("0"));
+        assert_ok!(lex!("1"), num!("1"));
+        assert_ok!(lex!("1.0"), num!("1.0"));
+        assert_ok!(lex!("0.1"), num!("0.1"));
+        assert_ok!(lex!("1i32"), num!("1i32"));
+        assert_ok!(lex!("10_000f32"), num!("10_000f32"));
+        assert_ok!(lex!("10_000.62f64"), num!("10_000.62f64"));
+        // the lexer does not validate numbers fully
+        assert_ok!(lex!("2Z"), num!("2Z"));
+    }
+
+    #[test]
+    fn test_not_numbers() {
+        assert_ok!(lex!("a0"), str!("a0"));
+        assert_ok!(lex!("_1"), str!("_1"));
+        assert_ok!(lex!("@b4"), group!(_at!(), str!("b4")));
     }
 
     #[test]
