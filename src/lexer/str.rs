@@ -1,13 +1,15 @@
 use crate::lexer::LexerState;
 
-pub(super) fn parse_str<'s>(state: &mut LexerState<'s>) -> &'s str {
+pub(super) fn parse_str<'s>(state: &mut LexerState<'s>) -> Result<&'s str, String> {
     let idx = state.idx;
     loop {
         match state.next() {
-            Some("\"") | None => break,
+            Some("\"") => break,
+            None => return Err("unclosed string".into()),
             _ => {}
         }
     }
-    if idx == state.idx { return ""; }
-    &state.text[idx..state.idx - 1]
+    Ok(if idx == state.idx { "" } else {
+        &state.text[idx..state.idx - 1]
+    })
 }

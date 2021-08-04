@@ -166,7 +166,11 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
-            "\"" => ASTNode::Str(parse_str(state)),
+            "\"" => {
+                let start = state.pos();
+                ASTNode::Str(parse_str(state)
+                    .map_err(|e| werr_syntax!(e, start, state.pos()))?)
+            }
             _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
             _ => ASTNode::Id(token),
         });
@@ -428,6 +432,16 @@ mod tests {
         assert_ok!(lex!("\"A full sentence...\""), str!("A full sentence..."));
         assert_ok!(lex!("\"pub fun let keywords = 2, 4)\""),
             str!("pub fun let keywords = 2, 4)"));
+        assert_ok!(lex!("let s = \"hello\";"),
+            group!(_let!(), id!("s"), _eq!(), str!("hello"), end!()));
+        assert_ok!(lex!("(concat \"hello\" [fst \"bar\"])"),
+            group!(p id!("concat"), str!("hello"), group!(s id!("fst"), str!("bar"))));
+    }
+
+    #[test]
+    fn test_str_unfinished() {
+        assert_syntax_err!(lex!("\"foo bar"),
+            "unclosed string", (1, 1), (1, 8));
     }
 
     #[test]
