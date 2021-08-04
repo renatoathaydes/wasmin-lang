@@ -110,7 +110,7 @@ fn lexer<'s>(state: &mut LexerState<'s>)
     if !state.nesting.is_empty() {
         let last_n = state.nesting.last().unwrap();
         return Err(werr_syntax!(format!("unmatched '{}', which started at {}",
-                last_n.elem, last_n.pos_str()), state.pos()));
+                   last_n.elem, last_n.pos_str()), last_n.pos, state.pos()));
     }
     Ok(join_nodes(nodes, None))
 }
@@ -397,11 +397,11 @@ mod tests {
     #[test]
     fn test_unclosed_group_error() {
         assert_syntax_err!(lex!("(x"),
-            "unmatched '(', which started at 1:1", (1, 2), (1, 2));
+            "unmatched '(', which started at 1:1", (1, 1), (1, 2));
         assert_syntax_err!(lex!("foo[x;"),
-            "unmatched '[', which started at 1:4", (1, 6), (1, 6));
+            "unmatched '[', which started at 1:4", (1, 4), (1, 6));
         assert_syntax_err!(lex!("fun x y = {\n  (\n abc ; \n )"),
-            "unmatched '{', which started at 1:11", (4, 2), (4, 2));
+            "unmatched '{', which started at 1:11", (1, 11), (4, 2));
     }
 
     #[test]
