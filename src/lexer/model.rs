@@ -7,6 +7,8 @@ pub enum ASTNode<'s> {
     Id(&'s str),
     /// Number.
     Num(&'s str),
+    /// Constant String
+    Str(&'s str),
     /// Grouped expression that introduces nesting.
     Group(Vec<ASTNode<'s>>, Option<NestingElement>),
     /// A comma splitting an expression into a multi-value expression.

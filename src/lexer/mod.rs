@@ -4,13 +4,17 @@ use model::*;
 
 use crate::errors::WasminError;
 use crate::lexer::model::ASTNode::Group;
+use crate::lexer::str::parse_str;
 
 mod model;
+mod str;
 
 struct LexerState<'s> {
     nesting: Vec<NestingToken>,
     line: usize,
     col: usize,
+    idx: usize,
+    text: &'s str,
     words: UWordBounds<'s>,
 }
 
@@ -19,17 +23,20 @@ impl<'s> LexerState<'s> {
         (self.line, self.col)
     }
 
-    fn new(words: UWordBounds<'s>) -> LexerState<'s> {
+    fn new(text: &'s str) -> LexerState<'s> {
         LexerState {
             nesting: vec![],
             line: 1,
             col: 0,
-            words,
+            idx: 0,
+            text,
+            words: text.split_word_bounds(),
         }
     }
 
     fn next(&mut self) -> Option<&'s str> {
         let token = self.words.next()?;
+        self.idx += token.len();
         if token == "\n" || token == "\r\n" {
             self.line += 1;
             self.col = 0;
@@ -159,6 +166,7 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
+            "\"" => ASTNode::Str(parse_str(state)),
             _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
             _ => ASTNode::Id(token),
         });
@@ -183,12 +191,9 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
 
 #[cfg(test)]
 mod tests {
-    use unicode_segmentation::UnicodeWords;
-
     use crate::errors::ErrorPosition;
 
     use super::*;
-    use super::model::*;
 
     macro_rules! nest {
         (p) => {NestingElement::Parens};
@@ -209,6 +214,7 @@ mod tests {
 
     macro_rules! id { ($e:literal) => {ASTNode::Id($e)} }
     macro_rules! num { ($e:literal) => {ASTNode::Num($e)} }
+    macro_rules! str { ($e:literal) => {ASTNode::Str($e)} }
     macro_rules! split { () => {ASTNode::Split} }
     macro_rules! end { () => {ASTNode::End} }
     macro_rules! _let { () => {ASTNode::Let} }
@@ -227,7 +233,7 @@ mod tests {
 
     macro_rules! lex {
         ($input:literal) => {{
-            let mut state = LexerState::new(UnicodeSegmentation::split_word_bounds($input));
+            let mut state = LexerState::new($input);
             lexer(&mut state)
         }};
     }
@@ -417,6 +423,14 @@ mod tests {
     }
 
     #[test]
+    fn test_str() {
+        assert_ok!(lex!("\"hello\""), str!("hello"));
+        assert_ok!(lex!("\"A full sentence...\""), str!("A full sentence..."));
+        assert_ok!(lex!("\"pub fun let keywords = 2, 4)\""),
+            str!("pub fun let keywords = 2, 4)"));
+    }
+
+    #[test]
     fn test_unclosed_group_error() {
         assert_syntax_err!(lex!("(x"),
             "unmatched '(', which started at 1:1", (1, 1), (1, 2));
@@ -440,7 +454,7 @@ mod tests {
     #[test]
     fn test_iterator_can_be_reused_and_pos() {
         let words = "(a)\n(b)";
-        let mut state = LexerState::new(words.split_word_bounds());
+        let mut state = LexerState::new(words);
         assert_ok!(lexer(&mut state), group!(p id!("a")));
         assert_ok!(lexer(&mut state), group!(p id!("b")));
         assert_eq!(state.pos(), (2, 3));
@@ -449,7 +463,7 @@ mod tests {
     #[test]
     fn test_new_lines_pos() {
         let words = "\n \r\n foo\nb a r";
-        let mut state = LexerState::new(words.split_word_bounds());
+        let mut state = LexerState::new(words);
         assert_ok!(lexer(&mut state),
             group!(id!("foo"), id!("b"), id!("a"), id!("r")));
         assert_eq!(state.pos(), (4, 5));
