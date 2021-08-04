@@ -107,6 +107,11 @@ fn lexer<'s>(state: &mut LexerState<'s>)
         nodes.append(&mut next);
         if is_terminated(&nodes) { break; }
     }
+    if !state.nesting.is_empty() {
+        let last_n = state.nesting.last().unwrap();
+        return Err(werr_syntax!(format!("unmatched '{}', which started at {}",
+                last_n.elem, last_n.pos_str()), state.pos()));
+    }
     Ok(join_nodes(nodes, None))
 }
 
@@ -158,13 +163,6 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
         });
     }
     Ok(nodes)
-    // FIXME caller needs to do this in the top-level scope
-    // } else {
-    //     let last_n = state.nesting.last().unwrap();
-    //     let err = if eof { "EOF" } else { "';'" };
-    //     Err(werr_syntax!(format!("unexpected {}, unmatched '{}', which started at {}",
-    //             err , last_n.elem, last_n.pos_str()), state.pos()))
-    // }
 }
 
 fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNode {
@@ -185,6 +183,8 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
 #[cfg(test)]
 mod tests {
     use unicode_segmentation::UnicodeWords;
+
+    use crate::errors::ErrorPosition;
 
     use super::*;
     use super::model::*;
@@ -232,6 +232,15 @@ mod tests {
 
     macro_rules! assert_ok {
         ($left:expr, $right:expr) => { assert_eq!($left, Ok($right)) };
+    }
+
+    macro_rules! assert_syntax_err {
+        ($e:expr, $msg:literal, $start:expr, $end:expr) => {{
+            assert_eq!($e, Err(WasminError::SyntaxError {
+                cause: $msg.into(),
+                pos: ErrorPosition { start: $start, end: $end },
+            }));
+        }};
     }
 
     #[test]
@@ -383,6 +392,27 @@ mod tests {
                 group!(p str!("sqrt"), str!("x"))));
         assert_ok!(lex!("@macro x"), group!(_at!(), str!("macro"), str!("x")));
         assert_ok!(lex!("use foo, bar;"), group!(_use!(), str!("foo"), split!(), str!("bar"), end!()));
+    }
+
+    #[test]
+    fn test_unclosed_group_error() {
+        assert_syntax_err!(lex!("(x"),
+            "unmatched '(', which started at 1:1", (1, 2), (1, 2));
+        assert_syntax_err!(lex!("foo[x;"),
+            "unmatched '[', which started at 1:4", (1, 6), (1, 6));
+        assert_syntax_err!(lex!("fun x y = {\n  (\n abc ; \n )"),
+            "unmatched '{', which started at 1:11", (4, 2), (4, 2));
+    }
+
+    #[test]
+    fn test_unmatched_closing_group_error() {
+        assert_syntax_err!(lex!("x)"),
+            "mismatched ')', closes nothing", (1, 2), (1, 2));
+        assert_syntax_err!(lex!("ext {
+            foo [] u64;
+            bar ];
+        }\n  "),
+            "misplaced ']', expecting '}', which started at 1:5", (3, 17), (3, 17));
     }
 
     #[test]
