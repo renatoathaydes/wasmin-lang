@@ -350,13 +350,13 @@ mod tests {
         assert_ok!(lexer(&mut state), group!(p str!("b")));
         assert_eq!(state.pos(), (2, 3));
     }
-    //
-    // #[test]
-    // fn test_new_lines_pos() {
-    //     let mut state = LexerState::default();
-    //     let mut iter = Tokens::from("\n \r\n foo\nb a r");
-    //     assert_ok!(lexer(&mut iter, &mut state),
-    //         group!(str!("foo"), str!("b"), str!("a"), str!("r")));
-    //     assert_eq!(state.pos(), (4, 5));
-    // }
+
+    #[test]
+    fn test_new_lines_pos() {
+        let words = "\n \r\n foo\nb a r";
+        let mut state = LexerState::new(words.split_word_bounds());
+        assert_ok!(lexer(&mut state),
+            group!(str!("foo"), str!("b"), str!("a"), str!("r")));
+        assert_eq!(state.pos(), (4, 5));
+    }
 }
