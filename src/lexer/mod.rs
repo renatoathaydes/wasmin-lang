@@ -1,170 +1,46 @@
-use std::fmt::{Display, Formatter};
-
 use unicode_segmentation::{UnicodeSegmentation, UWordBounds};
 
+use model::*;
+
 use crate::errors::WasminError;
+use crate::lexer::model::ASTNode::Group;
 
-/// Expression is the basic unit of Wasmin code.
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub enum Expression<'s> {
-    Empty(Option<NestingElement>),
-    Wrap(Box<Expression<'s>>, NestingElement),
-    Simple(&'s str, Option<NestingElement>),
-    Group(Vec<Expression<'s>>, Option<NestingElement>),
-    Multi(Vec<Expression<'s>>, Option<NestingElement>),
-}
+mod model;
 
-impl<'s> Expression<'s> {
-    fn nest(self, elem: NestingElement) -> Self {
-        match self {
-            Expression::Empty(_) => Expression::Empty(Some(elem)),
-            Expression::Wrap(e, _) => Expression::Wrap(e, elem),
-            Expression::Simple(e, _) => Expression::Simple(e, Some(elem)),
-            Expression::Group(e, _) => Expression::Group(e, Some(elem)),
-            Expression::Multi(e, _) => Expression::Multi(e, Some(elem)),
-        }
-    }
-
-    fn has_nesting(&self) -> bool {
-        match self {
-            Expression::Empty(n) => n.is_some(),
-            Expression::Wrap(..) => true,
-            Expression::Simple(_, n) => n.is_some(),
-            Expression::Group(_, n) => n.is_some(),
-            Expression::Multi(_, n) => n.is_some(),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub enum NestingElement {
-    Parens,
-    Square,
-    Curly,
-}
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-struct NestingToken {
-    elem: NestingElement,
-    pos: (usize, usize),
-}
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-struct LexerState {
+struct LexerState<'s> {
     nesting: Vec<NestingToken>,
-    naked_level: Vec<bool>,
     line: usize,
     col: usize,
+    words: UWordBounds<'s>,
 }
 
-impl LexerState {
-    fn pos(&self) -> (usize, usize) {
+impl<'s> LexerState<'s> {
+    fn pos(&'s self) -> (usize, usize) {
         (self.line, self.col)
     }
-}
 
-impl Display for NestingElement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            NestingElement::Parens => '(',
-            NestingElement::Square => '[',
-            NestingElement::Curly => '{',
-        })
-    }
-}
-
-impl Default for LexerState {
-    fn default() -> Self {
+    fn new(words: UWordBounds<'s>) -> LexerState<'s> {
         LexerState {
             nesting: vec![],
-            naked_level: vec![],
             line: 1,
             col: 0,
+            words,
         }
-    }
-}
-
-impl NestingToken {
-    fn closing_char(&self) -> char {
-        match self.elem {
-            NestingElement::Parens => ')',
-            NestingElement::Square => ']',
-            NestingElement::Curly => '}',
-        }
-    }
-
-    fn pos_str(&self) -> String {
-        format!("{}:{}", self.pos.0, self.pos.1)
-    }
-}
-
-/// ExprOrComma allows the lexer to keep track of where each expression is split up
-/// into multi-values.
-#[cfg_attr(test, derive(Debug, PartialEq, Clone, Hash, Eq))]
-enum ExpOrComma<'s> {
-    Exp(Expression<'s>),
-    Comma,
-}
-
-struct Tokens<'s> {
-    words: UWordBounds<'s>,
-    returned: Option<&'s str>,
-}
-
-impl<'s> Tokens<'s> {
-    fn from(s: &str) -> Tokens {
-        Tokens { words: s.split_word_bounds(), returned: None }
     }
 
     fn next(&mut self) -> Option<&'s str> {
-        if let Some(r) = self.returned.take() {
-            return Some(r);
-        }
-        self.words.next()
-    }
-
-    fn put_back(&mut self, token: &'s str, state: &mut LexerState) {
-        if let Some(t) = self.returned {
-            panic!("Putting back more than one token: '{}', '{}'", t, token)
-        }
-        // state.col -= token.len();
-        self.returned.insert(token);
-    }
-}
-
-/// Start a nesting expression from a naked expression.
-/// In other words, this macro does not terminate parsing of current expression.
-macro_rules! nested_exp {
-    ($tokens:expr, $token:expr, $state:expr) => {{
-        $tokens.put_back($token, $state);
-        ExpOrComma::Exp(lexer($tokens, $state)?)
-    }};
-}
-
-/// End a nesting expression.
-/// Pops a nesting level and results in a Result<Expression>.
-macro_rules! end_nesting {
-    ($elem:expr, $token:expr, $nesting:expr, $state:expr) => {{
-        if $nesting.elem != $elem {
-            return Err(werr_syntax!(format!("misplaced '{}', expecting '{}', which started at {}",
-                $token, $nesting.closing_char(), $nesting.pos_str()), $state.pos()))
-        }
-        break;
-    }};
-}
-
-macro_rules! update_pos {
-    ($token:expr, $state:expr) => {{
-        if $token == "\n" || $token == "\r\n" {
-            $state.line += 1;
-            $state.col = 0;
+        let token = self.words.next()?;
+        if token == "\n" || token == "\r\n" {
+            self.line += 1;
+            self.col = 0;
         } else {
-            $state.col += $token.len()
+            self.col += token.len();
         }
-    }};
+        Some(token.trim())
+    }
 }
 
-fn get_nesting_elem(token: &str) -> Option<NestingElement> {
+fn as_nesting_start(token: &str) -> Option<NestingElement> {
     let elem = match token {
         "(" => NestingElement::Parens,
         "[" => NestingElement::Square,
@@ -174,64 +50,103 @@ fn get_nesting_elem(token: &str) -> Option<NestingElement> {
     Some(elem)
 }
 
-fn first_non_empty_token<'s>(tokens: &mut Tokens<'s>, state: &mut LexerState)
-                             -> Option<&'s str> {
-    loop {
-        let mut token = if let Some(t) = tokens.next() { t } else {
-            return None;
-        };
-        update_pos!(token, state);
-        token = token.trim();
-        if !token.is_empty() { return Some(token); }
+fn as_nesting_end(token: &str) -> Option<NestingElement> {
+    let elem = match token {
+        ")" => NestingElement::Parens,
+        "]" => NestingElement::Square,
+        "}" => NestingElement::Curly,
+        _ => return None
+    };
+    Some(elem)
+}
+
+fn is_terminated(nodes: &Vec<ASTNode>) -> bool {
+    match &nodes[..] {
+        // EOF?
+        &[] => true,
+        // single group is always self-terminating
+        &[ASTNode::Group(..)] => true,
+        // anything that's not a group ending with END is terminated
+        &[.., ASTNode::End] => true,
+        _ => false,
     }
 }
 
-fn lexer<'s>(tokens: &mut Tokens<'s>, state: &mut LexerState)
-             -> Result<Expression<'s>, WasminError> {
+#[cfg(test)]
+mod is_terminated_test {
+    use crate::lexer::model::{ASTNode::*};
+    use crate::lexer::model::NestingElement::Parens;
+
+    use super::is_terminated;
+
+    #[test]
+    fn is_terminated_test() {
+        assert_eq!(is_terminated(&vec![]), true);
+        assert_eq!(is_terminated(&vec![Group(vec![], None)]), true);
+        assert_eq!(is_terminated(&vec![Group(vec![], Some(Parens))]), true);
+        assert_eq!(is_terminated(&vec![Str(""), End]), true);
+        assert_eq!(is_terminated(&vec![Str(""), Str(""), End]), true);
+        assert_eq!(is_terminated(&vec![Let, Str(""), End]), true);
+        assert_eq!(is_terminated(&vec![End]), true);
+
+        assert_eq!(is_terminated(&vec![Str("")]), false);
+        assert_eq!(is_terminated(&vec![Split]), false);
+        assert_eq!(is_terminated(&vec![Split, Str("")]), false);
+        assert_eq!(is_terminated(&vec![Str(""), Group(vec![], None)]), false);
+        assert_eq!(is_terminated(&vec![Str(""), Group(vec![], Some(Parens))]), false);
+        assert_eq!(is_terminated(&vec![Let, Str(""), Eq, Group(vec![], Some(Parens))]), false);
+    }
+}
+
+fn lexer<'s>(state: &mut LexerState<'s>)
+             -> Result<ASTNode<'s>, WasminError> {
+    let mut nodes = vec![];
+    loop {
+        let mut next = lexer_rec(state)?;
+        if next.is_empty() { break; }
+        nodes.append(&mut next);
+        if is_terminated(&nodes) { break; }
+    }
+    Ok(join_nodes(nodes, None))
+}
+
+fn lexer_rec<'s>(state: &mut LexerState<'s>)
+                 -> Result<Vec<ASTNode<'s>>, WasminError> {
     // let file = fs::read_to_string("ex.wasmin").unwrap();
     // let tokens = UnicodeSegmentation::split_word_bounds(&file);
-    let mut exprs = Vec::<ExpOrComma>::new();
-
-    let token = if let Some(t) = first_non_empty_token(tokens, state) { t } else {
-        return Ok(Expression::Empty(None));
-    };
-
-    // If '(', '[' or '{' start the expression, then we terminate it as soon as we handle the
-    // nesting, otherwise we go all the way down to either ';' or EOF.
-    let nesting = get_nesting_elem(token)
-        .map(|elem| NestingToken { pos: state.pos(), elem });
-    if nesting.is_none() {
-        tokens.put_back(token, state);
-    }
+    let mut nodes = Vec::<ASTNode>::new();
 
     loop {
-        let token = if let Some(t) = first_non_empty_token(tokens, state) { t } else {
-            break;
-        };
-        match (&nesting, token) {
-            // nesting cases
-            (_, "(" | "[" | "{") => exprs.push(nested_exp!(tokens, token, state)),
-            // ending nesting within naked expression
-            (None, ")" | "]" | "}") => {
-                tokens.put_back(token, state); // it's not ours to take
-                break;
+        let token = if let Some(t) = state.next() { t } else { break; };
+        if token.is_empty() { continue; }
+
+        if let Some(elem) = as_nesting_start(token) {
+            state.nesting.push(NestingToken { pos: state.pos(), elem });
+            nodes.push(join_nodes(lexer_rec(state)?, Some(elem)));
+            if state.nesting.is_empty() { break; } else { continue; }
+        }
+        if let Some(elem) = as_nesting_end(token) {
+            let opener = state.nesting.pop();
+            if let Some(opener) = opener {
+                if opener.elem == elem { break; }
+                return Err(werr_syntax!(format!("misplaced '{}', expecting '{}', which started at {}",
+                    token, opener.closing_char(), opener.pos_str()), state.pos()));
             }
-            // ending naked expression
-            (None, ";") => break,
-            // terminating nested expression cases
-            (Some(n), ")") => end_nesting!(NestingElement::Parens, token, n, state),
-            (Some(n), "]") => end_nesting!(NestingElement::Square, token, n, state),
-            (Some(n), "}") => end_nesting!(NestingElement::Curly, token, n, state),
-            // interrupting expression within nested expression
-            (Some(_), ";") => end_exp(&mut exprs),
-            // multi expression
-            (_, ",") => exprs.push(ExpOrComma::Comma),
-            // simple expression
-            _ => exprs.push(ExpOrComma::Exp(Expression::Simple(token, None))),
-        };
+            return Err(werr_syntax!(format!("mismatched '{}', closes nothing", token), state.pos()));
+        }
+        if token == ";" && state.nesting.is_empty() {
+            nodes.push(ASTNode::End);
+            break;
+        }
+        nodes.push(match token {
+            ";" => ASTNode::End,
+            "," => ASTNode::Split,
+            "let" => ASTNode::Let,
+            "=" => ASTNode::Eq,
+            _ => ASTNode::Str(token),
+        });
     }
-    end_exp(&mut exprs);
-    Ok(join_exprs(exprs, nesting.map(|n| n.elem)))
+    Ok(nodes)
     // FIXME caller needs to do this in the top-level scope
     // } else {
     //     let last_n = state.nesting.last().unwrap();
@@ -241,67 +156,27 @@ fn lexer<'s>(tokens: &mut Tokens<'s>, state: &mut LexerState)
     // }
 }
 
-fn end_exp(exprs: &mut Vec<ExpOrComma>) {
-    // we need to get the "lose" Simple expressions and group them together when an expression
-    // is ended so we can keep the nesting information exact.
-    if exprs.len() < 2 { return; }
-    let idx = exprs.iter().enumerate().rev().find_map(|(i, e)| match e {
-        ExpOrComma::Exp(Expression::Simple(..)) => None,
-        _ => Some(i + 1),
-    }).unwrap_or(0);
-
-    // no point grouping nothing or a single expression
-    if idx >= exprs.len() - 1 { return; }
-
-    let grouping: Vec<_> = exprs.drain(idx..).collect();
-    if !grouping.is_empty() {
-        exprs.push(ExpOrComma::Exp(join_exprs(grouping, None)));
-    }
-}
-
-fn join_exprs(exprs: Vec<ExpOrComma>, nesting: Option<NestingElement>) -> Expression {
-    let mut multi = vec![Vec::new()];
-    for exp in exprs {
-        match exp {
-            ExpOrComma::Exp(e) => {
-                multi.last_mut().unwrap().push(e);
-            }
-            ExpOrComma::Comma => {
-                multi.push(Vec::new());
-            }
+fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNode {
+    if nodes.is_empty() {
+        Group(vec![], nesting)
+    } else if nodes.len() == 1 {
+        let node = nodes.remove(0);
+        if nesting.is_some() {
+            Group(vec![node], nesting)
+        } else {
+            node
         }
-    }
-    if multi.len() > 1 {
-        Expression::Multi(
-            multi.drain(..)
-                .map(|e| join_single_exprs(e, None))
-                .collect(), nesting)
     } else {
-        join_single_exprs(multi.remove(0), nesting)
-    }
-}
-
-fn join_single_exprs(mut exprs: Vec<Expression>, nesting: Option<NestingElement>) -> Expression {
-    match (exprs.len(), nesting) {
-        (0, n) => Expression::Empty(n),
-        (1, Some(n)) => {
-            let exp = exprs.remove(0);
-            if exp.has_nesting() {
-                Expression::Wrap(Box::new(exp), n)
-            } else {
-                exp.nest(n)
-            }
-        }
-        (1, None) => exprs.remove(0),
-        (_, n) => Expression::Group(exprs, n)
+        Group(nodes, nesting)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::Expression;
+    use unicode_segmentation::UnicodeWords;
 
     use super::*;
+    use super::model::*;
 
     macro_rules! nest {
         (p) => {NestingElement::Parens};
@@ -309,50 +184,27 @@ mod tests {
         (c) => {NestingElement::Curly};
     }
 
-    macro_rules! exp_or_c {
-        ($e:expr) => { ExpOrComma::Exp($e) };
-        () => { ExpOrComma::Comma };
+    macro_rules! group {
+        () => {ASTNode::Group(vec![], None)};
+        (p) => {ASTNode::Group(vec![], Some(nest!(p)))};
+        (s) => {ASTNode::Group(vec![], Some(nest!(s)))};
+        (c) => {ASTNode::Group(vec![], Some(nest!(c)))};
+        ($($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], None)};
+        (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(p)))};
+        (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(s)))};
+        (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(c)))};
     }
 
-    macro_rules! group_expr {
-        ($($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], None)};
-        (p $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(nest!(p)))};
-        (s $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(nest!(s)))};
-        (c $($a:expr), +) => {Expression::Group(vec![ $( $a ), + ], Some(nest!(c)))};
-    }
-
-    macro_rules! multi_expr {
-        ($($a:expr), +) => {Expression::Multi(vec![ $( $a ), + ], None)};
-        (p $($a:expr), +) => {Expression::Multi(vec![ $( $a ), + ], Some(nest!(p)))};
-        (s $($a:expr), +) => {Expression::Multi(vec![ $( $a ), + ], Some(nest!(s)))};
-        (c $($a:expr), +) => {Expression::Multi(vec![ $( $a ), + ], Some(nest!(c)))};
-    }
-
-    macro_rules! empty_expr {
-        () => {Expression::Empty(None)};
-        (p) => {Expression::Empty(Some(nest!(p)))};
-        (s) => {Expression::Empty(Some(nest!(s)))};
-        (c) => {Expression::Empty(Some(nest!(c)))};
-    }
-
-    macro_rules! str_expr {
-        ($e:literal) => {Expression::Simple($e, None)};
-        (p $e:literal) => {Expression::Simple($e, Some(nest!(p)))};
-        (s $e:literal) => {Expression::Simple($e, Some(nest!(s)))};
-        (c $e:literal) => {Expression::Simple($e, Some(nest!(c)))};
-    }
-
-    macro_rules! wrap_expr {
-        (p $e:expr) => { Expression::Wrap(Box::new($e), nest!(p)) };
-        (s $e:expr) => { Expression::Wrap(Box::new($e), nest!(s)) };
-        (c $e:expr) => { Expression::Wrap(Box::new($e), nest!(c)) };
-    }
+    macro_rules! str { ($e:literal) => {ASTNode::Str($e)} }
+    macro_rules! split { () => {ASTNode::Split} }
+    macro_rules! end { () => {ASTNode::End} }
+    macro_rules! _let { () => {ASTNode::Let} }
+    macro_rules! eq { () => {ASTNode::Eq} }
 
     macro_rules! lex {
         ($input:literal) => {{
-            let mut state = LexerState::default();
-            let mut tokens = Tokens::from($input);
-            lexer(&mut tokens, &mut state)
+            let mut state = LexerState::new(UnicodeSegmentation::split_word_bounds($input));
+            lexer(&mut state)
         }};
     }
 
@@ -362,188 +214,149 @@ mod tests {
 
     #[test]
     fn test_empty_expr() {
-        assert_ok!(lex!(""), empty_expr!());
-        assert_ok!(lex!("()"), empty_expr!(p));
-        assert_ok!(lex!("( )"), empty_expr!(p));
-        assert_ok!(lex!("  [    ]   "), empty_expr!(s));
-        assert_ok!(lex!("  \n{ \n  }\n   "), empty_expr!(c));
+        assert_ok!(lex!(""), group!());
+        assert_ok!(lex!("()"), group!(p));
+        assert_ok!(lex!("( )"), group!(p));
+        assert_ok!(lex!("  [    ]   "), group!(s));
+        assert_ok!(lex!("  \n{ \n  }\n   "), group!(c));
     }
 
     #[test]
     fn test_simple_expr() {
-        assert_ok!(lex!("hello"), str_expr!("hello"));
-        assert_ok!(lex!("(hello_world)"), str_expr!(p "hello_world"));
+        assert_ok!(lex!("hello"), str!("hello"));
+        assert_ok!(lex!("hello_world"), str!("hello_world"));
     }
 
     #[test]
     fn test_group_expr() {
-        assert_ok!(lex!("foo bar"), group_expr!(str_expr!("foo"), str_expr!("bar")));
-        assert_ok!(lex!("(foo bar)"), group_expr!(p str_expr!("foo"), str_expr!("bar")));
+        assert_ok!(lex!("(hello_world)"), group!(p str!("hello_world")));
+        assert_ok!(lex!("foo bar"), group!(str!("foo"), str!("bar")));
+        assert_ok!(lex!("(foo bar)"), group!(p str!("foo"), str!("bar")));
+        assert_ok!(lex!("[foo]"), group!(s str!("foo")));
         assert_ok!(lex!("(+ 1 2 3)"),
-                   group_expr!(p str_expr!("+"), str_expr!("1"), str_expr!("2"), str_expr!("3")));
+                   group!(p str!("+"), str!("1"), str!("2"), str!("3")));
     }
 
     #[test]
-    fn test_multi_expr() {
-        assert_ok!(lex!("foo, bar"), multi_expr!(str_expr!("foo"), str_expr!("bar")));
-        assert_ok!(lex!("(foo, bar)"), multi_expr!(p str_expr!("foo"), str_expr!("bar")));
+    fn test_group() {
+        assert_ok!(lex!("foo, bar"), group!(str!("foo"), split!(), str!("bar")));
+        assert_ok!(lex!("(foo, bar)"), group!(p str!("foo"), split!(), str!("bar")));
         assert_ok!(lex!("foo, bar 1, zort 2"),
-            multi_expr!(str_expr!("foo"),
-                group_expr!(str_expr!("bar"), str_expr!("1")),
-                group_expr!(str_expr!("zort"), str_expr!("2"))));
-        assert_ok!(lex!("[foo,]"), multi_expr!(s str_expr!("foo"), empty_expr!()));
-        assert_ok!(lex!("{,}"), multi_expr!(c empty_expr!(), empty_expr!()));
+            group!(str!("foo"), split!(),
+                str!("bar"), str!("1"), split!(),
+                str!("zort"), str!("2")));
+        assert_ok!(lex!("[foo,]"), group!(s str!("foo"), split!()));
+        assert_ok!(lex!("{,}"), group!(c split!()));
         assert_ok!(lex!("1, 2 ,3; ignore"),
-            multi_expr!(str_expr!("1"), str_expr!("2"), str_expr!("3")));
+            group!(str!("1"), split!(), str!("2"), split!(), str!("3"), end!()));
         assert_ok!(lex!("1 2 ,3; ignore"),
-            multi_expr!(group_expr!(str_expr!("1"), str_expr!("2")), str_expr!("3")));
+            group!(str!("1"), str!("2"), split!(), str!("3"), end!()));
     }
 
     #[test]
     fn test_group_expr_square_brackets() {
-        assert_ok!(lex!("foo[bar]"), group_expr!(str_expr!("foo"), str_expr!(s "bar")));
+        assert_ok!(lex!("foo[bar]"), group!(str!("foo"), group!(s str!("bar"))));
         assert_ok!(lex!("[+ 1 2 3]"),
-                   group_expr!(s str_expr!("+"), str_expr!("1"), str_expr!("2"), str_expr!("3")));
+                   group!(s str!("+"), str!("1"), str!("2"), str!("3")));
     }
 
     #[test]
     fn test_nested_empty_expr() {
-        assert_ok!(lex!("(())"), wrap_expr!(p empty_expr!(p)));
-        assert_ok!(lex!("([])"), wrap_expr!(p empty_expr!(s)));
-        assert_ok!(lex!("[({})]"), wrap_expr!(s wrap_expr!(p empty_expr!(c))));
-        assert_ok!(lex!("{{([])}}"), wrap_expr!(c wrap_expr!(c wrap_expr!(p empty_expr!(s)))));
+        assert_ok!(lex!("(())"), group!(p group!(p)));
+        assert_ok!(lex!("([])"), group!(p group!(s)));
+        assert_ok!(lex!("[({})]"), group!(s group!(p group!(c))));
+        assert_ok!(lex!("{{([])}}"), group!(c group!(c group!(p group!(s)))));
     }
 
     #[test]
     fn test_nested_group_expr() {
-        assert_ok!(lex!("foo(bar)"), group_expr!(str_expr!("foo"), str_expr!(p "bar")));
-        assert_ok!(lex!("((foo)(bar))"), group_expr!(p str_expr!(p "foo"), str_expr!(p "bar")));
-        assert_ok!(lex!("foo[(bar) zort]"), group_expr!(str_expr!("foo"),
-            group_expr!(s str_expr!(p "bar"), str_expr!("zort"))));
+        assert_ok!(lex!("foo(bar)"), group!(str!("foo"), group!(p str!("bar"))));
+        assert_ok!(lex!("((foo)(bar))"), group!(p group!(p str!("foo")), group!(p str!("bar"))));
+        assert_ok!(lex!("foo[(bar) zort]"), group!(str!("foo"),
+            group!(s group!(p str!("bar")), str!("zort"))));
         assert_ok!(lex!("(+ (1 (2 3)))"),
-                   group_expr!(p str_expr!("+"),
-                       group_expr!(p str_expr!("1"),
-                           group_expr!(p str_expr!("2"), str_expr!("3")))));
+                   group!(p str!("+"),
+                       group!(p str!("1"),
+                           group!(p str!("2"), str!("3")))));
     }
 
     #[test]
-    fn test_nested_multi_expr() {
-        assert_ok!(lex!("foo, (bar)"), multi_expr!(str_expr!("foo"), str_expr!(p "bar")));
+    fn test_nested_group() {
+        assert_ok!(lex!("foo, (bar)"), group!(str!("foo"), split!(), group!(p str!("bar"))));
         assert_ok!(lex!("(foo, (bar, zort))"),
-            multi_expr!(p str_expr!("foo"), multi_expr!(p str_expr!("bar"), str_expr!("zort"))));
+            group!(p str!("foo"), split!(), group!(p str!("bar"), split!(), str!("zort"))));
         assert_ok!(lex!("[1,foo(z,2)]"),
-            multi_expr!(s str_expr!("1"),
-                group_expr!(str_expr!("foo"), multi_expr!(p str_expr!("z"), str_expr!("2")))));
-        println!(r"Staring {{[1,foo(z,2)], [(4,  89)]}}");
+            group!(s str!("1"), split!(), str!("foo"),
+                group!(p str!("z"), split!(), str!("2"))));
         assert_ok!(lex!("{[1,foo(z,2)], [(4,  89), 6]}"),
-            multi_expr!(c
-                multi_expr!(s str_expr!("1"), group_expr!(str_expr!("foo"),
-                    multi_expr!(p str_expr!("z"), str_expr!("2")))),
-                multi_expr!(s multi_expr!(p str_expr!("4"), str_expr!("89")), str_expr!("6"))));
+            group!(c
+                group!(s str!("1"), split!(), str!("foo"),
+                    group!(p str!("z"), split!(), str!("2"))), split!(),
+                group!(s group!(p str!("4"), split!(), str!("89")), split!(), str!("6"))));
     }
 
     #[test]
     fn test_naked_expr() {
-        assert_ok!(lex!(";"), empty_expr!());
-        assert_ok!(lex!("foo;"), str_expr!("foo"));
-        assert_ok!(lex!("foo ; ignored"), str_expr!("foo"));
+        assert_ok!(lex!(";"), end!());
+        assert_ok!(lex!("foo;"), group!(str!("foo"), end!()));
+        assert_ok!(lex!("foo ; ignored"), group!(str!("foo"), end!()));
         assert_ok!(lex!("foo bar 1 2 3; ignored"),
-            group_expr!(str_expr!("foo"), str_expr!("bar"),
-                str_expr!("1"), str_expr!("2"), str_expr!("3")));
+            group!(str!("foo"), str!("bar"),
+                str!("1"), str!("2"), str!("3"), end!()));
     }
 
     #[test]
     fn test_naked_expr_with_nested_exprs() {
         assert_ok!(lex!("foo(bar); ignored"),
-            group_expr!(str_expr!("foo"),str_expr!(p "bar")));
+            group!(str!("foo"), group!(p str!("bar")), end!()));
         assert_ok!(lex!("foo(); ignored"),
-            group_expr!(str_expr!("foo"), empty_expr!(p)));
+            group!(str!("foo"), group!(p), end!()));
         assert_ok!(lex!("foo (bar 1) 2; ignored"),
-            group_expr!(str_expr!("foo"),
-                group_expr!(p str_expr!("bar"), str_expr!("1")),
-                str_expr!("2")));
+            group!(str!("foo"),
+                group!(p str!("bar"), str!("1")),
+                str!("2"), end!()));
         assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
-            group_expr!(str_expr!("foo"),
-                group_expr!(p str_expr!("bar"), str_expr!("1")),
-                group_expr!(str_expr!(s "2"), str_expr!(c "3"))));
+            group!(str!("foo"),
+                group!(p str!("bar"), str!("1")),
+                group!(s str!("2")), group!(c str!("3")), end!()));
     }
 
     #[test]
-    fn test_naked_exprs_within_nested_exprs() {
+    fn test_naked_exprs_within_nested_let_exprs() {
         assert_ok!(lex!("(foo;bar)"),
-            group_expr!(p str_expr!("foo"), str_expr!("bar")));
+            group!(p str!("foo"), end!(), str!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
-            // parsed as ( | let x = 1 |, | let y = 2 |, | + x y | )
-            group_expr!(p
-                group_expr!(str_expr!("let"), str_expr!("x"), str_expr!("="), str_expr!("1")),
-                group_expr!(str_expr!("let"), str_expr!("y"), str_expr!("="), str_expr!("2")),
-                group_expr!(str_expr!("+"), str_expr!("x"), str_expr!("y"))));
+            group!(p
+                _let!(), str!("x"), eq!(), str!("1"), end!(),
+                _let!(), str!("y"), eq!(), str!("2"), end!(),
+                str!("+"), str!("x"), str!("y")));
+    }
+
+    #[test]
+    fn test_nested_exprs_within_nested_exprs() {
+        assert_ok!(lex!("mul [add 2 (3; sub 2)] 5"),
+            group!(
+                str!("mul"),
+                group!(s str!("add"), str!("2"),
+                    group!(p str!("3"), end!(), str!("sub"), str!("2"))),
+                str!("5")));
     }
 
     #[test]
     fn test_iterator_can_be_reused_and_pos() {
-        let mut state = LexerState::default();
-        let mut iter = Tokens::from("(a)\n(b)");
-        assert_ok!(lexer(&mut iter, &mut state), str_expr!(p "a"));
-        assert_ok!(lexer(&mut iter, &mut state), str_expr!(p "b"));
+        let words = "(a)\n(b)";
+        let mut state = LexerState::new(words.split_word_bounds());
+        assert_ok!(lexer(&mut state), group!(p str!("a")));
+        assert_ok!(lexer(&mut state), group!(p str!("b")));
         assert_eq!(state.pos(), (2, 3));
     }
-
-    #[test]
-    fn test_new_lines_pos() {
-        let mut state = LexerState::default();
-        let mut iter = Tokens::from("\n \r\n foo\nb a r");
-        assert_ok!(lexer(&mut iter, &mut state),
-            group_expr!(str_expr!("foo"), str_expr!("b"), str_expr!("a"), str_expr!("r")));
-        assert_eq!(state.pos(), (4, 5));
-    }
-
-    #[test]
-    fn does_not_interrupt_simple_expr() {
-        let mut e = vec![exp_or_c!(str_expr!("hi"))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(str_expr!("hi"))])
-    }
-
-    #[test]
-    fn does_not_interrupt_comma_then_simple_expr() {
-        let mut e = vec![exp_or_c!(), exp_or_c!(str_expr!("hi"))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(), exp_or_c!(str_expr!("hi"))])
-    }
-
-    #[test]
-    fn does_not_interrupt_groups() {
-        let mut e = vec![
-            exp_or_c!(group_expr!(str_expr!("h"))),
-            exp_or_c!(group_expr!(str_expr!("h")))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(group_expr!(str_expr!("h"))),
-                           exp_or_c!(group_expr!(str_expr!("h")))])
-    }
-
-    #[test]
-    fn interrupts_simple_exprs() {
-        let mut e = vec![exp_or_c!(str_expr!("hi")), exp_or_c!(str_expr!("ho"))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(group_expr!(str_expr!("hi"), str_expr!("ho")))]);
-    }
-
-    #[test]
-    fn interrupts_group_then_simple_exprs() {
-        let mut e = vec![exp_or_c!(group_expr!(empty_expr!())),
-                         exp_or_c!(str_expr!("hi")), exp_or_c!(str_expr!("ho"))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(group_expr!(empty_expr!())),
-                           exp_or_c!(group_expr!(str_expr!("hi"), str_expr!("ho")))]);
-    }
-
-    #[test]
-    fn interrupts_comma_then_simple_exprs() {
-        let mut e = vec![exp_or_c!(),
-                         exp_or_c!(str_expr!("1")), exp_or_c!(str_expr!("2"))];
-        end_exp(&mut e);
-        assert_eq!(e, vec![exp_or_c!(),
-                           exp_or_c!(group_expr!(str_expr!("1"), str_expr!("2")))]);
-    }
+    //
+    // #[test]
+    // fn test_new_lines_pos() {
+    //     let mut state = LexerState::default();
+    //     let mut iter = Tokens::from("\n \r\n foo\nb a r");
+    //     assert_ok!(lexer(&mut iter, &mut state),
+    //         group!(str!("foo"), str!("b"), str!("a"), str!("r")));
+    //     assert_eq!(state.pos(), (4, 5));
+    // }
 }
