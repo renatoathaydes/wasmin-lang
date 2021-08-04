@@ -166,16 +166,20 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
-            "\"" => {
-                let start = state.pos();
-                ASTNode::Str(parse_str(state)
-                    .map_err(|e| werr_syntax!(e, start, state.pos()))?)
-            }
+            "\"" => handle_str(state, "\"")?,
+            "'" => handle_str(state, "'")?,
             _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
             _ => ASTNode::Id(token),
         });
     }
     Ok(nodes)
+}
+
+fn handle_str<'s>(state: &mut LexerState<'s>, end: &str)
+                  -> Result<ASTNode<'s>, WasminError> {
+    let start = state.pos();
+    Ok(ASTNode::Str(parse_str(state, end)
+        .map_err(|e| werr_syntax!(e, start, state.pos()))?))
 }
 
 fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNode {
@@ -430,12 +434,20 @@ mod tests {
     fn test_str() {
         assert_ok!(lex!("\"hello\""), str!("hello"));
         assert_ok!(lex!("\"A full sentence...\""), str!("A full sentence..."));
-        assert_ok!(lex!("\"pub fun let keywords = 2, 4)\""),
-            str!("pub fun let keywords = 2, 4)"));
+        assert_ok!(lex!("\"pub fun let 'keywords' = 2, 4)\""),
+            str!("pub fun let 'keywords' = 2, 4)"));
         assert_ok!(lex!("let s = \"hello\";"),
             group!(_let!(), id!("s"), _eq!(), str!("hello"), end!()));
         assert_ok!(lex!("(concat \"hello\" [fst \"bar\"])"),
             group!(p id!("concat"), str!("hello"), group!(s id!("fst"), str!("bar"))));
+    }
+
+    #[test]
+    fn test_str_single_quote() {
+        assert_ok!(lex!("'hello'"), str!("hello"));
+        assert_ok!(lex!("'A full sentence...'"), str!("A full sentence..."));
+        assert_ok!(lex!("'pub fun let \"keywords\" = 2, 4)'"),
+            str!("pub fun let \"keywords\" = 2, 4)"));
     }
 
     #[test]

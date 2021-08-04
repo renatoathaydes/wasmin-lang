@@ -1,10 +1,11 @@
 use crate::lexer::LexerState;
 
-pub(super) fn parse_str<'s>(state: &mut LexerState<'s>) -> Result<&'s str, String> {
+pub(super) fn parse_str<'s>(state: &mut LexerState<'s>, end: &str)
+                            -> Result<&'s str, String> {
     let idx = state.idx;
     loop {
         match state.next() {
-            Some("\"") => break,
+            Some(s) if s == end => break,
             None => return Err("unclosed string".into()),
             _ => {}
         }
