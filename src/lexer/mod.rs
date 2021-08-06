@@ -150,6 +150,11 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             nodes.push(ASTNode::End);
             break;
         }
+        // '.' does not split words so we need special treatment for it
+        if token.contains(".") {
+            split_dots_or_num(&mut nodes, token);
+            continue;
+        }
         nodes.push(match token {
             ";" => ASTNode::End,
             "," => ASTNode::Split,
@@ -166,13 +171,34 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "ext" => ASTNode::Ext,
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
+            "." => ASTNode::Dot,
             "\"" => handle_str(state, "\"")?,
             "'" => handle_str(state, "'")?,
-            _ if token.chars().nth(0).map_or(false, |c| c.is_digit(10)) => ASTNode::Num(token),
+            _ if is_num(token) => ASTNode::Num(token),
             _ => ASTNode::Id(token),
         });
     }
     Ok(nodes)
+}
+
+fn is_num(token: &str) -> bool {
+    token.chars().nth(0).map_or(false, |c| c.is_digit(10))
+}
+
+fn split_dots_or_num<'s>(nodes: &mut Vec<ASTNode<'s>>, token: &'s str) {
+    if token == "." {
+        nodes.push(ASTNode::Dot);
+        return;
+    }
+    if is_num(token) {
+        nodes.push(ASTNode::Num(token));
+        return;
+    }
+    for part in token.split(".") {
+        nodes.push(if part.is_empty() { ASTNode::Dot } else { ASTNode::Id(part) });
+        nodes.push(ASTNode::Dot);
+    }
+    nodes.pop();
 }
 
 fn handle_str<'s>(state: &mut LexerState<'s>, end: &str)
@@ -237,6 +263,7 @@ mod tests {
     macro_rules! _def { () => {ASTNode::Def} }
     macro_rules! _ext { () => {ASTNode::Ext} }
     macro_rules! _at { () => {ASTNode::At} }
+    macro_rules! _dot { () => {ASTNode::Dot} }
     macro_rules! _eq { () => {ASTNode::Eq} }
 
     macro_rules! lex {
@@ -408,6 +435,22 @@ mod tests {
                 group!(p id!("sqrt"), id!("x"))));
         assert_ok!(lex!("@macro x"), group!(_at!(), id!("macro"), id!("x")));
         assert_ok!(lex!("use foo, bar;"), group!(_use!(), id!("foo"), split!(), id!("bar"), end!()));
+    }
+
+    #[test]
+    fn test_dot() {
+        assert_ok!(lex!("."), _dot!());
+        assert_ok!(lex!(".a"), group!(_dot!(), id!("a")));
+        assert_ok!(lex!("a."), group!(id!("a"), _dot!()));
+        assert_ok!(lex!("foo.bar"), group!(id!("foo"), _dot!(), id!("bar")));
+        assert_ok!(lex!("foo\n  .bar"), group!(id!("foo"), _dot!(), id!("bar")));
+        assert_ok!(lex!("foo.\n  bar"), group!(id!("foo"), _dot!(), id!("bar")));
+        assert_ok!(lex!("(foo . bar x)"),
+            group!(p id!("foo"), _dot!(), id!("bar"), id!("x")));
+        assert_ok!(lex!("(( foo ).bar )"),
+            group!(p group!(p id!("foo")), _dot!(), id!("bar")));
+        assert_ok!(lex!("[( foo ). (bar )]"),
+            group!(s group!(p id!("foo")), _dot!(), group!(p id!("bar"))));
     }
 
     #[test]

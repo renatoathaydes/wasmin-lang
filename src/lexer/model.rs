@@ -41,6 +41,8 @@ pub enum ASTNode<'s> {
     Eq,
     /// '@' symbol
     At,
+    /// '.' symbol
+    Dot,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
