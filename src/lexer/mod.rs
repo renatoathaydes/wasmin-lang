@@ -432,6 +432,7 @@ mod tests {
 
     #[test]
     fn test_str() {
+        assert_ok!(lex!("\"\""), str!(""));
         assert_ok!(lex!("\"hello\""), str!("hello"));
         assert_ok!(lex!("\"A full sentence...\""), str!("A full sentence..."));
         assert_ok!(lex!("\"pub fun let 'keywords' = 2, 4)\""),
@@ -448,6 +449,15 @@ mod tests {
         assert_ok!(lex!("'A full sentence...'"), str!("A full sentence..."));
         assert_ok!(lex!("'pub fun let \"keywords\" = 2, 4)'"),
             str!("pub fun let \"keywords\" = 2, 4)"));
+    }
+
+    #[test]
+    fn test_str_escapes() {
+        assert_ok!(lex!("'hello\\n'"), str!("hello\\n"));
+        assert_ok!(lex!("'hello\\n\\r'"), str!("hello\\n\\r"));
+        assert_ok!(lex!("'hello\\t'"), str!("hello\\t"));
+        assert_ok!(lex!("'hello\\''"), str!("hello\\'"));
+        assert_ok!(lex!("\"hello\\\"\""), str!("hello\\\""));
     }
 
     #[test]
