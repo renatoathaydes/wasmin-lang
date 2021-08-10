@@ -172,6 +172,7 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "=" => ASTNode::Eq,
             "@" => ASTNode::At,
             "." => ASTNode::Dot,
+            "-" => ASTNode::Dash,
             "\"" => handle_str(state, "\"")?,
             "'" => handle_str(state, "'")?,
             _ if is_num(token) => ASTNode::Num(token),
@@ -264,6 +265,7 @@ mod tests {
     macro_rules! _ext { () => {ASTNode::Ext} }
     macro_rules! _at { () => {ASTNode::At} }
     macro_rules! _dot { () => {ASTNode::Dot} }
+    macro_rules! _dash { () => {ASTNode::Dash} }
     macro_rules! _eq { () => {ASTNode::Eq} }
 
     macro_rules! lex {
@@ -454,7 +456,7 @@ mod tests {
     }
 
     #[test]
-    fn test_numbers() {
+    fn test_pos_numbers() {
         assert_ok!(lex!("0"), num!("0"));
         assert_ok!(lex!("1"), num!("1"));
         assert_ok!(lex!("1.0"), num!("1.0"));
@@ -464,6 +466,19 @@ mod tests {
         assert_ok!(lex!("10_000.62f64"), num!("10_000.62f64"));
         // the lexer does not validate numbers fully
         assert_ok!(lex!("2Z"), num!("2Z"));
+    }
+
+    #[test]
+    fn test_neg_numbers() {
+        assert_ok!(lex!("-0"), group!(_dash!(), num!("0")));
+        assert_ok!(lex!("-1"), group!(_dash!(), num!("1")));
+        assert_ok!(lex!("-1.0"), group!(_dash!(), num!("1.0")));
+        assert_ok!(lex!("-0.1"), group!(_dash!(), num!("0.1")));
+        assert_ok!(lex!("-1i32"), group!(_dash!(), num!("1i32")));
+        assert_ok!(lex!("-10_000f32"), group!(_dash!(), num!("10_000f32")));
+        assert_ok!(lex!("-10_000.62f64"), group!(_dash!(), num!("10_000.62f64")));
+        // the lexer does not validate numbers fully
+        assert_ok!(lex!("-2Z"), group!(_dash!(), num!("2Z")));
     }
 
     #[test]

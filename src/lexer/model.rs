@@ -43,6 +43,8 @@ pub enum ASTNode<'s> {
     At,
     /// '.' symbol
     Dot,
+    /// '-' symbol
+    Dash,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
