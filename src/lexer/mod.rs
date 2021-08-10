@@ -304,6 +304,29 @@ mod tests {
     }
 
     #[test]
+    fn test_word_boundaries() {
+        assert_ok!(lex!("hi ho"), group!(id!("hi"), id!("ho")));
+        assert_ok!(lex!("hi\nho"), group!(id!("hi"), id!("ho")));
+        assert_ok!(lex!("hi\tho"), group!(id!("hi"), id!("ho")));
+        assert_ok!(lex!("hi\r\nho"), group!(id!("hi"), id!("ho")));
+        assert_ok!(lex!("hi_ho"), id!("hi_ho"));
+        // most symbols are not treated specially
+        assert_ok!(lex!("hi?ho"), group!(id!("hi"), id!("?"), id!("ho")));
+        assert_ok!(lex!("hi ? ho"), group!(id!("hi"), id!("?"), id!("ho")));
+        assert_ok!(lex!("hi!ho"), group!(id!("hi"), id!("!"), id!("ho")));
+        assert_ok!(lex!("hi^ho"), group!(id!("hi"), id!("^"), id!("ho")));
+        assert_ok!(lex!("hi&ho"), group!(id!("hi"), id!("&"), id!("ho")));
+        // but some are
+        assert_ok!(lex!("hi@ho"), group!(id!("hi"), _at!(), id!("ho")));
+        assert_ok!(lex!("hi=ho"), group!(id!("hi"), _eq!(), id!("ho")));
+        assert_ok!(lex!("hi-ho"), group!(id!("hi"), _dash!(), id!("ho")));
+        assert_ok!(lex!("hi.ho"), group!(id!("hi"), _dot!(), id!("ho")));
+        assert_ok!(lex!("hi,ho"), group!(id!("hi"), split!(), id!("ho")));
+        // expressions stop being parsed at "end"
+        assert_ok!(lex!("hi;ho"), group!(id!("hi"), end!()));
+    }
+
+    #[test]
     fn test_group_expr() {
         assert_ok!(lex!("(hello_world)"), group!(p id!("hello_world")));
         assert_ok!(lex!("foo bar"), group!(id!("foo"), id!("bar")));
