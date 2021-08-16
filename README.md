@@ -67,6 +67,8 @@ not generate garbage) and supports the procedural and concatenative programming 
 
 ## Tour of Wasmin
 
+### Expressions
+
 The basic constructs of a Wasmin program are **expressions**.
 
 Expressions are arrangements of symbols, constants and other expressions which evaluate to zero or more values.
@@ -104,6 +106,8 @@ example, it allows using a familiar "infix operator" syntax.
 
 > Wasmin source code must always be encoded using UTF-8.
 
+### Comments
+
 Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form:
 
 ```bash
@@ -114,6 +118,8 @@ Multi-line
 Comment
 }
 ```
+
+### Demarking expressions
 
 Top-level expressions within parenthesis end when the closing parens is reached, so no `;` is required.
 
@@ -141,15 +147,20 @@ let w = add(2, 3);
 
 Basically, if an expression does not start with `(`, it ends when a `;` is found.
 
+### Multi-value expressions
+
 Multi-value expressions are separated by `,`.
 
 In the example above, `add (2, 3)` actually creates an expression whose second term evalutes to two values, `2` and `3`,
 which then are passed as arguments to the first term, the `add`
-function, and hence is equivalent to just `(add 2 3)` (but _accidentally_ looks like a C-like function call).
+function, and hence is equivalent to just `(add 2 3)` (but _coincidentally_ looks like a C-like function call).
 
 > `let` expressions can be multi-valued as in `let x, y = 2, 3;`.
 > A `let` will consume one value per identifier.
-> Wasmin does not allow a single identifier to have more than one value.
+> Wasmin does not allow a single identifier to have more than one value, hence the number of elements must be the
+> same on both sides.
+
+### Types
 
 The type of a variable or function can be declared explicitly with a `def` statement. To implement a function, the `fun`
 keyword is used.
@@ -167,6 +178,10 @@ Types have a simple syntax:
 - `i32`, `i64`, `f32`, `f64` - native WASM types.
 - `[i32]i32` - function from one `i32` to another `i32` value.
 - `[i32 i32] f32 f32` - function from two `i32` values, to two `f32` values.
+- `[ [i32]f32 ]( [i32](f32) )` - function that takes a function from `i32` to `f32` and returns
+  another function from `i32` to `f32` (notice how the return type can appear between parens). 
+
+### Functions
 
 In this example, we define and implement a simple identity function:
 
@@ -175,14 +190,7 @@ def identity [i32] i32;
 fun identity n = n;
 ```
 
-The return value(s) can be declared within parenthesis in order to declare more complicated types:
-
-```rust
-# function from two functions, both taking one `i32` and returning one `i32`, to a single `i32` value
-def complex-function [ [i32](i32) [i32](i32) ] (i32)
-```
-
-Finally, to be able to use functions provided by the host environment (so you can actually print something, for example)
+To be able to use functions provided by the host environment (so you can actually print something, for example)
 , you can use `ext` (external module):
 
 ```rust
@@ -200,17 +208,23 @@ ext console {
 
 To call functions defined in an `ext` module, employ the familiar `module_name.fun_name` syntax:
 
-> Unlike in most languages, in Wasmin, the `.` in a namespaced function call becomes part of the identifier,
-> so you cannot have spaces or new-line between the module and function names. As identifiers cannot contain
-> dots, a dot always indicates a namespaced reference.
-
 ```rust
 ext console { # { omitted definitions } }
 
 fun _start = console.log 10;
 ```
 
-> TODO support Strings, so we can finally print "hello world"!
+### Strings
+
+String literals can be declared as in most other languages:
+
+```rust
+# Explicit type declaration shown for illustration purposes
+def name str;
+let name = "John";
+```
+
+### Organizing code
 
 You can split up Wasmin programs in several files. To do that, just import other files as shown below.
 
@@ -257,7 +271,91 @@ use {
 fun _start = console.log (factorial 5);
 ```
 
+### Macros
+
+Macros allow Wasmin programs to manipulate the AST (Abstract syntax tree) of a given expressions at compile-time.
+
+To invoke a macro named `foo`, prefix it with `@`, as in `@foo 1 2 3`.
+
+For example, suppose we really like infix notation for maths, so we want to add that to Wasmin, which would allow us
+to do this:
+
+```rust
+let x = @infix 2 add 3;
+```
+
+Here's a very simple implementation that would work for this example:
+
+```rust
+macro infix expr = (
+	if len expr, eq 3 then
+		get expr 0, get expr 2, get expr 1, group
+	else
+		raise "infix expects exactly 3 expressions"
+)
+```
+
+`expr` is an array of symbols or other expressions. Hence, `get expr 0` returns the first item, which in the
+case of the invocation `@infix 2 add 3` would be `2`. When expanded, this invocation would thus become:
+
+```rust
+let x = 2, 3, add;
+```
+
+This is a valid Wasmin expression, so it would compile as expected.
+
 This completes the description of the Wasmin syntax (a minimalistic syntax for WASM, hence the name ;))!
+
+## Memory
+
+To write most interesting programs, you'll need to allocate memory to represent structures more complex than just numbers and literal Strings!
+
+Wasmin exposes the WASM `memory` instruction, but leaves it up to libraries to use that for the management of `struct`s and other more complex objects.
+
+As an example, one could create a vector of `i32` as follows:
+
+```rust
+let min_size = 10   # 10 pages or ~64KiB
+let max_size = 100  # 100 pages or ~64MiB
+
+# Memory must be declared in the top-level.
+# Current version of WASM only allows one memory per module!
+# This is our heap!
+let mem = memory min_size max_size;
+
+def create_vec [i32 i32] i32;
+fun create_vec offset len = (
+	# push multiples of 2 into the vec
+	# initial value of i is the offset in memory
+	mut i = offset;
+	mut v = 0;
+	let limit = add offset len;
+	loop (
+		# the store instruction is used to store a value in mem,
+		# it takes the memory and an offset followed by a value
+		if i, gt limit then break
+		else store mem i (let a = v; set v = add 2; a); # ==> 0, 2, 4 ...
+		# we add 4 because an i32 has 4 bytes
+		set i = i, add 4
+	)
+	# return a pointer to the vec
+	offset
+)
+
+ext console { log [i32]; }
+
+# Using the vector
+fun _start = (
+	let len, offset, limit = 10, 16, mul len 4;
+	mut my_vec = create_vec offset len;
+    loop (
+		if my_vec, gt limit then break
+		else console.log (load mem my_vec);
+		# my_vec is a pointer, so we increment it to go to the next elemnt
+		set my_vec = my_vec, add 4
+	)
+)
+```
 
 ## Examples
 
@@ -271,4 +369,14 @@ pub fun increment = (set count = count, add 1; count)
 
 def decrement [] i32;
 pub fun decrement = (set count = count, sub 1; count)
+```
+
+## Grammar
+
+```
+expr          = naked_expr | group_expr
+simple_expr   = identifier | number
+naked_expr    = simple_expr expr* ';'
+group_expr    = '(' expr* ')' | '[' expr* ']' | '{' expr* '}'
+multi_expr    = expr ',' expr
 ```
