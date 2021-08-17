@@ -288,10 +288,10 @@ Here's a very simple implementation that would work for this example:
 
 ```rust
 macro infix expr = (
-	if len expr, eq 3 then
-		get expr 0, get expr 2, get expr 1, group
-	else
-		raise "infix expects exactly 3 expressions"
+    if len expr, eq 3 then
+        get expr 0, get expr 2, get expr 1, group
+    else
+        raise "infix expects exactly 3 expressions"
 )
 ```
 
@@ -325,35 +325,35 @@ let mem = memory min_size max_size;
 
 def create_vec [i32 i32] i32;
 fun create_vec offset len = (
-	# push multiples of 2 into the vec
-	# initial value of i is the offset in memory
-	mut i = offset;
-	mut v = 0;
-	let limit = add offset len;
-	loop (
-		# the store instruction is used to store a value in mem,
-		# it takes the memory and an offset followed by a value
-		if i, gt limit then break
-		else store mem i (let a = v; set v = add 2; a); # ==> 0, 2, 4 ...
-		# we add 4 because an i32 has 4 bytes
-		set i = i, add 4
-	)
-	# return a pointer to the vec
-	offset
+    # push multiples of 2 into the vec
+    # initial value of i is the offset in memory
+    mut i = offset;
+    mut v = 0;
+    let limit = add offset len;
+    loop (
+        # the store instruction is used to store a value in mem,
+        # it takes the memory and an offset followed by a value
+        if i, gt limit then break;;
+        store mem i (let a = v; set v = add 2; a); # ==> 0, 2, 4 ...
+        # we add 4 because an i32 has 4 bytes
+        set i = i, add 4
+    )
+    # return a pointer to the vec
+    offset
 )
 
 ext console { log [i32]; }
 
 # Using the vector
 fun _start = (
-	let len, offset, limit = 10, 16, mul len 4;
-	mut my_vec = create_vec offset len;
+    let len, offset, limit = 10, 16, mul len 4;
+    mut my_vec = create_vec offset len;
     loop (
-		if my_vec, gt limit then break
-		else console.log (load mem my_vec);
-		# my_vec is a pointer, so we increment it to go to the next elemnt
-		set my_vec = my_vec, add 4
-	)
+        if my_vec, gt limit then break;;
+        console.log (load mem my_vec);
+        # my_vec is a pointer, so we increment it to go to the next elemnt
+        set my_vec = my_vec, add 4
+    )
 )
 ```
 
