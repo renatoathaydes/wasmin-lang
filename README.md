@@ -329,7 +329,8 @@ fun create_vec offset len = (
     # initial value of i is the offset in memory
     mut i = offset;
     mut v = 0;
-    let limit = add offset len;
+    # each element has 4 bytes, so the limit is len * 4
+    let limit = add offset (len, mul 4);
     loop (
         # the store instruction is used to store a value in mem,
         # it takes the memory and an offset followed by a value
