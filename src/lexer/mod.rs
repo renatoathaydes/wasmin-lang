@@ -79,32 +79,6 @@ fn is_terminated(nodes: &Vec<ASTNode>) -> bool {
     }
 }
 
-#[cfg(test)]
-mod is_terminated_test {
-    use crate::lexer::model::{ASTNode::*};
-    use crate::lexer::model::NestingElement::Parens;
-
-    use super::is_terminated;
-
-    #[test]
-    fn is_terminated_test() {
-        assert_eq!(is_terminated(&vec![]), true);
-        assert_eq!(is_terminated(&vec![Group(vec![], None)]), true);
-        assert_eq!(is_terminated(&vec![Group(vec![], Some(Parens))]), true);
-        assert_eq!(is_terminated(&vec![Id(""), End]), true);
-        assert_eq!(is_terminated(&vec![Id(""), Id(""), End]), true);
-        assert_eq!(is_terminated(&vec![Let, Id(""), End]), true);
-        assert_eq!(is_terminated(&vec![End]), true);
-
-        assert_eq!(is_terminated(&vec![Id("")]), false);
-        assert_eq!(is_terminated(&vec![Split]), false);
-        assert_eq!(is_terminated(&vec![Split, Id("")]), false);
-        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], None)]), false);
-        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], Some(Parens))]), false);
-        assert_eq!(is_terminated(&vec![Let, Id(""), Eq, Group(vec![], Some(Parens))]), false);
-    }
-}
-
 fn lexer<'s>(state: &mut LexerState<'s>)
              -> Result<ASTNode<'s>, WasminError> {
     let mut nodes = vec![];
@@ -223,6 +197,35 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
         Group(nodes, nesting)
     }
 }
+
+/// TESTS
+
+#[cfg(test)]
+mod is_terminated_test {
+    use crate::lexer::model::{ASTNode::*};
+    use crate::lexer::model::NestingElement::Parens;
+
+    use super::is_terminated;
+
+    #[test]
+    fn is_terminated_test() {
+        assert_eq!(is_terminated(&vec![]), true);
+        assert_eq!(is_terminated(&vec![Group(vec![], None)]), true);
+        assert_eq!(is_terminated(&vec![Group(vec![], Some(Parens))]), true);
+        assert_eq!(is_terminated(&vec![Id(""), End]), true);
+        assert_eq!(is_terminated(&vec![Id(""), Id(""), End]), true);
+        assert_eq!(is_terminated(&vec![Let, Id(""), End]), true);
+        assert_eq!(is_terminated(&vec![End]), true);
+
+        assert_eq!(is_terminated(&vec![Id("")]), false);
+        assert_eq!(is_terminated(&vec![Split]), false);
+        assert_eq!(is_terminated(&vec![Split, Id("")]), false);
+        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], None)]), false);
+        assert_eq!(is_terminated(&vec![Id(""), Group(vec![], Some(Parens))]), false);
+        assert_eq!(is_terminated(&vec![Let, Id(""), Eq, Group(vec![], Some(Parens))]), false);
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
