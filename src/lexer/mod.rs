@@ -157,7 +157,9 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
 }
 
 fn is_num(token: &str) -> bool {
-    token.chars().nth(0).map_or(false, |c| c.is_digit(10))
+    // TODO support _ separator
+    regex::Regex::new("^[+-]?(0|[1-9]\\d*)(\\.\\d+)?([Ee][+-]?\\d+)?([fi](32|64))?$")
+        .expect("num regex").is_match(token)
 }
 
 fn split_dots_or_num<'s>(nodes: &mut Vec<ASTNode<'s>>, token: &'s str) {
@@ -226,6 +228,47 @@ mod is_terminated_test {
     }
 }
 
+#[cfg(test)]
+mod is_num {
+    use super::is_num;
+
+    #[test]
+    fn is_num_test() {
+        assert!(is_num("0"));
+        assert!(is_num("+0"));
+        assert!(is_num("-0"));
+        assert!(is_num("1"));
+        assert!(is_num("2"));
+        assert!(is_num("1e0"));
+        assert!(is_num("1E2"));
+        assert!(is_num("100e-1"));
+        assert!(is_num("100.0123e-1"));
+        assert!(is_num("100.0123e+245"));
+        assert!(is_num("-100.0123e-245"));
+        assert!(is_num("100"));
+        assert!(is_num("11234556778990223"));
+        assert!(is_num("+1"));
+        assert!(is_num("-1"));
+    }
+
+    #[test]
+    fn is_not_num_test() {
+        assert!(!is_num("f"));
+        assert!(!is_num("."));
+        assert!(!is_num("-"));
+        assert!(!is_num("+"));
+        assert!(!is_num("11A234556778990223"));
+        assert!(!is_num("+1A"));
+        assert!(!is_num("+A1"));
+        assert!(!is_num("-1e"));
+        assert!(!is_num("123."));
+        assert!(!is_num("123.4.5"));
+        assert!(!is_num(".1"));
+        assert!(!is_num(".A"));
+        assert!(!is_num("-A"));
+        assert!(!is_num("-A1"));
+    }
+}
 
 #[cfg(test)]
 mod tests {
