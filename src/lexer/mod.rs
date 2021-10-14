@@ -1,3 +1,5 @@
+use lazy_static::lazy_static;
+use regex::Regex;
 use unicode_segmentation::{UnicodeSegmentation, UWordBounds};
 
 use model::*;
@@ -8,6 +10,12 @@ use crate::lexer::str::parse_str;
 
 mod model;
 mod str;
+
+lazy_static! {
+    static ref NUM_REGEX: Regex = Regex::new(
+        r"^[+-]?(0|[1-9][\d_]*)(\.\d[\d_]*)?([Ee][+-]?\d[\d_]*)?([fi](32|64))?$"
+    ).unwrap();
+}
 
 struct LexerState<'s> {
     nesting: Vec<NestingToken>,
@@ -157,9 +165,7 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
 }
 
 fn is_num(token: &str) -> bool {
-    // TODO support _ separator
-    regex::Regex::new("^[+-]?(0|[1-9]\\d*)(\\.\\d+)?([Ee][+-]?\\d+)?([fi](32|64))?$")
-        .expect("num regex").is_match(token)
+    NUM_REGEX.is_match(token)
 }
 
 fn split_dots_or_num<'s>(nodes: &mut Vec<ASTNode<'s>>, token: &'s str) {
@@ -201,7 +207,6 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
 }
 
 /// TESTS
-
 #[cfg(test)]
 mod is_terminated_test {
     use crate::lexer::model::{ASTNode::*};
@@ -533,8 +538,9 @@ mod tests {
         assert_ok!(lex!("1i32"), num!("1i32"));
         assert_ok!(lex!("10_000f32"), num!("10_000f32"));
         assert_ok!(lex!("10_000.62f64"), num!("10_000.62f64"));
-        // the lexer does not validate numbers fully
-        assert_ok!(lex!("2Z"), num!("2Z"));
+        assert_ok!(lex!("10_000e32"), num!("10_000e32"));
+        assert_ok!(lex!("10_000e100_100_100"), num!("10_000e100_100_100"));
+        assert_ok!(lex!("1.625428E100"), num!("1.625428E100"));
     }
 
     #[test]
@@ -546,8 +552,9 @@ mod tests {
         assert_ok!(lex!("-1i32"), group!(_dash!(), num!("1i32")));
         assert_ok!(lex!("-10_000f32"), group!(_dash!(), num!("10_000f32")));
         assert_ok!(lex!("-10_000.62f64"), group!(_dash!(), num!("10_000.62f64")));
-        // the lexer does not validate numbers fully
-        assert_ok!(lex!("-2Z"), group!(_dash!(), num!("2Z")));
+        assert_ok!(lex!("-10_000e32"), group!(_dash!(),num!("10_000e32")));
+        assert_ok!(lex!("-10_000e100_100_100"), group!(_dash!(),num!("10_000e100_100_100")));
+        assert_ok!(lex!("-1.625428E100"), group!(_dash!(),num!("1.625428E100")));
     }
 
     #[test]
