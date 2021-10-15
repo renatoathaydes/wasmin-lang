@@ -81,7 +81,7 @@ fn is_terminated(nodes: &Vec<ASTNode>) -> bool {
         &[] => true,
         // single group is always self-terminating
         &[ASTNode::Group(..)] => true,
-        // anything that's not a group ending with END is terminated
+        // anything that's not a group, and ending with END, is terminated
         &[.., ASTNode::End] => true,
         _ => false,
     }
@@ -254,6 +254,12 @@ mod is_num {
         assert!(is_num("11234556778990223"));
         assert!(is_num("+1"));
         assert!(is_num("-1"));
+        assert!(is_num("1_0"));
+        assert!(is_num("1_123_456"));
+        assert!(is_num("1_123_456_i64"));
+        assert!(is_num("1_123_456i64"));
+        assert!(is_num("1_123_456E1i64"));
+        assert!(is_num("1_123_456E10_00_00_i64"));
     }
 
     #[test]
@@ -272,6 +278,10 @@ mod is_num {
         assert!(!is_num(".A"));
         assert!(!is_num("-A"));
         assert!(!is_num("-A1"));
+        assert!(!is_num("_1"));
+        assert!(!is_num("_10_"));
+        assert!(!is_num("1f32f64"));
+        assert!(!is_num("10f32_i64"));
     }
 }
 
@@ -561,6 +571,7 @@ mod tests {
     fn test_not_numbers() {
         assert_ok!(lex!("a0"), id!("a0"));
         assert_ok!(lex!("_1"), id!("_1"));
+        assert_ok!(lex!("1z"), id!("1z"));
         assert_ok!(lex!("@b4"), group!(_at!(), id!("b4")));
     }
 
