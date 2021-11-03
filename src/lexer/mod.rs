@@ -218,21 +218,21 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
 
 #[macro_export]
 macro_rules! wnest {
-        (p) => {NestingElement::Parens};
-        (s) => {NestingElement::Square};
-        (c) => {NestingElement::Curly};
-    }
+    (p) => {$crate::lexer::model::NestingElement::Parens};
+    (s) => {$crate::lexer::model::NestingElement::Square};
+    (c) => {$crate::lexer::model::NestingElement::Curly};
+}
 
 #[macro_export]
 macro_rules! wgroup {
-    () => {ASTNode::Group(vec![], None)};
-    (p) => {ASTNode::Group(vec![], Some(nest!(p)))};
-    (s) => {ASTNode::Group(vec![], Some(nest!(s)))};
-    (c) => {ASTNode::Group(vec![], Some(nest!(c)))};
+    () => {$crate::lexer::model::ASTNode::Group(vec![], None)};
+    (p) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(p)))};
+    (s) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(s)))};
+    (c) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(c)))};
     ($($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], None)};
-    (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(p)))};
-    (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(s)))};
-    (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(c)))};
+    (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(p)))};
+    (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(s)))};
+    (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(c)))};
 }
 
 #[macro_export]
@@ -275,29 +275,6 @@ macro_rules! wdot { () => {ASTNode::Dot} }
 macro_rules! wdash { () => {ASTNode::Dash} }
 #[macro_export]
 macro_rules! weq { () => {ASTNode::Eq} }
-
-pub use wnest;
-pub use wgroup;
-pub use wid;
-pub use wnum;
-pub use wstr;
-pub use wsplit;
-pub use wend;
-pub use wlet;
-pub use wmut;
-pub use wset;
-pub use wfun;
-pub use wpub;
-pub use wuse;
-pub use wif;
-pub use wthen;
-pub use welse;
-pub use wdef;
-pub use wext;
-pub use wat;
-pub use wdot;
-pub use wdash;
-pub use weq;
 
 /// TESTS
 #[cfg(test)]
