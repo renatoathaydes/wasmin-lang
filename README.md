@@ -108,7 +108,8 @@ example, it allows using a familiar "infix operator" syntax.
 
 ### Comments
 
-Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form:
+Comments start with the `#` character. Multi-line comments require the `#{ ... multi-line comment ... }` form, which
+ends with `}` even on the same line:
 
 ```bash
 # single line comment
@@ -117,33 +118,29 @@ Comments start with the `#` character. Multi-line comments require the `#{ ... m
 Multi-line
 Comment
 }
+
+#{ comment } let this_is_code = #{ another comment } 1;
 ```
 
 ### Demarking expressions
 
-Top-level expressions within parenthesis end when the closing parens is reached, so no `;` is required.
+Top-level expressions without parenthesis end with `;`, and within parenthesis end when the closing parens is reached,
+so no `;` is required.
 
 ```rust
 # ok
 let x = (add 2 3)
 
-# wrong!
+# ok
+let x = add 2 3;
+
+# wrong! expr ends with ')'
 let x = (add 2) 3;
 ```
 
 The last example above would try to assign the result of `add 2` to `x` (which won't work because `add` takes two
 arguments), then the expression `3` appears outside of the previous `let` expression, in an illegal location
-(only `let`, `mut`, `set`, and as we'll see below, `def` and `fun` can appear as top-level elements).
-
-These, however, would be fine:
-
-```rust
-# ok!
-let x = add 2 3;
-let y = add (2) (3);
-let z = (add 2 3)
-let w = add(2, 3);
-```
+(only `let`, `mut`, `set`, and as we'll see below, `def`, `fun` and `ext` can appear as top-level elements).
 
 Basically, if an expression does not start with `(`, it ends when a `;` is found.
 
@@ -151,8 +148,8 @@ Basically, if an expression does not start with `(`, it ends when a `;` is found
 
 Multi-value expressions are separated by `,`.
 
-In the example above, `add (2, 3)` actually creates an expression whose second term evalutes to two values, `2` and `3`,
-which then are passed as arguments to the first term, the `add`
+The expression `add (2, 3)` is valid because the second term evaluates to two values, `2` and `3`, which then are passed
+as arguments to the first term, the `add`
 function, and hence is equivalent to just `(add 2 3)` (but _coincidentally_ looks like a C-like function call).
 
 > `let` expressions can be multi-valued as in `let x, y = 2, 3;`.
@@ -209,19 +206,8 @@ ext console {
 To call functions defined in an `ext` module, employ the familiar `module_name.fun_name` syntax:
 
 ```rust
-ext console { # { omitted definitions } }
-
+# given the above definition for console
 fun _start = console.log 10;
-```
-
-### Strings
-
-String literals can be declared as in most other languages:
-
-```rust
-# Explicit type declaration shown for illustration purposes
-def name str;
-let name = "John";
 ```
 
 ### Organizing code
@@ -235,16 +221,16 @@ You can split up Wasmin programs in several files. To do that, just import other
 ```rust
 def factorial [i32]i64;
 pub fun factorial n = if n, le_s 2;
-    then n;
-    else n, mul (n, sub 1, factorial);
+then n;
+else n, mul factorial (n, sub 1);
 ```
 
 `main.wasmin`:
 
 ```rust
 # the file extension is always implied to be .wasmin,
-# so this will import all `pub` definitions from "./factorial.wasmin".
-use * from "./factorial";
+# so this will import all ` pub ` definitions from "./factorial.wasmin".
+use "./factorial";
 
 def _start []i64;
 fun _start = factorial 5;
@@ -253,7 +239,7 @@ fun _start = factorial 5;
 `use` statements may also list which definitions to import:
 
 ```rust
-use { factorial } from "./factorial";
+use "./factorial" { factorial };
 
 def _start []i64;
 fun _start = factorial 5;
@@ -263,54 +249,22 @@ If another file defines an `ext` module, then the `ext` module can be used as an
 
 ```rust
 # assume that "ext console" was defined inside "./factorial.wasmin"
-use {
-    factorial
-    console
-} from "./factorial";
+use "./factorial" {
+factorial
+console
+};
 
 fun _start = console.log (factorial 5);
 ```
-
-### Macros
-
-Macros allow Wasmin programs to manipulate the AST (Abstract syntax tree) of a given expressions at compile-time.
-
-To invoke a macro named `foo`, prefix it with `@`, as in `@foo 1 2 3`.
-
-For example, suppose we really like infix notation for maths, so we want to add that to Wasmin, which would allow us
-to do this:
-
-```rust
-let x = @infix 2 add 3;
-```
-
-Here's a very simple implementation that would work for this example:
-
-```rust
-macro infix expr = (
-    if len expr, eq 3 then
-        get expr 0, get expr 2, get expr 1, group
-    else
-        raise "infix expects exactly 3 expressions"
-)
-```
-
-`expr` is an array of symbols or other expressions. Hence, `get expr 0` returns the first item, which in the
-case of the invocation `@infix 2 add 3` would be `2`. When expanded, this invocation would thus become:
-
-```rust
-let x = 2, 3, add;
-```
-
-This is a valid Wasmin expression, so it would compile as expected.
 
 This completes the description of the Wasmin syntax (a minimalistic syntax for WASM, hence the name ;))!
 
 ## Memory
 
-To write most interesting programs, you'll need to allocate memory to represent structures more complex than just numbers and literal Strings!
+To write most interesting programs, you'll need to allocate memory to represent structures more complex than just
+numbers!
 
-Wasmin exposes the WASM `memory` instruction, but leaves it up to libraries to use that for the management of `struct`s and other more complex objects.
+Wasmin exposes the WASM `memory` instruction, but leaves it up to libraries to interpret those bytes as complex objects.
 
 As an example, one could create a vector of `i32` as follows:
 
@@ -325,22 +279,22 @@ let mem = memory min_size max_size;
 
 def create_vec [i32 i32] i32;
 fun create_vec offset len = (
-    # push multiples of 2 into the vec
-    # initial value of i is the offset in memory
-    mut i = offset;
-    mut v = 0;
-    # each element has 4 bytes, so the limit is len * 4
-    let limit = add offset (len, mul 4);
-    loop (
-        # the store instruction is used to store a value in mem,
-        # it takes the memory and an offset followed by a value
-        if i, gt limit then break;;
-        store mem i (let a = v; set v = add 2; a); # ==> 0, 2, 4 ...
-        # we add 4 because an i32 has 4 bytes
-        set i = i, add 4
-    )
-    # return a pointer to the vec
-    offset
+# push multiples of 2 into the vec
+# initial value of i is the offset in memory
+mut i = offset;
+mut value = 0;
+# each element has 4 bytes, so the limit is len * 4
+let limit = add offset (len, mul 4);
+loop (
+# the store instruction is used to store a value in mem,
+# it takes the memory and an offset followed by a value
+if i, gt limit then break; ;
+store mem i ( let a = value; set value = add 2; a); # == > 0, 2, 4...
+# we add 4 to the index because an i32 has 4 bytes
+set i = i, add 4
+)
+# return a pointer to the vec
+offset
 )
 
 ext console { log [i32]; }
@@ -370,14 +324,4 @@ pub fun increment = (set count = count, add 1; count)
 
 def decrement [] i32;
 pub fun decrement = (set count = count, sub 1; count)
-```
-
-## Grammar
-
-```
-expr          = naked_expr | group_expr
-simple_expr   = identifier | number
-naked_expr    = simple_expr expr* ';'
-group_expr    = '(' expr* ')' | '[' expr* ']' | '{' expr* '}'
-multi_expr    = expr ',' expr
 ```
