@@ -51,7 +51,7 @@ impl<'s> LexerState<'s> {
         } else {
             self.col += token.len();
         }
-        Some(token.trim())
+        Some(token)
     }
 }
 
@@ -115,9 +115,20 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
     // let file = fs::read_to_string("ex.wasmin").unwrap();
     // let tokens = UnicodeSegmentation::split_word_bounds(&file);
     let mut nodes = Vec::<ASTNode>::new();
+    let mut comment_start_pos: Option<usize> = None;
 
     loop {
         let token = if let Some(t) = state.next() { t } else { break; };
+        if comment_start_pos.is_some() {
+            if token.contains("\n") {
+                let comment_start = comment_start_pos.take().unwrap();
+                let comment_end = state.idx - 1;
+                nodes.push(ASTNode::Comment(&state.text[comment_start..comment_end]));
+            }
+            continue;
+        }
+
+        let token = token.trim();
         if token.is_empty() { continue; }
 
         if let Some(elem) = as_nesting_start(token) {
@@ -137,6 +148,10 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
         if token == ";" && state.nesting.is_empty() {
             nodes.push(ASTNode::End);
             break;
+        }
+        if token == "#" {
+            comment_start_pos.insert(state.idx);
+            continue;
         }
         // '.' does not split words so we need special treatment for it
         if token.contains(".") {
@@ -166,6 +181,9 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             _ if is_num(token) => ASTNode::Num(token),
             _ => ASTNode::Id(token),
         });
+    }
+    if let Some(comment_start) = comment_start_pos {
+        nodes.push(ASTNode::Comment(&state.text[comment_start..state.idx]));
     }
     Ok(nodes)
 }
@@ -237,6 +255,8 @@ macro_rules! wgroup {
 
 #[macro_export]
 macro_rules! wid { ($e:literal) => {ASTNode::Id($e)} }
+#[macro_export]
+macro_rules! wcomment { ($e:literal) => {ASTNode::Comment($e)} }
 #[macro_export]
 macro_rules! wnum { ($e:literal) => {ASTNode::Num($e)} }
 #[macro_export]
@@ -605,6 +625,21 @@ mod tests {
         assert_ok!(lex!("_1"), wid!("_1"));
         assert_ok!(lex!("1z"), wid!("1z"));
         assert_ok!(lex!("@b4"), wgroup!(wat!(), wid!("b4")));
+    }
+
+    #[test]
+    fn test_single_line_comments() {
+        assert_ok!(lex!("# foo bar\na0"), wgroup!(
+            wcomment!(" foo bar"), wid!("a0")));
+        assert_ok!(lex!("#foo\na1#done"), wgroup!(wcomment!("foo"), wid!("a1"), wcomment!("done")));
+        assert_ok!(lex!("# foo bar
+            let x
+            # another comment # ignore it
+            # done
+            = y; # end"), wgroup!(wcomment!(" foo bar"),
+                wlet!(), wid!("x"),
+                wcomment!(" another comment # ignore it"), wcomment!(" done"),
+                weq!(), wid!("y"), wend!()));
     }
 
     #[test]
