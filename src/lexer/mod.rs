@@ -8,7 +8,7 @@ use crate::errors::WasminError;
 use crate::lexer::model::ASTNode::Group;
 use crate::lexer::str::parse_str;
 
-mod model;
+pub mod model;
 mod str;
 
 lazy_static! {
@@ -85,6 +85,12 @@ fn is_terminated(nodes: &Vec<ASTNode>) -> bool {
         &[.., ASTNode::End] => true,
         _ => false,
     }
+}
+
+/// Perform the lexing of a Wasmin program source code.
+pub fn lex(source: &str) -> Result<ASTNode, WasminError> {
+    let mut state = LexerState::new(source);
+    lexer(&mut state)
 }
 
 fn lexer<'s>(state: &mut LexerState<'s>)
@@ -206,6 +212,93 @@ fn join_nodes(mut nodes: Vec<ASTNode>, nesting: Option<NestingElement>) -> ASTNo
     }
 }
 
+/*
+ MACROS
+*/
+
+#[macro_export]
+macro_rules! wnest {
+        (p) => {NestingElement::Parens};
+        (s) => {NestingElement::Square};
+        (c) => {NestingElement::Curly};
+    }
+
+#[macro_export]
+macro_rules! wgroup {
+    () => {ASTNode::Group(vec![], None)};
+    (p) => {ASTNode::Group(vec![], Some(nest!(p)))};
+    (s) => {ASTNode::Group(vec![], Some(nest!(s)))};
+    (c) => {ASTNode::Group(vec![], Some(nest!(c)))};
+    ($($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], None)};
+    (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(p)))};
+    (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(s)))};
+    (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(c)))};
+}
+
+#[macro_export]
+macro_rules! wid { ($e:literal) => {ASTNode::Id($e)} }
+#[macro_export]
+macro_rules! wnum { ($e:literal) => {ASTNode::Num($e)} }
+#[macro_export]
+macro_rules! wstr { ($e:literal) => {ASTNode::Str($e)} }
+#[macro_export]
+macro_rules! wsplit { () => {ASTNode::Split} }
+#[macro_export]
+macro_rules! wend { () => {ASTNode::End} }
+#[macro_export]
+macro_rules! wlet { () => {ASTNode::Let} }
+#[macro_export]
+macro_rules! wmut { () => {ASTNode::Mut} }
+#[macro_export]
+macro_rules! wset { () => {ASTNode::Set} }
+#[macro_export]
+macro_rules! wfun { () => {ASTNode::Fun} }
+#[macro_export]
+macro_rules! wpub { () => {ASTNode::Pub} }
+#[macro_export]
+macro_rules! wuse { () => {ASTNode::Use} }
+#[macro_export]
+macro_rules! wif { () => {ASTNode::If} }
+#[macro_export]
+macro_rules! wthen { () => {ASTNode::Then} }
+#[macro_export]
+macro_rules! welse { () => {ASTNode::Else} }
+#[macro_export]
+macro_rules! wdef { () => {ASTNode::Def} }
+#[macro_export]
+macro_rules! wext { () => {ASTNode::Ext} }
+#[macro_export]
+macro_rules! wat { () => {ASTNode::At} }
+#[macro_export]
+macro_rules! wdot { () => {ASTNode::Dot} }
+#[macro_export]
+macro_rules! wdash { () => {ASTNode::Dash} }
+#[macro_export]
+macro_rules! weq { () => {ASTNode::Eq} }
+
+pub use wnest;
+pub use wgroup;
+pub use wid;
+pub use wnum;
+pub use wstr;
+pub use wsplit;
+pub use wend;
+pub use wlet;
+pub use wmut;
+pub use wset;
+pub use wfun;
+pub use wpub;
+pub use wuse;
+pub use wif;
+pub use wthen;
+pub use welse;
+pub use wdef;
+pub use wext;
+pub use wat;
+pub use wdot;
+pub use wdash;
+pub use weq;
+
 /// TESTS
 #[cfg(test)]
 mod is_terminated_test {
@@ -291,44 +384,6 @@ mod tests {
 
     use super::*;
 
-    macro_rules! nest {
-        (p) => {NestingElement::Parens};
-        (s) => {NestingElement::Square};
-        (c) => {NestingElement::Curly};
-    }
-
-    macro_rules! group {
-        () => {ASTNode::Group(vec![], None)};
-        (p) => {ASTNode::Group(vec![], Some(nest!(p)))};
-        (s) => {ASTNode::Group(vec![], Some(nest!(s)))};
-        (c) => {ASTNode::Group(vec![], Some(nest!(c)))};
-        ($($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], None)};
-        (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(p)))};
-        (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(s)))};
-        (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some(nest!(c)))};
-    }
-
-    macro_rules! id { ($e:literal) => {ASTNode::Id($e)} }
-    macro_rules! num { ($e:literal) => {ASTNode::Num($e)} }
-    macro_rules! str { ($e:literal) => {ASTNode::Str($e)} }
-    macro_rules! split { () => {ASTNode::Split} }
-    macro_rules! end { () => {ASTNode::End} }
-    macro_rules! _let { () => {ASTNode::Let} }
-    macro_rules! _mut { () => {ASTNode::Mut} }
-    macro_rules! _set { () => {ASTNode::Set} }
-    macro_rules! _fun { () => {ASTNode::Fun} }
-    macro_rules! _pub { () => {ASTNode::Pub} }
-    macro_rules! _use { () => {ASTNode::Use} }
-    macro_rules! _if { () => {ASTNode::If} }
-    macro_rules! _then { () => {ASTNode::Then} }
-    macro_rules! _else { () => {ASTNode::Else} }
-    macro_rules! _def { () => {ASTNode::Def} }
-    macro_rules! _ext { () => {ASTNode::Ext} }
-    macro_rules! _at { () => {ASTNode::At} }
-    macro_rules! _dot { () => {ASTNode::Dot} }
-    macro_rules! _dash { () => {ASTNode::Dash} }
-    macro_rules! _eq { () => {ASTNode::Eq} }
-
     macro_rules! lex {
         ($input:literal) => {{
             let mut state = LexerState::new($input);
@@ -351,258 +406,258 @@ mod tests {
 
     #[test]
     fn test_empty_expr() {
-        assert_ok!(lex!(""), group!());
-        assert_ok!(lex!("()"), group!(p));
-        assert_ok!(lex!("( )"), group!(p));
-        assert_ok!(lex!("  [    ]   "), group!(s));
-        assert_ok!(lex!("  \n{ \n  }\n   "), group!(c));
+        assert_ok!(lex!(""), wgroup!());
+        assert_ok!(lex!("()"), wgroup!(p));
+        assert_ok!(lex!("( )"), wgroup!(p));
+        assert_ok!(lex!("  [    ]   "), wgroup!(s));
+        assert_ok!(lex!("  \n{ \n  }\n   "), wgroup!(c));
     }
 
     #[test]
     fn test_simple_expr() {
-        assert_ok!(lex!("hello"), id!("hello"));
-        assert_ok!(lex!("hello_world"), id!("hello_world"));
+        assert_ok!(lex!("hello"), wid!("hello"));
+        assert_ok!(lex!("hello_world"), wid!("hello_world"));
     }
 
     #[test]
     fn test_word_boundaries() {
-        assert_ok!(lex!("hi ho"), group!(id!("hi"), id!("ho")));
-        assert_ok!(lex!("hi\nho"), group!(id!("hi"), id!("ho")));
-        assert_ok!(lex!("hi\tho"), group!(id!("hi"), id!("ho")));
-        assert_ok!(lex!("hi\r\nho"), group!(id!("hi"), id!("ho")));
-        assert_ok!(lex!("hi_ho"), id!("hi_ho"));
+        assert_ok!(lex!("hi ho"), wgroup!(wid!("hi"), wid!("ho")));
+        assert_ok!(lex!("hi\nho"), wgroup!(wid!("hi"), wid!("ho")));
+        assert_ok!(lex!("hi\tho"), wgroup!(wid!("hi"), wid!("ho")));
+        assert_ok!(lex!("hi\r\nho"), wgroup!(wid!("hi"), wid!("ho")));
+        assert_ok!(lex!("hi_ho"), wid!("hi_ho"));
         // most symbols are not treated specially
-        assert_ok!(lex!("hi?ho"), group!(id!("hi"), id!("?"), id!("ho")));
-        assert_ok!(lex!("hi ? ho"), group!(id!("hi"), id!("?"), id!("ho")));
-        assert_ok!(lex!("hi!ho"), group!(id!("hi"), id!("!"), id!("ho")));
-        assert_ok!(lex!("hi^ho"), group!(id!("hi"), id!("^"), id!("ho")));
-        assert_ok!(lex!("hi&ho"), group!(id!("hi"), id!("&"), id!("ho")));
+        assert_ok!(lex!("hi?ho"), wgroup!(wid!("hi"), wid!("?"), wid!("ho")));
+        assert_ok!(lex!("hi ? ho"), wgroup!(wid!("hi"), wid!("?"), wid!("ho")));
+        assert_ok!(lex!("hi!ho"), wgroup!(wid!("hi"), wid!("!"), wid!("ho")));
+        assert_ok!(lex!("hi^ho"), wgroup!(wid!("hi"), wid!("^"), wid!("ho")));
+        assert_ok!(lex!("hi&ho"), wgroup!(wid!("hi"), wid!("&"), wid!("ho")));
         // but some are
-        assert_ok!(lex!("hi@ho"), group!(id!("hi"), _at!(), id!("ho")));
-        assert_ok!(lex!("hi=ho"), group!(id!("hi"), _eq!(), id!("ho")));
-        assert_ok!(lex!("hi-ho"), group!(id!("hi"), _dash!(), id!("ho")));
-        assert_ok!(lex!("hi.ho"), group!(id!("hi"), _dot!(), id!("ho")));
-        assert_ok!(lex!("hi,ho"), group!(id!("hi"), split!(), id!("ho")));
+        assert_ok!(lex!("hi@ho"), wgroup!(wid!("hi"), wat!(), wid!("ho")));
+        assert_ok!(lex!("hi=ho"), wgroup!(wid!("hi"), weq!(), wid!("ho")));
+        assert_ok!(lex!("hi-ho"), wgroup!(wid!("hi"), wdash!(), wid!("ho")));
+        assert_ok!(lex!("hi.ho"), wgroup!(wid!("hi"), wdot!(), wid!("ho")));
+        assert_ok!(lex!("hi,ho"), wgroup!(wid!("hi"), wsplit!(), wid!("ho")));
         // expressions stop being parsed at "end"
-        assert_ok!(lex!("hi;ho"), group!(id!("hi"), end!()));
+        assert_ok!(lex!("hi;ho"), wgroup!(wid!("hi"), wend!()));
     }
 
     #[test]
     fn test_group_expr() {
-        assert_ok!(lex!("(hello_world)"), group!(p id!("hello_world")));
-        assert_ok!(lex!("foo bar"), group!(id!("foo"), id!("bar")));
-        assert_ok!(lex!("(foo bar)"), group!(p id!("foo"), id!("bar")));
-        assert_ok!(lex!("[foo]"), group!(s id!("foo")));
+        assert_ok!(lex!("(hello_world)"), wgroup!(p wid!("hello_world")));
+        assert_ok!(lex!("foo bar"), wgroup!(wid!("foo"), wid!("bar")));
+        assert_ok!(lex!("(foo bar)"), wgroup!(p wid!("foo"), wid!("bar")));
+        assert_ok!(lex!("[foo]"), wgroup!(s wid!("foo")));
         assert_ok!(lex!("(+ 1 2 3)"),
-                   group!(p id!("+"), num!("1"), num!("2"), num!("3")));
+                   wgroup!(p wid!("+"), wnum!("1"), wnum!("2"), wnum!("3")));
     }
 
     #[test]
     fn test_group() {
-        assert_ok!(lex!("foo, bar"), group!(id!("foo"), split!(), id!("bar")));
-        assert_ok!(lex!("(foo, bar)"), group!(p id!("foo"), split!(), id!("bar")));
+        assert_ok!(lex!("foo, bar"), wgroup!(wid!("foo"), wsplit!(), wid!("bar")));
+        assert_ok!(lex!("(foo, bar)"), wgroup!(p wid!("foo"), wsplit!(), wid!("bar")));
         assert_ok!(lex!("foo, bar 1, zort 2"),
-            group!(id!("foo"), split!(),
-                id!("bar"), num!("1"), split!(),
-                id!("zort"), num!("2")));
-        assert_ok!(lex!("[foo,]"), group!(s id!("foo"), split!()));
-        assert_ok!(lex!("{,}"), group!(c split!()));
+            wgroup!(wid!("foo"), wsplit!(),
+                wid!("bar"), wnum!("1"), wsplit!(),
+                wid!("zort"), wnum!("2")));
+        assert_ok!(lex!("[foo,]"), wgroup!(s wid!("foo"), wsplit!()));
+        assert_ok!(lex!("{,}"), wgroup!(c wsplit!()));
         assert_ok!(lex!("1, 2 ,3; ignore"),
-            group!(num!("1"), split!(), num!("2"), split!(), num!("3"), end!()));
+            wgroup!(wnum!("1"), wsplit!(), wnum!("2"), wsplit!(), wnum!("3"), wend!()));
         assert_ok!(lex!("1 2 ,3; ignore"),
-            group!(num!("1"), num!("2"), split!(), num!("3"), end!()));
+            wgroup!(wnum!("1"), wnum!("2"), wsplit!(), wnum!("3"), wend!()));
     }
 
     #[test]
     fn test_group_expr_square_brackets() {
-        assert_ok!(lex!("foo[bar]"), group!(id!("foo"), group!(s id!("bar"))));
+        assert_ok!(lex!("foo[bar]"), wgroup!(wid!("foo"), wgroup!(s wid!("bar"))));
         assert_ok!(lex!("[+ 1 2 3]"),
-                   group!(s id!("+"), num!("1"), num!("2"), num!("3")));
+                   wgroup!(s wid!("+"), wnum!("1"), wnum!("2"), wnum!("3")));
     }
 
     #[test]
     fn test_nested_empty_expr() {
-        assert_ok!(lex!("(())"), group!(p group!(p)));
-        assert_ok!(lex!("([])"), group!(p group!(s)));
-        assert_ok!(lex!("[({})]"), group!(s group!(p group!(c))));
-        assert_ok!(lex!("{{([])}}"), group!(c group!(c group!(p group!(s)))));
+        assert_ok!(lex!("(())"), wgroup!(p wgroup!(p)));
+        assert_ok!(lex!("([])"), wgroup!(p wgroup!(s)));
+        assert_ok!(lex!("[({})]"), wgroup!(s wgroup!(p wgroup!(c))));
+        assert_ok!(lex!("{{([])}}"), wgroup!(c wgroup!(c wgroup!(p wgroup!(s)))));
     }
 
     #[test]
     fn test_nested_group_expr() {
-        assert_ok!(lex!("foo(bar)"), group!(id!("foo"), group!(p id!("bar"))));
-        assert_ok!(lex!("((foo)(bar))"), group!(p group!(p id!("foo")), group!(p id!("bar"))));
-        assert_ok!(lex!("foo[(bar) zort]"), group!(id!("foo"),
-            group!(s group!(p id!("bar")), id!("zort"))));
+        assert_ok!(lex!("foo(bar)"), wgroup!(wid!("foo"), wgroup!(p wid!("bar"))));
+        assert_ok!(lex!("((foo)(bar))"), wgroup!(p wgroup!(p wid!("foo")), wgroup!(p wid!("bar"))));
+        assert_ok!(lex!("foo[(bar) zort]"), wgroup!(wid!("foo"),
+            wgroup!(s wgroup!(p wid!("bar")), wid!("zort"))));
         assert_ok!(lex!("(+ (1 (2 3)))"),
-                   group!(p id!("+"),
-                       group!(p num!("1"),
-                           group!(p num!("2"), num!("3")))));
+                   wgroup!(p wid!("+"),
+                       wgroup!(p wnum!("1"),
+                           wgroup!(p wnum!("2"), wnum!("3")))));
     }
 
     #[test]
     fn test_nested_group() {
-        assert_ok!(lex!("foo, (bar)"), group!(id!("foo"), split!(), group!(p id!("bar"))));
+        assert_ok!(lex!("foo, (bar)"), wgroup!(wid!("foo"), wsplit!(), wgroup!(p wid!("bar"))));
         assert_ok!(lex!("(foo, (bar, zort))"),
-            group!(p id!("foo"), split!(), group!(p id!("bar"), split!(), id!("zort"))));
+            wgroup!(p wid!("foo"), wsplit!(), wgroup!(p wid!("bar"), wsplit!(), wid!("zort"))));
         assert_ok!(lex!("[1,foo(z,2)]"),
-            group!(s num!("1"), split!(), id!("foo"),
-                group!(p id!("z"), split!(), num!("2"))));
+            wgroup!(s wnum!("1"), wsplit!(), wid!("foo"),
+                wgroup!(p wid!("z"), wsplit!(), wnum!("2"))));
         assert_ok!(lex!("{[1,foo(z,2)], [(4,  89), 6]}"),
-            group!(c
-                group!(s num!("1"), split!(), id!("foo"),
-                    group!(p id!("z"), split!(), num!("2"))), split!(),
-                group!(s group!(p num!("4"), split!(), num!("89")), split!(), num!("6"))));
+            wgroup!(c
+                wgroup!(s wnum!("1"), wsplit!(), wid!("foo"),
+                    wgroup!(p wid!("z"), wsplit!(), wnum!("2"))), wsplit!(),
+                wgroup!(s wgroup!(p wnum!("4"), wsplit!(), wnum!("89")), wsplit!(), wnum!("6"))));
     }
 
     #[test]
     fn test_naked_expr() {
-        assert_ok!(lex!(";"), end!());
-        assert_ok!(lex!("foo;"), group!(id!("foo"), end!()));
-        assert_ok!(lex!("foo ; ignored"), group!(id!("foo"), end!()));
+        assert_ok!(lex!(";"), wend!());
+        assert_ok!(lex!("foo;"), wgroup!(wid!("foo"), wend!()));
+        assert_ok!(lex!("foo ; ignored"), wgroup!(wid!("foo"), wend!()));
         assert_ok!(lex!("foo bar 1 2 3; ignored"),
-            group!(id!("foo"), id!("bar"),
-                num!("1"), num!("2"), num!("3"), end!()));
+            wgroup!(wid!("foo"), wid!("bar"),
+                wnum!("1"), wnum!("2"), wnum!("3"), wend!()));
     }
 
     #[test]
     fn test_naked_expr_with_nested_exprs() {
         assert_ok!(lex!("foo(bar); ignored"),
-            group!(id!("foo"), group!(p id!("bar")), end!()));
+            wgroup!(wid!("foo"), wgroup!(p wid!("bar")), wend!()));
         assert_ok!(lex!("foo(); ignored"),
-            group!(id!("foo"), group!(p), end!()));
+            wgroup!(wid!("foo"), wgroup!(p), wend!()));
         assert_ok!(lex!("foo (bar 1) 2; ignored"),
-            group!(id!("foo"),
-                group!(p id!("bar"), num!("1")),
-                num!("2"), end!()));
+            wgroup!(wid!("foo"),
+                wgroup!(p wid!("bar"), wnum!("1")),
+                wnum!("2"), wend!()));
         assert_ok!(lex!("foo (bar 1)[2]{ 3 } ; ignored"),
-            group!(id!("foo"),
-                group!(p id!("bar"), num!("1")),
-                group!(s num!("2")), group!(c num!("3")), end!()));
+            wgroup!(wid!("foo"),
+                wgroup!(p wid!("bar"), wnum!("1")),
+                wgroup!(s wnum!("2")), wgroup!(c wnum!("3")), wend!()));
     }
 
     #[test]
     fn test_naked_exprs_within_nested_let_exprs() {
         assert_ok!(lex!("(foo;bar)"),
-            group!(p id!("foo"), end!(), id!("bar")));
+            wgroup!(p wid!("foo"), wend!(), wid!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
-            group!(p
-                _let!(), id!("x"), _eq!(), num!("1"), end!(),
-                _let!(), id!("y"), _eq!(), num!("2"), end!(),
-                id!("+"), id!("x"), id!("y")));
+            wgroup!(p
+                wlet!(), wid!("x"), weq!(), wnum!("1"), wend!(),
+                wlet!(), wid!("y"), weq!(), wnum!("2"), wend!(),
+                wid!("+"), wid!("x"), wid!("y")));
     }
 
     #[test]
     fn test_nested_exprs_within_nested_exprs() {
         assert_ok!(lex!("mul [add 2 (3; sub 2)] 5"),
-            group!(
-                id!("mul"),
-                group!(s id!("add"), num!("2"),
-                    group!(p num!("3"), end!(), id!("sub"), num!("2"))),
-                num!("5")));
+            wgroup!(
+                wid!("mul"),
+                wgroup!(s wid!("add"), wnum!("2"),
+                    wgroup!(p wnum!("3"), wend!(), wid!("sub"), wnum!("2"))),
+                wnum!("5")));
     }
 
     #[test]
     fn test_keywords() {
         assert_ok!(lex!("let x = 1, mut y = 2, set y=add x y;"),
-            group!(_let!(), id!("x"), _eq!(), num!("1"), split!(),
-                _mut!(), id!("y"), _eq!(), num!("2"), split!(),
-                _set!(), id!("y"), _eq!(), id!("add"), id!("x"), id!("y"), end!()));
+            wgroup!(wlet!(), wid!("x"), weq!(), wnum!("1"), wsplit!(),
+                wmut!(), wid!("y"), weq!(), wnum!("2"), wsplit!(),
+                wset!(), wid!("y"), weq!(), wid!("add"), wid!("x"), wid!("y"), wend!()));
         assert_ok!(lex!("ext mod {
             add [u32] u32;
             mul [f32] f32;
-            }"), group!(_ext!(), id!("mod"), group!(c
-                id!("add"), group!(s id!("u32")), id!("u32"), end!(),
-                id!("mul"), group!(s id!("f32")), id!("f32"), end!())));
+            }"), wgroup!(wext!(), wid!("mod"), wgroup!(c
+                wid!("add"), wgroup!(s wid!("u32")), wid!("u32"), wend!(),
+                wid!("mul"), wgroup!(s wid!("f32")), wid!("f32"), wend!())));
         assert_ok!(lex!("if cond then x else y"),
-            group!(_if!(), id!("cond"), _then!(), id!("x"), _else!(), id!("y")));
+            wgroup!(wif!(), wid!("cond"), wthen!(), wid!("x"), welse!(), wid!("y")));
         assert_ok!(lex!("pub fun f x = (sqrt x)"),
-            group!(_pub!(), _fun!(), id!("f"), id!("x"), _eq!(),
-                group!(p id!("sqrt"), id!("x"))));
-        assert_ok!(lex!("@macro x"), group!(_at!(), id!("macro"), id!("x")));
-        assert_ok!(lex!("use foo, bar;"), group!(_use!(), id!("foo"), split!(), id!("bar"), end!()));
+            wgroup!(wpub!(), wfun!(), wid!("f"), wid!("x"), weq!(),
+                wgroup!(p wid!("sqrt"), wid!("x"))));
+        assert_ok!(lex!("@macro x"), wgroup!(wat!(), wid!("macro"), wid!("x")));
+        assert_ok!(lex!("use foo, bar;"), wgroup!(wuse!(), wid!("foo"), wsplit!(), wid!("bar"), wend!()));
     }
 
     #[test]
     fn test_dot() {
-        assert_ok!(lex!("."), _dot!());
-        assert_ok!(lex!(".a"), group!(_dot!(), id!("a")));
-        assert_ok!(lex!("a."), group!(id!("a"), _dot!()));
-        assert_ok!(lex!("foo.bar"), group!(id!("foo"), _dot!(), id!("bar")));
-        assert_ok!(lex!("foo\n  .bar"), group!(id!("foo"), _dot!(), id!("bar")));
-        assert_ok!(lex!("foo.\n  bar"), group!(id!("foo"), _dot!(), id!("bar")));
+        assert_ok!(lex!("."), wdot!());
+        assert_ok!(lex!(".a"), wgroup!(wdot!(), wid!("a")));
+        assert_ok!(lex!("a."), wgroup!(wid!("a"), wdot!()));
+        assert_ok!(lex!("foo.bar"), wgroup!(wid!("foo"), wdot!(), wid!("bar")));
+        assert_ok!(lex!("foo\n  .bar"), wgroup!(wid!("foo"), wdot!(), wid!("bar")));
+        assert_ok!(lex!("foo.\n  bar"), wgroup!(wid!("foo"), wdot!(), wid!("bar")));
         assert_ok!(lex!("(foo . bar x)"),
-            group!(p id!("foo"), _dot!(), id!("bar"), id!("x")));
+            wgroup!(p wid!("foo"), wdot!(), wid!("bar"), wid!("x")));
         assert_ok!(lex!("(( foo ).bar )"),
-            group!(p group!(p id!("foo")), _dot!(), id!("bar")));
+            wgroup!(p wgroup!(p wid!("foo")), wdot!(), wid!("bar")));
         assert_ok!(lex!("[( foo ). (bar )]"),
-            group!(s group!(p id!("foo")), _dot!(), group!(p id!("bar"))));
+            wgroup!(s wgroup!(p wid!("foo")), wdot!(), wgroup!(p wid!("bar"))));
     }
 
     #[test]
     fn test_pos_numbers() {
-        assert_ok!(lex!("0"), num!("0"));
-        assert_ok!(lex!("1"), num!("1"));
-        assert_ok!(lex!("1.0"), num!("1.0"));
-        assert_ok!(lex!("0.1"), num!("0.1"));
-        assert_ok!(lex!("1i32"), num!("1i32"));
-        assert_ok!(lex!("10_000f32"), num!("10_000f32"));
-        assert_ok!(lex!("10_000.62f64"), num!("10_000.62f64"));
-        assert_ok!(lex!("10_000e32"), num!("10_000e32"));
-        assert_ok!(lex!("10_000e100_100_100"), num!("10_000e100_100_100"));
-        assert_ok!(lex!("1.625428E100"), num!("1.625428E100"));
+        assert_ok!(lex!("0"), wnum!("0"));
+        assert_ok!(lex!("1"), wnum!("1"));
+        assert_ok!(lex!("1.0"), wnum!("1.0"));
+        assert_ok!(lex!("0.1"), wnum!("0.1"));
+        assert_ok!(lex!("1i32"), wnum!("1i32"));
+        assert_ok!(lex!("10_000f32"), wnum!("10_000f32"));
+        assert_ok!(lex!("10_000.62f64"), wnum!("10_000.62f64"));
+        assert_ok!(lex!("10_000e32"), wnum!("10_000e32"));
+        assert_ok!(lex!("10_000e100_100_100"), wnum!("10_000e100_100_100"));
+        assert_ok!(lex!("1.625428E100"), wnum!("1.625428E100"));
     }
 
     #[test]
     fn test_neg_numbers() {
-        assert_ok!(lex!("-0"), group!(_dash!(), num!("0")));
-        assert_ok!(lex!("-1"), group!(_dash!(), num!("1")));
-        assert_ok!(lex!("-1.0"), group!(_dash!(), num!("1.0")));
-        assert_ok!(lex!("-0.1"), group!(_dash!(), num!("0.1")));
-        assert_ok!(lex!("-1i32"), group!(_dash!(), num!("1i32")));
-        assert_ok!(lex!("-10_000f32"), group!(_dash!(), num!("10_000f32")));
-        assert_ok!(lex!("-10_000.62f64"), group!(_dash!(), num!("10_000.62f64")));
-        assert_ok!(lex!("-10_000e32"), group!(_dash!(),num!("10_000e32")));
-        assert_ok!(lex!("-10_000e100_100_100"), group!(_dash!(),num!("10_000e100_100_100")));
-        assert_ok!(lex!("-1.625428E100"), group!(_dash!(),num!("1.625428E100")));
+        assert_ok!(lex!("-0"), wgroup!(wdash!(), wnum!("0")));
+        assert_ok!(lex!("-1"), wgroup!(wdash!(), wnum!("1")));
+        assert_ok!(lex!("-1.0"), wgroup!(wdash!(), wnum!("1.0")));
+        assert_ok!(lex!("-0.1"), wgroup!(wdash!(), wnum!("0.1")));
+        assert_ok!(lex!("-1i32"), wgroup!(wdash!(), wnum!("1i32")));
+        assert_ok!(lex!("-10_000f32"), wgroup!(wdash!(), wnum!("10_000f32")));
+        assert_ok!(lex!("-10_000.62f64"), wgroup!(wdash!(), wnum!("10_000.62f64")));
+        assert_ok!(lex!("-10_000e32"), wgroup!(wdash!(),wnum!("10_000e32")));
+        assert_ok!(lex!("-10_000e100_100_100"), wgroup!(wdash!(),wnum!("10_000e100_100_100")));
+        assert_ok!(lex!("-1.625428E100"), wgroup!(wdash!(),wnum!("1.625428E100")));
     }
 
     #[test]
     fn test_not_numbers() {
-        assert_ok!(lex!("a0"), id!("a0"));
-        assert_ok!(lex!("_1"), id!("_1"));
-        assert_ok!(lex!("1z"), id!("1z"));
-        assert_ok!(lex!("@b4"), group!(_at!(), id!("b4")));
+        assert_ok!(lex!("a0"), wid!("a0"));
+        assert_ok!(lex!("_1"), wid!("_1"));
+        assert_ok!(lex!("1z"), wid!("1z"));
+        assert_ok!(lex!("@b4"), wgroup!(wat!(), wid!("b4")));
     }
 
     #[test]
     fn test_str() {
-        assert_ok!(lex!("\"\""), str!(""));
-        assert_ok!(lex!("\"hello\""), str!("hello"));
-        assert_ok!(lex!("\"A full sentence...\""), str!("A full sentence..."));
+        assert_ok!(lex!("\"\""), wstr!(""));
+        assert_ok!(lex!("\"hello\""), wstr!("hello"));
+        assert_ok!(lex!("\"A full sentence...\""), wstr!("A full sentence..."));
         assert_ok!(lex!("\"pub fun let 'keywords' = 2, 4)\""),
-            str!("pub fun let 'keywords' = 2, 4)"));
+            wstr!("pub fun let 'keywords' = 2, 4)"));
         assert_ok!(lex!("let s = \"hello\";"),
-            group!(_let!(), id!("s"), _eq!(), str!("hello"), end!()));
+            wgroup!(wlet!(), wid!("s"), weq!(), wstr!("hello"), wend!()));
         assert_ok!(lex!("(concat \"hello\" [fst \"bar\"])"),
-            group!(p id!("concat"), str!("hello"), group!(s id!("fst"), str!("bar"))));
+            wgroup!(p wid!("concat"), wstr!("hello"), wgroup!(s wid!("fst"), wstr!("bar"))));
     }
 
     #[test]
     fn test_str_single_quote() {
-        assert_ok!(lex!("'hello'"), str!("hello"));
-        assert_ok!(lex!("'A full sentence...'"), str!("A full sentence..."));
+        assert_ok!(lex!("'hello'"), wstr!("hello"));
+        assert_ok!(lex!("'A full sentence...'"), wstr!("A full sentence..."));
         assert_ok!(lex!("'pub fun let \"keywords\" = 2, 4)'"),
-            str!("pub fun let \"keywords\" = 2, 4)"));
+            wstr!("pub fun let \"keywords\" = 2, 4)"));
     }
 
     #[test]
     fn test_str_escapes() {
-        assert_ok!(lex!("'hello\\n'"), str!("hello\\n"));
-        assert_ok!(lex!("'hello\\n\\r'"), str!("hello\\n\\r"));
-        assert_ok!(lex!("'hello\\t'"), str!("hello\\t"));
-        assert_ok!(lex!("'hello\\''"), str!("hello\\'"));
-        assert_ok!(lex!("\"hello\\\"\""), str!("hello\\\""));
+        assert_ok!(lex!("'hello\\n'"), wstr!("hello\\n"));
+        assert_ok!(lex!("'hello\\n\\r'"), wstr!("hello\\n\\r"));
+        assert_ok!(lex!("'hello\\t'"), wstr!("hello\\t"));
+        assert_ok!(lex!("'hello\\''"), wstr!("hello\\'"));
+        assert_ok!(lex!("\"hello\\\"\""), wstr!("hello\\\""));
     }
 
     #[test]
@@ -636,8 +691,8 @@ mod tests {
     fn test_iterator_can_be_reused_and_pos() {
         let words = "(a)\n(b)";
         let mut state = LexerState::new(words);
-        assert_ok!(lexer(&mut state), group!(p id!("a")));
-        assert_ok!(lexer(&mut state), group!(p id!("b")));
+        assert_ok!(lexer(&mut state), wgroup!(p wid!("a")));
+        assert_ok!(lexer(&mut state), wgroup!(p wid!("b")));
         assert_eq!(state.pos(), (2, 3));
     }
 
@@ -646,7 +701,7 @@ mod tests {
         let words = "\n \r\n foo\nb a r";
         let mut state = LexerState::new(words);
         assert_ok!(lexer(&mut state),
-            group!(id!("foo"), id!("b"), id!("a"), id!("r")));
+            wgroup!(wid!("foo"), wid!("b"), wid!("a"), wid!("r")));
         assert_eq!(state.pos(), (4, 5));
     }
 }
