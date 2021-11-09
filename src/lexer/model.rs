@@ -13,6 +13,8 @@ pub enum ASTNode<'s> {
     Comment(&'s str),
     /// Grouped expression that introduces nesting.
     Group(Vec<ASTNode<'s>>, Option<NestingElement>),
+    /// '=' symbol with the following value expression
+    Eq(Box<ASTNode<'s>>),
     /// A comma splitting an expression into a multi-value expression.
     Split,
     /// A semi-colon ending the current expression.
@@ -39,8 +41,6 @@ pub enum ASTNode<'s> {
     Def,
     /// ext keyword
     Ext,
-    /// '=' symbol
-    Eq,
     /// '@' symbol
     At,
     /// '.' symbol

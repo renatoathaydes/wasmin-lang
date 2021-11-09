@@ -43,15 +43,39 @@ impl<'s> LexerState<'s> {
     }
 
     fn next(&mut self) -> Option<&'s str> {
-        let token = self.words.next()?;
-        self.idx += token.len();
-        if token == "\n" || token == "\r\n" {
-            self.line += 1;
-            self.col = 0;
+        if let Some(token) = self.words.next() {
+            self.idx += token.len();
+            if token == "\n" || token == "\r\n" {
+                self.line += 1;
+                self.col = 0;
+            } else {
+                self.col += token.len();
+            }
+            Some(token)
         } else {
-            self.col += token.len();
+            None
         }
-        Some(token)
+    }
+
+    /// Try to get the next nesting element.
+    /// If the next non-whitespace character is a nesting element, it is returned and the state
+    /// is advanced past the element, otherwise the state is not modified and [None] is returned.
+    fn next_nesting_elem(&mut self) -> Option<NestingElement> {
+        let nesting = self.text[self.idx..].trim_start().chars().next().and_then(|c| {
+            as_nesting_start(&String::from(c))
+        });
+        if let Some(elem) = nesting {
+            // consume the input until non-whitespace is found, which is the nesting elem
+            loop {
+                if let Some(token) = self.next() {
+                    if !token.trim().is_empty() {
+                        break;
+                    }
+                }
+            }
+            self.nesting.push(NestingToken { pos: self.pos(), elem });
+        }
+        nesting
     }
 }
 
@@ -88,32 +112,37 @@ fn is_terminated(nodes: &Vec<ASTNode>) -> bool {
 }
 
 /// Perform the lexing of a Wasmin program source code.
-pub fn lex(source: &str) -> Result<ASTNode, WasminError> {
+pub fn lex(source: &str) -> Result<Vec<ASTNode>, WasminError> {
     let mut state = LexerState::new(source);
-    lexer(&mut state)
+    lex_to_end(&mut state)
 }
 
-fn lexer<'s>(state: &mut LexerState<'s>)
-             -> Result<ASTNode<'s>, WasminError> {
+fn lex_to_end<'s>(state: &mut LexerState<'s>)
+                  -> Result<Vec<ASTNode<'s>>, WasminError> {
     let mut nodes = vec![];
     loop {
-        let mut next = lexer_rec(state)?;
-        if next.is_empty() { break; }
-        nodes.append(&mut next);
-        if is_terminated(&nodes) { break; }
+        match lex_expr(state)? {
+            Some(n) => nodes.push(n),
+            None => break
+        };
     }
     if !state.nesting.is_empty() {
         let last_n = state.nesting.last().unwrap();
         return Err(werr_syntax!(format!("unmatched '{}', which started at {}",
                    last_n.elem, last_n.pos_str()), last_n.pos, state.pos()));
     }
-    Ok(join_nodes(nodes, None))
+    Ok(nodes)
 }
 
-fn lexer_rec<'s>(state: &mut LexerState<'s>)
-                 -> Result<Vec<ASTNode<'s>>, WasminError> {
-    // let file = fs::read_to_string("ex.wasmin").unwrap();
-    // let tokens = UnicodeSegmentation::split_word_bounds(&file);
+#[inline]
+fn lex_expr<'s>(state: &mut LexerState<'s>)
+                -> Result<Option<ASTNode<'s>>, WasminError> {
+    let nesting = state.next_nesting_elem();
+    lex_expr_with_nesting(state, nesting)
+}
+
+fn lex_expr_with_nesting<'s>(state: &mut LexerState<'s>, nesting: Option<NestingElement>)
+                             -> Result<Option<ASTNode<'s>>, WasminError> {
     let mut nodes = Vec::<ASTNode>::new();
     let mut comment_start_pos: Option<usize> = None;
 
@@ -133,8 +162,11 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
 
         if let Some(elem) = as_nesting_start(token) {
             state.nesting.push(NestingToken { pos: state.pos(), elem });
-            nodes.push(join_nodes(lexer_rec(state)?, Some(elem)));
-            if state.nesting.is_empty() { break; } else { continue; }
+            match lex_expr_with_nesting(state, Some(elem))? {
+                Some(n) => nodes.push(n),
+                None => break // EOF
+            };
+            if nodes.is_empty() { break; } else { continue; }
         }
         if let Some(elem) = as_nesting_end(token) {
             let opener = state.nesting.pop();
@@ -145,20 +177,24 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             }
             return Err(werr_syntax!(format!("mismatched '{}', closes nothing", token), state.pos()));
         }
-        if token == ";" && state.nesting.is_empty() {
-            nodes.push(ASTNode::End);
-            break;
-        }
-        if token == "#" {
-            comment_start_pos.insert(state.idx);
-            continue;
-        }
         // '.' does not split words so we need special treatment for it
         if token.contains(".") {
             split_dots_or_num(&mut nodes, token);
             continue;
         }
         nodes.push(match token {
+            "=" => ASTNode::Eq(Box::new(match lex_expr(state)? {
+                Some(n) => n,
+                None => break,
+            })),
+            "#" => {
+                comment_start_pos.insert(state.idx);
+                continue; // nothing to push
+            }
+            ";" if nesting.is_none() => {
+                nodes.push(ASTNode::End);
+                break;
+            }
             ";" => ASTNode::End,
             "," => ASTNode::Split,
             "let" => ASTNode::Let,
@@ -172,7 +208,6 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
             "else" => ASTNode::Else,
             "def" => ASTNode::Def,
             "ext" => ASTNode::Ext,
-            "=" => ASTNode::Eq,
             "@" => ASTNode::At,
             "." => ASTNode::Dot,
             "-" => ASTNode::Dash,
@@ -185,7 +220,8 @@ fn lexer_rec<'s>(state: &mut LexerState<'s>)
     if let Some(comment_start) = comment_start_pos {
         nodes.push(ASTNode::Comment(&state.text[comment_start..state.idx]));
     }
-    Ok(nodes)
+    if nodes.is_empty() && nesting.is_none() { return Ok(None); }
+    Ok(Some(join_nodes(nodes, nesting)))
 }
 
 fn is_num(token: &str) -> bool {
@@ -247,54 +283,54 @@ macro_rules! wgroup {
     (p) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(p)))};
     (s) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(s)))};
     (c) => {$crate::lexer::model::ASTNode::Group(vec![], Some($crate::wnest!(c)))};
-    ($($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], None)};
-    (p $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(p)))};
-    (s $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(s)))};
-    (c $($a:expr), +) => {ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(c)))};
+    ($($a:expr), +) => {$crate::lexer::model::ASTNode::Group(vec![ $( $a ), * ], None)};
+    (p $($a:expr), +) => {$crate::lexer::model::ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(p)))};
+    (s $($a:expr), +) => {$crate::lexer::model::ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(s)))};
+    (c $($a:expr), +) => {$crate::lexer::model::ASTNode::Group(vec![ $( $a ), * ], Some($crate::wnest!(c)))};
 }
 
 #[macro_export]
-macro_rules! wid { ($e:literal) => {ASTNode::Id($e)} }
+macro_rules! wid { ($e:literal) => {$crate::lexer::model::ASTNode::Id($e)} }
 #[macro_export]
-macro_rules! wcomment { ($e:literal) => {ASTNode::Comment($e)} }
+macro_rules! wcomment { ($e:literal) => {$crate::lexer::model::ASTNode::Comment($e)} }
 #[macro_export]
-macro_rules! wnum { ($e:literal) => {ASTNode::Num($e)} }
+macro_rules! wnum { ($e:literal) => {$crate::lexer::model::ASTNode::Num($e)} }
 #[macro_export]
-macro_rules! wstr { ($e:literal) => {ASTNode::Str($e)} }
+macro_rules! wstr { ($e:literal) => {$crate::lexer::model::ASTNode::Str($e)} }
 #[macro_export]
-macro_rules! wsplit { () => {ASTNode::Split} }
+macro_rules! wsplit { () => {$crate::lexer::model::ASTNode::Split} }
 #[macro_export]
-macro_rules! wend { () => {ASTNode::End} }
+macro_rules! wend { () => {$crate::lexer::model::ASTNode::End} }
 #[macro_export]
-macro_rules! wlet { () => {ASTNode::Let} }
+macro_rules! wlet { () => {$crate::lexer::model::ASTNode::Let} }
 #[macro_export]
-macro_rules! wmut { () => {ASTNode::Mut} }
+macro_rules! wmut { () => {$crate::lexer::model::ASTNode::Mut} }
 #[macro_export]
-macro_rules! wset { () => {ASTNode::Set} }
+macro_rules! wset { () => {$crate::lexer::model::ASTNode::Set} }
 #[macro_export]
-macro_rules! wfun { () => {ASTNode::Fun} }
+macro_rules! wfun { () => {$crate::lexer::model::ASTNode::Fun} }
 #[macro_export]
-macro_rules! wpub { () => {ASTNode::Pub} }
+macro_rules! wpub { () => {$crate::lexer::model::ASTNode::Pub} }
 #[macro_export]
-macro_rules! wuse { () => {ASTNode::Use} }
+macro_rules! wuse { () => {$crate::lexer::model::ASTNode::Use} }
 #[macro_export]
-macro_rules! wif { () => {ASTNode::If} }
+macro_rules! wif { () => {$crate::lexer::model::ASTNode::If} }
 #[macro_export]
-macro_rules! wthen { () => {ASTNode::Then} }
+macro_rules! wthen { () => {$crate::lexer::model::ASTNode::Then} }
 #[macro_export]
-macro_rules! welse { () => {ASTNode::Else} }
+macro_rules! welse { () => {$crate::lexer::model::ASTNode::Else} }
 #[macro_export]
-macro_rules! wdef { () => {ASTNode::Def} }
+macro_rules! wdef { () => {$crate::lexer::model::ASTNode::Def} }
 #[macro_export]
-macro_rules! wext { () => {ASTNode::Ext} }
+macro_rules! wext { () => {$crate::lexer::model::ASTNode::Ext} }
 #[macro_export]
-macro_rules! wat { () => {ASTNode::At} }
+macro_rules! wat { () => {$crate::lexer::model::ASTNode::At} }
 #[macro_export]
-macro_rules! wdot { () => {ASTNode::Dot} }
+macro_rules! wdot { () => {$crate::lexer::model::ASTNode::Dot} }
 #[macro_export]
-macro_rules! wdash { () => {ASTNode::Dash} }
+macro_rules! wdash { () => {$crate::lexer::model::ASTNode::Dash} }
 #[macro_export]
-macro_rules! weq { () => {ASTNode::Eq} }
+macro_rules! weq { ($g:expr) => {$crate::lexer::model::ASTNode::Eq(Box::new($g))} }
 
 /// TESTS
 #[cfg(test)]
@@ -319,7 +355,7 @@ mod is_terminated_test {
         assert_eq!(is_terminated(&vec![Split, Id("")]), false);
         assert_eq!(is_terminated(&vec![Id(""), Group(vec![], None)]), false);
         assert_eq!(is_terminated(&vec![Id(""), Group(vec![], Some(Parens))]), false);
-        assert_eq!(is_terminated(&vec![Let, Id(""), Eq, Group(vec![], Some(Parens))]), false);
+        assert_eq!(is_terminated(&vec![Let, Id(""), Eq(Box::new(Group(vec![], Some(Parens))))]), false);
     }
 }
 
@@ -384,12 +420,12 @@ mod tests {
     macro_rules! lex {
         ($input:literal) => {{
             let mut state = LexerState::new($input);
-            lexer(&mut state)
+            lex_expr(&mut state)
         }};
     }
 
     macro_rules! assert_ok {
-        ($left:expr, $right:expr) => { assert_eq!($left, Ok($right)) };
+        ($left:expr, $right:expr) => { assert_eq!($left, Ok(Some($right))) };
     }
 
     macro_rules! assert_syntax_err {
@@ -403,7 +439,7 @@ mod tests {
 
     #[test]
     fn test_empty_expr() {
-        assert_ok!(lex!(""), wgroup!());
+        assert_eq!(lex!(""), Ok(None));
         assert_ok!(lex!("()"), wgroup!(p));
         assert_ok!(lex!("( )"), wgroup!(p));
         assert_ok!(lex!("  [    ]   "), wgroup!(s));
@@ -431,11 +467,10 @@ mod tests {
         assert_ok!(lex!("hi&ho"), wgroup!(wid!("hi"), wid!("&"), wid!("ho")));
         // but some are
         assert_ok!(lex!("hi@ho"), wgroup!(wid!("hi"), wat!(), wid!("ho")));
-        assert_ok!(lex!("hi=ho"), wgroup!(wid!("hi"), weq!(), wid!("ho")));
+        assert_ok!(lex!("hi=ho"), wgroup!(wid!("hi"), weq!(wid!("ho"))));
         assert_ok!(lex!("hi-ho"), wgroup!(wid!("hi"), wdash!(), wid!("ho")));
         assert_ok!(lex!("hi.ho"), wgroup!(wid!("hi"), wdot!(), wid!("ho")));
         assert_ok!(lex!("hi,ho"), wgroup!(wid!("hi"), wsplit!(), wid!("ho")));
-        // expressions stop being parsed at "end"
         assert_ok!(lex!("hi;ho"), wgroup!(wid!("hi"), wend!()));
     }
 
@@ -539,8 +574,8 @@ mod tests {
             wgroup!(p wid!("foo"), wend!(), wid!("bar")));
         assert_ok!(lex!("(let x = 1; let y=2; + x y)"),
             wgroup!(p
-                wlet!(), wid!("x"), weq!(), wnum!("1"), wend!(),
-                wlet!(), wid!("y"), weq!(), wnum!("2"), wend!(),
+                wlet!(), wid!("x"), weq!(wgroup!(wnum!("1"), wend!())),
+                wlet!(), wid!("y"), weq!(wgroup!(wnum!("2"), wend!())),
                 wid!("+"), wid!("x"), wid!("y")));
     }
 
@@ -557,9 +592,9 @@ mod tests {
     #[test]
     fn test_keywords() {
         assert_ok!(lex!("let x = 1, mut y = 2, set y=add x y;"),
-            wgroup!(wlet!(), wid!("x"), weq!(), wnum!("1"), wsplit!(),
-                wmut!(), wid!("y"), weq!(), wnum!("2"), wsplit!(),
-                wset!(), wid!("y"), weq!(), wid!("add"), wid!("x"), wid!("y"), wend!()));
+            wgroup!(wlet!(), wid!("x"), weq!(wgroup!(wnum!("1"), wsplit!(),
+                wmut!(), wid!("y"), weq!(wgroup!(wnum!("2"), wsplit!(),
+                wset!(), wid!("y"), weq!(wgroup!(wid!("add"), wid!("x"), wid!("y"), wend!()))))))));
         assert_ok!(lex!("ext mod {
             add [u32] u32;
             mul [f32] f32;
@@ -569,8 +604,8 @@ mod tests {
         assert_ok!(lex!("if cond then x else y"),
             wgroup!(wif!(), wid!("cond"), wthen!(), wid!("x"), welse!(), wid!("y")));
         assert_ok!(lex!("pub fun f x = (sqrt x)"),
-            wgroup!(wpub!(), wfun!(), wid!("f"), wid!("x"), weq!(),
-                wgroup!(p wid!("sqrt"), wid!("x"))));
+            wgroup!(wpub!(), wfun!(), wid!("f"), wid!("x"), weq!(
+                wgroup!(p wid!("sqrt"), wid!("x")))));
         assert_ok!(lex!("@macro x"), wgroup!(wat!(), wid!("macro"), wid!("x")));
         assert_ok!(lex!("use foo, bar;"), wgroup!(wuse!(), wid!("foo"), wsplit!(), wid!("bar"), wend!()));
     }
@@ -639,7 +674,7 @@ mod tests {
             = y; # end"), wgroup!(wcomment!(" foo bar"),
                 wlet!(), wid!("x"),
                 wcomment!(" another comment # ignore it"), wcomment!(" done"),
-                weq!(), wid!("y"), wend!()));
+                weq!(wgroup!(wid!("y"), wend!())), wcomment!(" end")));
     }
 
     #[test]
@@ -650,7 +685,7 @@ mod tests {
         assert_ok!(lex!("\"pub fun let 'keywords' = 2, 4)\""),
             wstr!("pub fun let 'keywords' = 2, 4)"));
         assert_ok!(lex!("let s = \"hello\";"),
-            wgroup!(wlet!(), wid!("s"), weq!(), wstr!("hello"), wend!()));
+            wgroup!(wlet!(), wid!("s"), weq!(wgroup!(wstr!("hello"), wend!()))));
         assert_ok!(lex!("(concat \"hello\" [fst \"bar\"])"),
             wgroup!(p wid!("concat"), wstr!("hello"), wgroup!(s wid!("fst"), wstr!("bar"))));
     }
@@ -680,19 +715,19 @@ mod tests {
 
     #[test]
     fn test_unclosed_group_error() {
-        assert_syntax_err!(lex!("(x"),
+        assert_syntax_err!(lex("(x"),
             "unmatched '(', which started at 1:1", (1, 1), (1, 2));
-        assert_syntax_err!(lex!("foo[x;"),
+        assert_syntax_err!(lex("foo[x;"),
             "unmatched '[', which started at 1:4", (1, 4), (1, 6));
-        assert_syntax_err!(lex!("fun x y = {\n  (\n abc ; \n )"),
+        assert_syntax_err!(lex("fun x y = {\n  (\n abc ; \n )"),
             "unmatched '{', which started at 1:11", (1, 11), (4, 2));
     }
 
     #[test]
     fn test_unmatched_closing_group_error() {
-        assert_syntax_err!(lex!("x)"),
+        assert_syntax_err!(lex("x)"),
             "mismatched ')', closes nothing", (1, 2), (1, 2));
-        assert_syntax_err!(lex!("ext {
+        assert_syntax_err!(lex("ext {
             foo [] u64;
             bar ];
         }\n  "),
@@ -703,8 +738,10 @@ mod tests {
     fn test_iterator_can_be_reused_and_pos() {
         let words = "(a)\n(b)";
         let mut state = LexerState::new(words);
-        assert_ok!(lexer(&mut state), wgroup!(p wid!("a")));
-        assert_ok!(lexer(&mut state), wgroup!(p wid!("b")));
+        assert_eq!(lex_expr(&mut state),
+                   Ok(Some(wgroup!(p wid!("a")))));
+        assert_eq!(lex_expr(&mut state),
+                   Ok(Some(wgroup!(p wid!("b")))));
         assert_eq!(state.pos(), (2, 3));
     }
 
@@ -712,8 +749,8 @@ mod tests {
     fn test_new_lines_pos() {
         let words = "\n \r\n foo\nb a r";
         let mut state = LexerState::new(words);
-        assert_ok!(lexer(&mut state),
-            wgroup!(wid!("foo"), wid!("b"), wid!("a"), wid!("r")));
+        assert_eq!(lex_expr(&mut state),
+                   Ok(Some(wgroup!(wid!("foo"), wid!("b"), wid!("a"), wid!("r")))));
         assert_eq!(state.pos(), (4, 5));
     }
 }
