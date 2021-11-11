@@ -41,16 +41,38 @@ macro_rules! werr_syntax {
 #[macro_export]
 macro_rules! werr_type {
     ($cause:expr, $start:expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
+        use crate::errors::{TypeError, ErrorPosition, WasminError};
         let end = $start.clone();
-        WasminError::TypeError {
+        WasminError::TypeError(TypeError {
+            cause: $cause.to_owned(),
+            pos: ErrorPosition { start: $start, end },
+        })
+    }};
+    ($cause:expr, $start:expr, $end: expr) => {{
+        use crate::errors::{TypeError, ErrorPosition, WasminError};
+        WasminError::TypeError(TypeError {
+            cause: $cause.to_owned(),
+            pos: ErrorPosition {
+                start: $start,
+                end: $end,
+            },
+        })
+    }};
+}
+
+#[macro_export]
+macro_rules! werr_t {
+    ($cause:expr, $start:expr) => {{
+        use crate::errors::{ErrorPosition, TypeError};
+        let end = $start.clone();
+        TypeError {
             cause: $cause.to_owned(),
             pos: ErrorPosition { start: $start, end },
         }
     }};
     ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
-        WasminError::TypeError {
+        use crate::errors::{ErrorPosition, TypeError};
+        TypeError {
             cause: $cause.to_owned(),
             pos: ErrorPosition {
                 start: $start,
@@ -99,6 +121,12 @@ pub enum Error {
     Validation(String),
 }
 
+#[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
+pub struct TypeError {
+    pub cause: String,
+    pub pos: ErrorPosition,
+}
+
 /// WasminError enumerates all non-IO errors returned by this library.
 #[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
 pub enum WasminError {
@@ -106,7 +134,7 @@ pub enum WasminError {
     SyntaxError { cause: String, pos: ErrorPosition },
 
     /// Wasmin program contains a type error.
-    TypeError { cause: String, pos: ErrorPosition },
+    TypeError(TypeError),
 
     /// Wasmin program is using an unsupported feature.
     UnsupportedFeatureError { cause: String, pos: ErrorPosition },
@@ -116,7 +144,7 @@ impl WasminError {
     pub fn pos(&self) -> &ErrorPosition {
         match self {
             WasminError::SyntaxError { pos, .. } => pos,
-            WasminError::TypeError { pos, .. } => pos,
+            WasminError::TypeError(TypeError { pos, .. }) => pos,
             WasminError::UnsupportedFeatureError { pos, .. } => pos,
         }
     }
@@ -124,7 +152,7 @@ impl WasminError {
     pub fn cause(&self) -> &str {
         match self {
             WasminError::SyntaxError { cause, .. } => cause,
-            WasminError::TypeError { cause, .. } => cause,
+            WasminError::TypeError(TypeError { cause, .. }) => cause,
             WasminError::UnsupportedFeatureError { cause, .. } => cause,
         }
     }
@@ -181,7 +209,7 @@ impl std::fmt::Display for WasminError {
             WasminError::SyntaxError { cause, .. } => {
                 write!(f, "syntax error: {}", cause)
             }
-            WasminError::TypeError { cause, .. } => {
+            WasminError::TypeError(TypeError { cause, .. }) => {
                 write!(f, "type error: {}", cause)
             }
             WasminError::UnsupportedFeatureError { cause, .. } => {

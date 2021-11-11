@@ -4,6 +4,7 @@ pub mod errors;
 pub mod ast;
 pub mod lexer;
 pub mod parse;
+mod parse2;
 pub mod sink;
 pub mod types;
 mod vec_utils;
