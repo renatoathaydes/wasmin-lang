@@ -1,6 +1,6 @@
-use crate::parse::parser::GroupingSymbol::{Parens, SquareBracket};
 use crate::parse::parser::*;
-use crate::types::{Type::*, *};
+use crate::parse::parser::GroupingSymbol::{Parens, SquareBracket};
+use crate::types::{*, Type::*};
 
 pub fn parse_type(parser: &mut Parser) -> Type {
     let mut state = GroupingState::new();

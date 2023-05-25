@@ -1,7 +1,7 @@
-use crate::ast::{Expression::*, *};
-use crate::parse::parser::*;
+use crate::ast::{*, Expression::*};
 use crate::parse::{expr_parser, new_parser_with_stack, new_parser_without_sink};
-use crate::types::{Type::*, *};
+use crate::parse::parser::*;
+use crate::types::{*, Type::*};
 
 macro_rules! parse_expr {
     ($e:expr) => {{
@@ -691,7 +691,7 @@ fn test_type_functions() {
 
     assert_eq!(
         parser.parse_type(),
-        Type::Error(werr_type! { "type does not exist: err", (1, 61) })
+        Type::Error(werr_type! { "type does not exist: err", (1, 59), (1, 61) })
     );
     assert_eq!(
         parser.parse_type(),
@@ -735,7 +735,7 @@ fn test_def() {
 
     // error on ':'
     assert_symbols_contains!(parser,
-        "wrong" => Type::Error( werr_syntax! { "unexpected character: ':'", (0, 26)}));
+        "wrong" => Type::Error( werr_syntax! { "unexpected character ':', expected type", (0, 26)}));
     assert_eq!(parser.curr_char(), Some(':'));
     parser.next();
 
@@ -746,7 +746,7 @@ fn test_def() {
 
     assert_eq!(
         parser.parse_def(),
-        Err(werr_type! { "Expected identifier after def, but got EOF", (0, 33) })
+        Err(werr_syntax! { "Expected identifier after def, but got EOF", (0, 33) })
     );
 
     let mut chars = "[".chars();
@@ -754,7 +754,7 @@ fn test_def() {
 
     assert_eq!(
         parser.parse_def(),
-        Err(werr_type! { "Expected identifier after def, but got '['", (0, 1) })
+        Err(werr_syntax! { "Expected identifier after def, but got '['", (0, 1) })
     );
 }
 

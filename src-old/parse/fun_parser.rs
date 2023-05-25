@@ -1,7 +1,7 @@
 use crate::ast::Function;
 use crate::errors::WasminError;
 use crate::parse::Parser;
-use crate::types::{types_to_string, FunType, Type, Type::Fn, NO_ARGS_OR_RETURNS_FUN_TYPE};
+use crate::types::{FunType, NO_ARGS_OR_RETURNS_FUN_TYPE, Type, Type::Fn, types_to_string};
 
 pub fn parse_fun(parser: &mut Parser) -> Result<Function, WasminError> {
     let mut left = Vec::new();

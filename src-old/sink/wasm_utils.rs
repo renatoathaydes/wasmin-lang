@@ -4,7 +4,7 @@ use wasm_encoder::{BlockType, Instruction, ValType};
 
 use crate::sink::sanitize_number;
 use crate::sink::wasm::Context;
-use crate::types::{types_to_string, FunType, Type};
+use crate::types::{FunType, Type, types_to_string};
 
 pub fn to_val_types(types: &[Type]) -> Vec<ValType> {
     types.iter().map(|t| to_val_type(t)).collect()

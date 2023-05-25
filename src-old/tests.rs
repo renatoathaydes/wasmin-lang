@@ -1,5 +1,5 @@
-use crate::ast::Expression::If;
 use crate::ast::{Expression, ReAssignment};
+use crate::ast::Expression::If;
 use crate::types::Type::*;
 
 #[test]

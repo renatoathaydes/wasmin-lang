@@ -1,8 +1,7 @@
 use lazy_static::lazy_static;
+use model::*;
 use regex::Regex;
 use unicode_segmentation::{UnicodeSegmentation, UWordBounds};
-
-use model::*;
 
 use crate::errors::WasminError;
 use crate::lexer::model::ASTNode::Group;

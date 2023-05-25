@@ -2,16 +2,13 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::io::Write;
 
-use wasm_encoder::{
-    CodeSection, EntityType, Export, ExportSection, Function, FunctionSection, GlobalSection,
-    GlobalType, ImportSection, Instruction, Module, TypeSection, ValType,
-};
+use wasm_encoder::{CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection, ValType};
 
 use crate::ast::{Expression, ExtDef, ReAssignment, TopLevelElement, Visibility};
 use crate::errors::{Error, Result};
-use crate::sink::wasm_utils::*;
 use crate::sink::{expr_to_vec, WasminSink};
-use crate::types::{types_to_string, FunType, Type};
+use crate::sink::wasm_utils::*;
+use crate::types::{FunType, Type, types_to_string};
 use crate::vec_utils::remove_last;
 
 #[derive(Default)]
@@ -98,7 +95,7 @@ impl Wasm {
         let type_idx = ctx.index_fun_type(&typ);
         let fun_idx = ctx.index_fun(&name, type_idx, false);
         if vis == Visibility::Public {
-            ctx.exports.export(name.as_ref(), Export::Function(fun_idx));
+            ctx.exports.export(name.as_ref(), ExportKind::Func, fun_idx);
         }
         let f = self.create_fun(ctx, &typ.ins, &args, &body)?;
         ctx.code.function(&f);
@@ -120,7 +117,7 @@ impl Wasm {
         let locals: Vec<_> = local_map.values().cloned().collect();
         let mut f = Function::new(locals);
         self.add_instructions(&mut f, ctx, &local_map, body)?;
-        f.instruction(Instruction::End);
+        f.instruction(&Instruction::End);
         Ok(f)
     }
 
@@ -142,7 +139,7 @@ impl Wasm {
                 ctx.global_idx_by_name.insert(name.to_string(), global_idx);
                 if vis == Visibility::Public {
                     ctx.exports
-                        .export(name.as_str(), Export::Global(global_idx));
+                        .export(name.as_str(), ExportKind::Global, global_idx);
                 }
                 ctx.globals.global(
                     GlobalType {

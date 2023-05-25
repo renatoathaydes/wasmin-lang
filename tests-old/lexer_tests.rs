@@ -1,9 +1,9 @@
-use wasmin::{wcomment, wdef, wdot, wend, weq, wext, wfun, wgroup, wid, wlet, wpub, wmut, wnum, wset, wsplit};
+use wasmin::{wcomment, wdef, wdot, wend, weq, wext, wfun, wgroup, wid, wlet, wmut, wnum, wpub, wset, wsplit};
 use wasmin::errors::WasminError;
 use wasmin::lexer::lex;
 
-/// Basic lexer crate tests only here...
-/// The most functionality is checked in the lexer unit tests already.
+/// Basic lexer crate tests-old only here...
+/// The most functionality is checked in the lexer unit tests-old already.
 ///
 #[test]
 fn test_lexer_basic_expression() -> Result<(), WasminError> {

@@ -137,8 +137,8 @@ pub(crate) fn has_error(types: &[Type]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::Type::*;
     use super::*;
+    use super::Type::*;
 
     #[test]
     fn test_type_is_assignable_to() {

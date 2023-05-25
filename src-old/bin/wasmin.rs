@@ -1,5 +1,5 @@
+use std::io::{BufWriter, Read, stdin, stdout, Write};
 use std::io::stderr;
-use std::io::{stdin, stdout, BufWriter, Read, Write};
 use std::process::exit;
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -9,7 +9,6 @@ use std::thread;
 use ansi_term::Colour::{Red, Yellow};
 use ansi_term::Style;
 use structopt::*;
-
 use wasmin::ast::TopLevelElement;
 use wasmin::errors::{Error as WError, Result as WResult};
 use wasmin::parse::new_parser;
@@ -67,10 +66,10 @@ fn build(output_format: &FormatType, input: Option<String>, output: Option<Strin
 
     let text = read_program(&input)
         .unwrap_or_else(|e| exit_with_error!(2, "I/O read [{:?}]: {}", e.kind(), e));
-    let parser_text = text.clone();
+    // let parser_text = text.clone();
 
     let parser_handle = thread::spawn(move || {
-        let mut chars = parser_text.chars();
+        let mut chars = text.chars();
         let mut parser = new_parser(&mut chars, sender);
         parser.parse()
     });

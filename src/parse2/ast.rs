@@ -1,35 +1,30 @@
+use std::error::Error;
 use std::fmt;
 
-use crate::errors::{ErrorPosition, TypeError, WasminError};
+use crate::errors::{TypeError, WasminError};
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct FunType {
-    pub ins: Vec<Type>,
-    pub outs: Vec<Type>,
-}
-
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub enum Type {
+pub enum Type<'s> {
     I64,
     I32,
     F64,
     F32,
     Empty,
-    Fn(Vec<FunType>),
-    WasmFn(Vec<FunType>),
+    Fn(ExprType<'s>),
+    Custom(&'s str),
     Error(WasminError),
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct ExprType {
-    ins: Vec<Type>,
-    outs: Vec<Type>,
+pub struct ExprType<'s> {
+    ins: Vec<Type<'s>>,
+    outs: Vec<Type<'s>>,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Def<'s> {
     name: &'s str,
-    target_type: Option<Type>,
+    target_type: Option<Type<'s>>,
 }
 
 /// Assignment defines one or more Wasmin assignments.
@@ -42,7 +37,6 @@ pub struct Def<'s> {
 pub struct Assignment<'s> {
     vars: Vec<Def<'s>>,
     expr: Box<Expression<'s>>,
-    target_types: Vec<Option<Type>>,
 }
 
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
@@ -56,8 +50,8 @@ pub struct ReAssignment<'s> {
 
 /// Break instruction that exits a loop with a certain set of types on the stack.
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
-pub struct Break {
-    pub types: Vec<Type>,
+pub struct Break<'s> {
+    pub types: Vec<Type<'s>>,
 }
 
 /// Comment is a source code comment.
@@ -72,9 +66,9 @@ pub type Warning = String;
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Expression<'s> {
     Empty(Vec<Warning>),
-    Const(&'s str, Type, Vec<Warning>),
-    Local(&'s str, Type, Vec<Warning>),
-    Global(&'s str, Type, Vec<Warning>),
+    Const(&'s str, Type<'s>, ExprType<'s>, Vec<Warning>),
+    Local(&'s str, Type<'s>, ExprType<'s>, Vec<Warning>),
+    Global(&'s str, Type<'s>, ExprType<'s>, Vec<Warning>),
     Let(Assignment<'s>, Vec<Warning>),
     Mut(Assignment<'s>, Vec<Warning>),
     Set(ReAssignment<'s>, Vec<Warning>),
@@ -82,18 +76,20 @@ pub enum Expression<'s> {
         cond: Box<Expression<'s>>,
         yes: Box<Expression<'s>>,
         no: Box<Expression<'s>>,
+        typ: ExprType<'s>,
         warnings: Vec<Warning>,
     },
     Loop {
         expr: Box<Expression<'s>>,
         error: Option<WasminError>,
+        typ: ExprType<'s>,
         warnings: Vec<Warning>,
     },
-    Br(Break, Vec<Warning>),
-    Group(Vec<Expression<'s>>, Vec<Warning>),
+    Br(Break<'s>, ExprType<'s>, Vec<Warning>),
+    Group(Vec<Expression<'s>>, ExprType<'s>, Vec<Warning>),
     FunCall {
-        name: String,
-        typ: FunType,
+        name: &'s str,
+        typ: ExprType<'s>,
         fun_index: usize,
         is_wasm_fun: bool,
         warnings: Vec<Warning>,
@@ -111,7 +107,7 @@ pub struct Function<'s> {
     name: &'s str,
     arg_names: Vec<&'s str>,
     body: Expression<'s>,
-    target_type: FunType,
+    target_type: ExprType<'s>,
 }
 
 /// Visibility determines the level of visibility of a Wasmin program element.
@@ -131,96 +127,116 @@ pub enum TopLevelElement<'s> {
     Error(WasminError),
 }
 
-impl ExprType {
-    fn empty() -> Self {
-        ExprType { ins: vec![], outs: vec![] }
-    }
-
-    fn of(t: &Type) -> Self {
-        ExprType { ins: vec![], outs: vec![t.clone()] }
+impl<'s> ExprType<'s> {
+    fn outs(outs: Vec<Type<'s>>) -> ExprType<'s> {
+        ExprType { ins: vec![], outs }
     }
 }
 
-impl fmt::Display for FunType {
+impl<'s> fmt::Display for ExprType<'s> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("[")?;
-        f.write_str(&types_to_string(&self.ins))?;
+        f.write_str(&type_to_string(&self.ins))?;
         f.write_str("](")?;
-        f.write_str(&types_to_string(&self.outs))?;
+        f.write_str(&type_to_string(&self.outs))?;
         f.write_str(")")
     }
 }
 
-impl fmt::Display for Type {
+impl<'s> fmt::Display for Type<'s> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Type::Custom(s) => write!(f, ":{}", s)?,
             Type::I64 => write!(f, "i64")?,
             Type::I32 => write!(f, "i32")?,
             Type::F64 => write!(f, "f64")?,
             Type::F32 => write!(f, "f32")?,
             Type::Empty => write!(f, "()")?,
-            Type::Fn(types) | Type::WasmFn(types) => {
-                write!(f, "(")?;
-                let text = types
-                    .iter()
-                    .map(|t| format!("{}", t))
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                write!(f, "{})", text)?;
+            Type::Fn(types) => {
+                write!(f, "({})", types)?;
             }
-            Type::Error(err) => write!(f, "ERROR({})", err.cause())?,
+            Type::Error(err) => write!(f, "ERROR({:?})", err.source())?,
         };
         Ok(())
     }
 }
 
+const EMPTY_EXPR_TYPE: &'static ExprType = &ExprType { ins: vec![], outs: vec![] };
+
 impl<'s> Expression<'s> {
-    pub fn get_type(&self) -> Result<ExprType, TypeError> {
+    pub fn get_type(&self) -> Result<&'s ExprType<'_>, TypeError> {
         match self {
             Expression::Empty(_) |
             Expression::Mut(_, _) |
             Expression::Set(_, _) |
             Expression::ExprError(_, _) |
-            Expression::Let(_, _) => Ok(ExprType::empty()),
-            Expression::Const(_, t, _) |
-            Expression::Local(_, t, _) |
-            Expression::Global(_, t, _) => Ok(ExprType::of(t)),
+            Expression::Let(_, _) => Ok(EMPTY_EXPR_TYPE),
+            Expression::Const(_, _, t, _) |
+            Expression::Local(_, _, t, _) |
+            Expression::Global(_, _, t, _) => Ok(t),
             Expression::If { yes, .. } => yes.get_type(),
-            Expression::Loop { expr, .. } => expr.get_type(),
-            Expression::Br(b, _) => Ok(ExprType { ins: b.types.clone(), outs: vec![] }),
-            Expression::FunCall { typ, .. } =>
-                Ok(ExprType { ins: typ.ins.clone(), outs: typ.outs.clone() }),
-            Expression::Group(exprs, _) => type_of_exprs(exprs),
+            Expression::Loop { typ, .. } => Ok(typ),
+            Expression::Br(_, t, _) => Ok(t),
+            Expression::FunCall { typ, .. } => Ok(typ),
+            Expression::Group(_, typ, _) => Ok(typ),
         }
+    }
+    pub fn empty() -> Expression<'s> { Expression::Empty(vec![]) }
+
+    pub fn new_mut(a: Assignment<'s>, w: Vec<Warning>) -> Expression<'s> {
+        Expression::Mut(a, w)
+    }
+
+    pub fn new_set(re: ReAssignment<'s>, w: Vec<Warning>) -> Expression<'s> {
+        Expression::Set(re, w)
+    }
+
+    pub fn new_error(err: WasminError, w: Vec<Warning>) -> Expression<'s> {
+        Expression::ExprError(err, w)
+    }
+
+    pub fn new_let(a: Assignment<'s>, w: Vec<Warning>) -> Expression<'s> {
+        Expression::Let(a, w)
+    }
+
+    pub fn new_const(name: &'s str, typ: Type<'s>, w: Vec<Warning>) -> Expression<'s> {
+        let expr_type = ExprType::outs(vec![typ.clone()]);
+        Expression::Const(name, typ, expr_type, w)
+    }
+    pub fn new_local(name: &'s str, typ: Type<'s>, w: Vec<Warning>) -> Expression<'s> {
+        let expr_type = ExprType::outs(vec![typ.clone()]);
+        Expression::Local(name, typ, expr_type, w)
+    }
+    pub fn new_global(name: &'s str, typ: Type<'s>, w: Vec<Warning>) -> Expression<'s> {
+        let expr_type = ExprType::outs(vec![typ.clone()]);
+        Expression::Global(name, typ, expr_type, w)
     }
 }
 
-fn type_of_exprs(exprs: &Vec<Expression>) -> Result<ExprType, TypeError> {
-    let mut ins: Vec<Type> = vec![];
-    let mut outs: Vec<Type> = vec![];
-    for expr in exprs {
-        let mut typ = expr.get_type()?;
-        for i in typ.ins {
-            if let Some(e) = outs.pop() {
-                if e != i {
-                    return Err(werr_t!(format!("expected input of type '{}', \
-                        but got '{}'", i, e), (0, 0)));
-                }
-            } else {
-                ins.push(i);
-            }
-        }
-        outs.append(&mut typ.outs);
+impl<'s> Def<'s> {
+    fn new(name: &'s str, target_type: Option<Type<'s>>) -> Def<'s> {
+        Def { name, target_type }
     }
-    Ok(ExprType { ins, outs })
+
+    fn new_many(defs: &mut Vec<(&'s str, Option<Type<'s>>)>) -> Vec<Def<'s>> {
+        defs.drain(..)
+            .map(|(name, target_type)| Def { name, target_type })
+            .collect()
+    }
 }
 
-pub(crate) fn types_to_string(types: &[Type]) -> String {
-    let v: Vec<_> = types.iter().collect();
-    type_refs_to_string(&v)
+impl<'s> Assignment<'s> {
+    pub fn new(name: &'s str, expr: Expression<'s>) -> Assignment<'s> {
+        Assignment { vars: vec![Def { name, target_type: None }], expr: Box::new(expr) }
+    }
+
+    pub fn new_vars(vars: Vec<Def<'s>>,
+                    expr: Box<Expression<'s>>) -> Assignment<'s> {
+        Assignment { vars, expr }
+    }
 }
 
-pub(crate) fn type_refs_to_string(types: &[&Type]) -> String {
+pub(crate) fn type_to_string(types: &[Type]) -> String {
     if types.is_empty() {
         return "()".to_owned();
     }
@@ -242,36 +258,30 @@ mod tests {
 
     #[test]
     fn test_get_type() {
-        assert_eq!(Expression::Empty(vec![]).get_type(), Ok(ExprType::empty()));
+        assert_eq!(Expression::empty().get_type(), Ok(EMPTY_EXPR_TYPE));
 
-        assert_eq!(Expression::Const("i32", I32, vec![]).get_type(),
-                   Ok(ExprType { ins: vec![], outs: vec![I32] }));
+        assert_eq!(Expression::new_const("i32", I32, vec![]).get_type(),
+                   Ok(&ExprType::outs(vec![I32])));
 
-        assert_eq!(Expression::Local("foo", I64, vec![]).get_type(),
-                   Ok(ExprType { ins: vec![], outs: vec![I64] }));
+        assert_eq!(Expression::new_local("foo", I64, vec![]).get_type(),
+                   Ok(&ExprType::outs(vec![I64])));
 
-        assert_eq!(Expression::Global("foo", F64, vec![]).get_type(),
-                   Ok(ExprType { ins: vec![], outs: vec![F64] }));
+        assert_eq!(Expression::new_global("foo", F64, vec![]).get_type(),
+                   Ok(&ExprType::outs(vec![F64])));
 
-        assert_eq!(Expression::Let(Assignment {
-            vars: vec![],
-            expr: Box::new(Expression::Empty(vec![])),
-            target_types: vec![Some(I32)],
-        }, vec![]).get_type(), Ok(ExprType::empty()));
+        assert_eq!(Expression::new_let(
+            Assignment::new(
+                "", Expression::new_const("", Type::F32, vec![])),
+            vec![]).get_type(), Ok(EMPTY_EXPR_TYPE));
 
-        assert_eq!(Expression::Mut(Assignment {
-            vars: vec![],
-            expr: Box::new(Expression::Empty(vec![])),
-            target_types: vec![Some(I32)],
-        }, vec![]).get_type(), Ok(ExprType::empty()));
+        assert_eq!(Expression::new_mut(Assignment::new(
+            "", Expression::new_const("", Type::F32, vec![])),
+                                       vec![]).get_type(), Ok(EMPTY_EXPR_TYPE));
 
-        assert_eq!(Expression::Set(ReAssignment {
-            assignment: Assignment {
-                vars: vec![],
-                expr: Box::new(Expression::Empty(vec![])),
-                target_types: vec![Some(I32)],
-            },
+        assert_eq!(Expression::new_set(ReAssignment {
+            assignment: Assignment::new(
+                "", Expression::new_const("", Type::F32, vec![])),
             globals: vec![],
-        }, vec![]).get_type(), Ok(ExprType::empty()));
+        }, vec![]).get_type(), Ok(EMPTY_EXPR_TYPE));
     }
 }
