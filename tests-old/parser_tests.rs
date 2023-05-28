@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::sync::mpsc::channel;
 
+use wasmin::*;
 use wasmin::ast::*;
 use wasmin::parse::new_parser;
 use wasmin::types::Type::*;
-use wasmin::*;
 
 macro_rules! test_parser {
     ($program:literal ; $($ns:literal: $( $id:literal => $ns_expr:expr ),+ )* ; $($e:expr),+) => {{

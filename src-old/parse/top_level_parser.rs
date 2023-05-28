@@ -1,7 +1,7 @@
 use Visibility::Public;
 
-use crate::ast::Visibility::Private;
 use crate::ast::{TopLevelElement, Visibility};
+use crate::ast::Visibility::Private;
 use crate::parse::Parser;
 
 pub fn parse(parser: &mut Parser) {

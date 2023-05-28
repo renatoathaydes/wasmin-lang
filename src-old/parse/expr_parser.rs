@@ -1,13 +1,13 @@
 use std::str::Chars;
 
-use crate::ast::Expression::{ExprError, Loop};
 use crate::ast::{Assignment, Break, Expression, ReAssignment};
+use crate::ast::Expression::{ExprError, Loop};
 use crate::errors::WasminError;
+use crate::parse::Parser;
 use crate::parse::parser::GroupingSymbol;
 use crate::parse::stack::Stack;
 use crate::parse::state::*;
-use crate::parse::Parser;
-use crate::types::{has_error, types_to_string, FunType, Kind, Type, TypedElement};
+use crate::types::{FunType, has_error, Kind, Type, TypedElement, types_to_string};
 use crate::vec_utils::{push_all, remove_last_n};
 
 pub fn parse_expr(parser: &mut Parser) -> Result<Expression, WasminError> {
