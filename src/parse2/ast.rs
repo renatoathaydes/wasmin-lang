@@ -1,4 +1,6 @@
 use std::cmp::min;
+use std::collections::VecDeque;
+use std::ops::Range;
 
 use crate::errors::WasminError;
 use crate::interner::{*};
@@ -178,27 +180,34 @@ impl ExprType {
 
 const EMPTY_EXPR_TYPE: &'static ExprType = &ExprType { ins: vec![], outs: vec![] };
 
+fn end_range_of_len(range_len: usize, vec_len: usize) -> Range<usize> {
+    (vec_len - range_len)..vec_len
+}
+
 fn merge_types(mut types: Vec<ExprType>) -> (ExprType, Vec<Warning>) {
     let mut ins: Vec<Type> = Vec::with_capacity(types.len());
     let mut outs: Vec<Type> = Vec::with_capacity(types.len());
     let mut errs: Vec<Warning> = Vec::new();
+    println!("merging types");
     for typ in types.iter_mut() {
-        // transfer inputs
-        typ.ins.drain(..).for_each(|t| ins.push(t));
-        // type check
-        for (i, o) in ins.iter().zip(&outs) {
+        let mut annihilate_len = min(typ.ins.len(), outs.len());
+        let pre_outs = outs.drain(end_range_of_len(annihilate_len, outs.len()));
+        let cur_ins = typ.ins.drain(0..annihilate_len);
+
+        for (o, i) in pre_outs.zip(cur_ins) {
+            println!("need {:?}, got {:?}", i, o);
             if i != o {
                 errs.push(format!("expected {:?} but found {:?}", i, o));
             }
         }
-        // remove i/o internal to the group
-        let min_len = min(ins.len(), outs.len());
-        ins.drain(0..min_len).for_each(|t| drop(t));
-        outs.drain(0..min_len).for_each(|t| drop(t));
+
+        // transfer inputs
+        typ.ins.drain(..).for_each(|t| ins.push(t));
 
         // add outputs
         typ.outs.drain(..).for_each(|t| outs.push(t));
     }
+    println!("----");
     (ExprType { ins, outs }, errs)
 }
 
@@ -327,8 +336,6 @@ mod tests {
 
     #[test]
     fn test_merge_types() {
-        let mut ast = AST::default();
-
         let (typ, w) = merge_types(vec![EMPTY_EXPR_TYPE.clone()]);
         assert_eq!(&typ, EMPTY_EXPR_TYPE);
         assert_eq!(w, Vec::<Warning>::new());
@@ -356,6 +363,24 @@ mod tests {
             ExprType::new(vec![I32, I32], vec![F32]),
             ExprType::outs(vec![F64])]);
         assert_eq!(typ, ExprType::new(vec![I32, I32], vec![F32, F64]));
+        assert_eq!(w, Vec::<Warning>::new());
+
+        let (typ, w) = merge_types(vec![
+            ExprType::new(vec![I32, I32], vec![F32]),
+            ExprType::new(vec![F32, F64], vec![I64])]);
+        assert_eq!(typ, ExprType::new(vec![I32, I32, F64], vec![I64]));
+        assert_eq!(w, Vec::<Warning>::new());
+
+        let (typ, w) = merge_types(vec![
+            ExprType::new(vec![], vec![F32, F64]),
+            ExprType::new(vec![F32, F64], vec![I64])]);
+        assert_eq!(typ, ExprType::new(vec![], vec![I64]));
+        assert_eq!(w, Vec::<Warning>::new());
+
+        let (typ, w) = merge_types(vec![
+            ExprType::new(vec![], vec![F32, F64, I64]),
+            ExprType::new(vec![F64, I64], vec![I64])]);
+        assert_eq!(typ, ExprType::new(vec![], vec![F32, I64]));
         assert_eq!(w, Vec::<Warning>::new());
     }
 
@@ -385,15 +410,10 @@ mod tests {
                        .get_type(), EMPTY_EXPR_TYPE);
 
         {
-            let hi = ast.new_def("hi", None);
-            let foo = ast.new_def("foo", Some(I64));
             let const_a = ast.new_const("a", I32, vec![]);
-            let const_b = ast.new_const("b", I32, vec![]); // allows coercion to I64
-            assert_eq!(AST::new_let(
-                AST::new_vars(vec![hi, foo],
-                              AST::new_group(vec![const_a, const_b], vec![])),
-                vec![],
-            ).get_type(), &ExprType::outs(vec![I32, I64]));
+            let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
+            assert_eq!(AST::new_group(vec![const_a, const_b], vec![]).get_type(),
+                       &ExprType::outs(vec![I32, I64]));
         }
     }
 }
