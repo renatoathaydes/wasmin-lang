@@ -171,8 +171,23 @@ mod tests {
     }
 
     #[test]
+    fn test_id() {
+        let mut lexer = Lexer::new("a");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "a".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("a->b");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "a->b".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("is?!");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "is?!".into())));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
     fn test_various() {
-        let mut lexer = Lexer::new("a,bb, ccc = foo");
+        let mut lexer = Lexer::new("a,bb, ccc = foo , bar");
         assert_eq!(lexer.next(), Some(Token::Id(1, "a".into())));
         assert_eq!(lexer.next(), Some(Token::Comma(2)));
         assert_eq!(lexer.next(), Some(Token::Id(3, "bb".into())));
@@ -180,7 +195,14 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Id(7, "ccc".into())));
         assert_eq!(lexer.next(), Some(Token::Eq(11)));
         assert_eq!(lexer.next(), Some(Token::Id(13, "foo".into())));
+        assert_eq!(lexer.next(), Some(Token::Comma(17)));
+        assert_eq!(lexer.next(), Some(Token::Id(19, "bar".into())));
         assert_eq!(lexer.next(), None);
         assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("(a)");
+        assert_eq!(lexer.next(), Some(Token::OpenParens(1)));
+        assert_eq!(lexer.next(), Some(Token::Id(2, "a".into())));
+        assert_eq!(lexer.next(), Some(Token::CloseParens(3)));
     }
 }
