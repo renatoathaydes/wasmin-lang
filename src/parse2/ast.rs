@@ -188,14 +188,12 @@ fn merge_types(mut types: Vec<ExprType>) -> (ExprType, Vec<Warning>) {
     let mut ins: Vec<Type> = Vec::with_capacity(types.len());
     let mut outs: Vec<Type> = Vec::with_capacity(types.len());
     let mut errs: Vec<Warning> = Vec::new();
-    println!("merging types");
     for typ in types.iter_mut() {
         let mut annihilate_len = min(typ.ins.len(), outs.len());
         let pre_outs = outs.drain(end_range_of_len(annihilate_len, outs.len()));
         let cur_ins = typ.ins.drain(0..annihilate_len);
 
         for (o, i) in pre_outs.zip(cur_ins) {
-            println!("need {:?}, got {:?}", i, o);
             if i != o {
                 errs.push(format!("expected {:?} but found {:?}", i, o));
             }
@@ -207,7 +205,6 @@ fn merge_types(mut types: Vec<ExprType>) -> (ExprType, Vec<Warning>) {
         // add outputs
         typ.outs.drain(..).for_each(|t| outs.push(t));
     }
-    println!("----");
     (ExprType { ins, outs }, errs)
 }
 
@@ -382,6 +379,13 @@ mod tests {
             ExprType::new(vec![F64, I64], vec![I64])]);
         assert_eq!(typ, ExprType::new(vec![], vec![F32, I64]));
         assert_eq!(w, Vec::<Warning>::new());
+
+        let (typ, w) = merge_types(vec![
+            ExprType::new(vec![I32], vec![F32]),
+            ExprType::new(vec![F32], vec![I64]),
+            ExprType::new(vec![I64, F64], vec![I32])]);
+        assert_eq!(typ, ExprType::new(vec![I32, F64], vec![I32]));
+        assert_eq!(w, Vec::<Warning>::new());
     }
 
     #[test]
@@ -409,11 +413,16 @@ mod tests {
         assert_eq!(AST::new_set(ast.new_assignment("", e1.clone()), vec![false], vec![])
                        .get_type(), EMPTY_EXPR_TYPE);
 
-        {
-            let const_a = ast.new_const("a", I32, vec![]);
-            let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
-            assert_eq!(AST::new_group(vec![const_a, const_b], vec![]).get_type(),
-                       &ExprType::outs(vec![I32, I64]));
-        }
+        let const_a = ast.new_const("a", I32, vec![]);
+        let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
+        assert_eq!(AST::new_group(vec![const_a, const_b], vec![]).get_type(),
+                   &ExprType::outs(vec![I32, I64]));
+
+        let const_a = ast.new_const("a", I32, vec![]);
+        let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
+        assert_eq!(AST::new_group(
+            vec![const_a.clone(),
+                 AST::new_group(vec![const_b, const_a], vec![])], vec![]).get_type(),
+                   &ExprType::outs(vec![I32, I64, I32]));
     }
 }
