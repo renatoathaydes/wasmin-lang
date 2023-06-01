@@ -58,21 +58,42 @@ impl<'s> Lexer<'s> {
         let mut iter = self.text[self.index..].chars();
         let mut text_start = self.index;
         let mut escape = false;
+        let mut escape_indexes: Vec<usize> = vec![];
         for c in iter {
             self.advance(c);
             if !escape && c == '\\' {
                 escape = true;
                 continue;
             }
-            escape = false;
             if c == '"' {
-                let text = self.text[text_start..self.index - 1].to_owned();
-                return Some(Token::Str(text_start, text));
+                if escape { // only " is escaped for now
+                    escape_indexes.push(self.index - 2);
+                } else {
+                    let text = self.make_string(text_start, escape_indexes);
+                    return Some(Token::Str(text_start, text));
+                }
             }
+            escape = false;
         }
         Some(Token::Error(self.index,
                           format!("Reached end of file without closing string started at {}",
                                   text_start)))
+    }
+
+    fn make_string(&self, start: usize, escapes: Vec<usize>) -> String {
+        if escapes.is_empty() {
+            self.text[start..self.index - 1].to_owned()
+        } else {
+            println!("start: {}, escapes: {:?}", start, escapes);
+            let mut builder = String::with_capacity(self.index - start);
+            let mut index = start;
+            for escape_index in escapes {
+                builder.push_str(&self.text[index..escape_index]);
+                index = escape_index + 1;
+            }
+            builder.push_str(&self.text[index..self.index - 1]);
+            builder
+        }
     }
 
     fn text_token(&self, start: usize) -> Option<Token> {
@@ -279,6 +300,22 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Str(11, "ghi".into())));
         assert_eq!(lexer.next(), Some(Token::Id(17, "abc".into())));
         assert_eq!(lexer.next(), Some(Token::Id(21, "d".into())));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_string_escaping() {
+        let mut lexer = Lexer::new("\"\\\"\"");
+        assert_eq!(lexer.next(), Some(Token::Str(1, "\"".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("\"a\\\"bcd\\\"done\"");
+        assert_eq!(lexer.next(), Some(Token::Str(1, "a\"bcd\"done".into())));
+        assert_eq!(lexer.next(), None);
+
+        // for now, escapes don't work except for string double-quotes
+        let mut lexer = Lexer::new("a\\b");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "a\\b".into())));
         assert_eq!(lexer.next(), None);
     }
 
