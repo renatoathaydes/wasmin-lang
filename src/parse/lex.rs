@@ -13,13 +13,11 @@ impl<'s> Lexer<'s> {
     }
 
     pub fn next(&mut self) -> Option<Token> {
-        let mut iter = self.text.chars().skip(self.index);
+        let mut iter = self.text[self.index..].chars();
         let mut text_start = self.index;
         let mut whitespace = true;
         for c in iter {
-            let boundary = self.text.is_char_boundary(self.index);
-            self.advance(c, boundary);
-            if !boundary { continue; }
+            self.advance(c);
             match c {
                 // whitespace
                 ' ' | '\t' | '\r' | '\n' => if whitespace {
@@ -37,6 +35,8 @@ impl<'s> Lexer<'s> {
                     self.index -= 1;
                     return self.text_token(text_start);
                 }
+                // string
+                '"' => return self.string(),
                 _ => whitespace = false,
             }
         }
@@ -44,11 +44,35 @@ impl<'s> Lexer<'s> {
         None
     }
 
-    fn advance(&mut self, c: char, boundary: bool) {
-        if !boundary && c == '\n' {
-            self.lines.push(self.index);
+    fn advance(&mut self, c: char) {
+        let next_index = self.index + c.len_utf8();
+        // check if index is still the same as the previous one, which can happen because
+        // the index may rewind by 1.
+        if c == '\n' && *self.lines.last().unwrap_or(&0) != next_index {
+            self.lines.push(next_index);
         }
-        self.index += 1;
+        self.index = next_index;
+    }
+
+    fn string(&mut self) -> Option<Token> {
+        let mut iter = self.text[self.index..].chars();
+        let mut text_start = self.index;
+        let mut escape = false;
+        for c in iter {
+            self.advance(c);
+            if !escape && c == '\\' {
+                escape = true;
+                continue;
+            }
+            escape = false;
+            if c == '"' {
+                let text = self.text[text_start..self.index - 1].to_owned();
+                return Some(Token::Str(text_start, text));
+            }
+        }
+        Some(Token::Error(self.index,
+                          format!("Reached end of file without closing string started at {}",
+                                  text_start)))
     }
 
     fn text_token(&self, start: usize) -> Option<Token> {
@@ -81,20 +105,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parens() {
+    fn test_parens_brackets_curlies() {
         let mut lexer = Lexer::new("()");
         assert_eq!(lexer.next(), Some(Token::OpenParens(1)));
         assert_eq!(lexer.next(), Some(Token::CloseParens(2)));
         assert_eq!(lexer.next(), None);
 
-        let mut lexer = Lexer::new("( )");
-        assert_eq!(lexer.next(), Some(Token::OpenParens(1)));
-        assert_eq!(lexer.next(), Some(Token::CloseParens(3)));
+        let mut lexer = Lexer::new("[ ]");
+        assert_eq!(lexer.next(), Some(Token::OpenBracket(1)));
+        assert_eq!(lexer.next(), Some(Token::CloseBracket(3)));
         assert_eq!(lexer.next(), None);
 
-        let mut lexer = Lexer::new("  (  )  ");
-        assert_eq!(lexer.next(), Some(Token::OpenParens(3)));
-        assert_eq!(lexer.next(), Some(Token::CloseParens(6)));
+        let mut lexer = Lexer::new("  {  }  ");
+        assert_eq!(lexer.next(), Some(Token::OpenCurly(3)));
+        assert_eq!(lexer.next(), Some(Token::CloseCurly(6)));
         assert_eq!(lexer.next(), None);
     }
 
@@ -199,10 +223,73 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Id(19, "bar".into())));
         assert_eq!(lexer.next(), None);
         assert_eq!(lexer.next(), None);
+    }
 
+    #[test]
+    fn test_groups() {
         let mut lexer = Lexer::new("(a)");
         assert_eq!(lexer.next(), Some(Token::OpenParens(1)));
         assert_eq!(lexer.next(), Some(Token::Id(2, "a".into())));
         assert_eq!(lexer.next(), Some(Token::CloseParens(3)));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("a , b; c(d)");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "a".into())));
+        assert_eq!(lexer.next(), Some(Token::Comma(3)));
+        assert_eq!(lexer.next(), Some(Token::Id(5, "b".into())));
+        assert_eq!(lexer.next(), Some(Token::SemiColon(6)));
+        assert_eq!(lexer.next(), Some(Token::Id(8, "c".into())));
+        assert_eq!(lexer.next(), Some(Token::OpenParens(9)));
+        assert_eq!(lexer.next(), Some(Token::Id(10, "d".into())));
+        assert_eq!(lexer.next(), Some(Token::CloseParens(11)));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_count_lines() {
+        let mut lexer = Lexer::new("let a = b;\nmut x\n end \n foo  ");
+        assert_eq!(lexer.next(), Some(Token::Let(1)));
+        assert_eq!(lexer.next(), Some(Token::Id(5, "a".into())));
+        assert_eq!(lexer.next(), Some(Token::Eq(7)));
+        assert_eq!(lexer.next(), Some(Token::Id(9, "b".into())));
+        assert_eq!(lexer.next(), Some(Token::SemiColon(10)));
+        assert_eq!(lexer.next(), Some(Token::Mut(12)));
+        assert_eq!(lexer.next(), Some(Token::Id(16, "x".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(19, "end".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(25, "foo".into())));
+        assert_eq!(lexer.next(), None);
+
+        assert_eq!(lexer.lines, vec![11, 17, 23]);
+        assert_eq!(lexer.index, 29);
+        assert_eq!(lexer.len, 29);
+    }
+
+    #[test]
+    fn test_string() {
+        let mut lexer = Lexer::new("\"\"");
+        assert_eq!(lexer.next(), Some(Token::Str(1, "".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("\"abc def\"");
+        assert_eq!(lexer.next(), Some(Token::Str(1, "abc def".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("\"abc\ndef\"\n\"ghi\" abc d");
+        assert_eq!(lexer.next(), Some(Token::Str(1, "abc\ndef".into())));
+        assert_eq!(lexer.next(), Some(Token::Str(11, "ghi".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(17, "abc".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(21, "d".into())));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_utf8() {
+        let mut lexer = Lexer::new("fire 🔥 \"fruit 🍉\" surf🏄;");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "fire".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(6, "🔥".into())));
+        assert_eq!(lexer.next(), Some(Token::Str(11, "fruit 🍉".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(24, "surf🏄".into())));
+        assert_eq!(lexer.next(), Some(Token::SemiColon(32)));
+        assert_eq!(lexer.next(), None);
     }
 }

@@ -18,5 +18,7 @@ pub enum Token {
     CloseCurly(Position),
     Eq(Position),
     Comment(Position, String),
+    Str(Position, String),
     Id(Position, String),
+    Error(Position, String)
 }
