@@ -1,6 +1,14 @@
 pub type Position = usize;
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
+pub enum Numeric {
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token {
     Let(Position),
     Set(Position),
@@ -20,5 +28,6 @@ pub enum Token {
     Comment(Position, String),
     Str(Position, String),
     Id(Position, String),
-    Error(Position, String)
+    Number(Position, Numeric),
+    Error(Position, String),
 }

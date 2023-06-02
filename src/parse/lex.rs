@@ -1,6 +1,7 @@
 use std::str::Chars;
 
 use crate::parse::model::Token;
+use crate::parse::number::number;
 
 pub struct Lexer<'s> {
     text: &'s str,
@@ -36,7 +37,7 @@ impl<'s> Lexer<'s> {
                             '"' => self.string(),
                             // comments
                             '#' => self.take_to_end_of_line(),
-                            // anything else is an Id
+                            // anything else is treated as text/number
                             _ => self.text_token(text_start)
                         };
                     }
@@ -120,6 +121,11 @@ impl<'s> Lexer<'s> {
 
     fn text_token(&self, start: usize) -> Option<Token> {
         let slice = &self.text[start..self.index];
+        if let Some(c) = slice.chars().next() {
+            if c.is_digit(10) {
+                return Some(number(slice, start));
+            }
+        }
         let start = start + 1; // position is 1-indexed
         let token = match slice {
             "let" => Token::Let(start),
