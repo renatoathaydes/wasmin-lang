@@ -1,3 +1,5 @@
+use std::str::Chars;
+
 use crate::parse::model::Token;
 
 pub struct Lexer<'s> {
@@ -27,16 +29,21 @@ impl<'s> Lexer<'s> {
                     return self.text_token(text_start);
                 },
                 // token separators
-                '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';' | ':' | '=' => {
+                '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';' | ':' | '=' | '"' | '#' => {
                     if text_start == self.index - 1 { // single char
-                        return self.text_token(text_start);
+                        return match c {
+                            // string
+                            '"' => self.string(),
+                            // comments
+                            '#' => self.take_to_end_of_line(),
+                            // anything else is an Id
+                            _ => self.text_token(text_start)
+                        };
                     }
                     // rewind to consume separator later, take the previous word first.
                     self.index -= 1;
                     return self.text_token(text_start);
                 }
-                // string
-                '"' => return self.string(),
                 _ => whitespace = false,
             }
         }
@@ -69,7 +76,7 @@ impl<'s> Lexer<'s> {
                 if escape { // only " is escaped for now
                     escape_indexes.push(self.index - 2);
                 } else {
-                    let text = self.make_string(text_start, escape_indexes);
+                    let text = self.make_string(text_start, escape_indexes, false);
                     return Some(Token::Str(text_start, text));
                 }
             }
@@ -80,18 +87,33 @@ impl<'s> Lexer<'s> {
                                   text_start)))
     }
 
-    fn make_string(&self, start: usize, escapes: Vec<usize>) -> String {
+    fn take_to_end_of_line(&mut self) -> Option<Token> {
+        let mut iter = self.text[self.index..].chars();
+        let start = self.index;
+        let mut is_eof = true;
+        for c in iter {
+            self.advance(c);
+            if c == '\n' {
+                is_eof = false;
+                break;
+            }
+        }
+        let text = self.make_string(start, vec![], is_eof);
+        return Some(Token::Comment(start, text));
+    }
+
+    fn make_string(&self, start: usize, escapes: Vec<usize>, include_last: bool) -> String {
+        let last_index = self.index - if include_last { 0 } else { 1 };
         if escapes.is_empty() {
-            self.text[start..self.index - 1].to_owned()
+            self.text[start..last_index].to_owned()
         } else {
-            println!("start: {}, escapes: {:?}", start, escapes);
             let mut builder = String::with_capacity(self.index - start);
             let mut index = start;
             for escape_index in escapes {
                 builder.push_str(&self.text[index..escape_index]);
                 index = escape_index + 1;
             }
-            builder.push_str(&self.text[index..self.index - 1]);
+            builder.push_str(&self.text[index..last_index]);
             builder
         }
     }
@@ -327,6 +349,22 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Str(11, "fruit 🍉".into())));
         assert_eq!(lexer.next(), Some(Token::Id(24, "surf🏄".into())));
         assert_eq!(lexer.next(), Some(Token::SemiColon(32)));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_comment() {
+        let mut lexer = Lexer::new("a\n#b()comment\nc");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "a".into())));
+        assert_eq!(lexer.next(), Some(Token::Comment(3, "b()comment".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(15, "c".into())));
+        assert_eq!(lexer.next(), None);
+
+        let mut lexer = Lexer::new("hi# ignore\nok  #comment");
+        assert_eq!(lexer.next(), Some(Token::Id(1, "hi".into())));
+        assert_eq!(lexer.next(), Some(Token::Comment(3, " ignore".into())));
+        assert_eq!(lexer.next(), Some(Token::Id(12, "ok".into())));
+        assert_eq!(lexer.next(), Some(Token::Comment(16, "comment".into())));
         assert_eq!(lexer.next(), None);
     }
 }
