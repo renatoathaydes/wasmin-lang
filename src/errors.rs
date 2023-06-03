@@ -1,114 +1,6 @@
+use crate::parse::model::Position;
+
 pub type Result<T> = std::result::Result<T, Error>;
-
-#[macro_export]
-macro_rules! err_wasmin {
-    ($e:expr) => {{
-        use crate::errors::Error;
-        Err(Error::Wasmin($e))
-    }};
-}
-
-#[macro_export]
-macro_rules! err_io {
-    ($e:expr) => {{
-        use crate::errors::Error;
-        Err(Error::IO($e))
-    }};
-}
-
-#[macro_export]
-macro_rules! werr_syntax {
-    ($cause:expr, $start:expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
-        let end = $start.clone();
-        WasminError::SyntaxError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end },
-        }
-    }};
-    ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
-        WasminError::SyntaxError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition {
-                start: $start,
-                end: $end,
-            },
-        }
-    }};
-}
-
-#[macro_export]
-macro_rules! werr_type {
-    ($cause:expr, $start:expr) => {{
-        use crate::errors::{TypeError, ErrorPosition, WasminError};
-        let end = $start.clone();
-        WasminError::TypeError(TypeError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end },
-        })
-    }};
-    ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{TypeError, ErrorPosition, WasminError};
-        WasminError::TypeError(TypeError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition {
-                start: $start,
-                end: $end,
-            },
-        })
-    }};
-}
-
-#[macro_export]
-macro_rules! werr_t {
-    ($cause:expr, $start:expr) => {{
-        use crate::errors::{ErrorPosition, TypeError};
-        let end = $start.clone();
-        TypeError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end },
-        }
-    }};
-    ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{ErrorPosition, TypeError};
-        TypeError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition {
-                start: $start,
-                end: $end,
-            },
-        }
-    }};
-}
-
-#[macro_export]
-macro_rules! werr_unsupported_feature {
-    ($cause:expr, $start:expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
-        let end = $start.clone();
-        WasminError::UnsupportedFeatureError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition { start: $start, end },
-        }
-    }};
-    ($cause:expr, $start:expr, $end: expr) => {{
-        use crate::errors::{ErrorPosition, WasminError};
-        WasminError::UnsupportedFeatureError {
-            cause: $cause.to_owned(),
-            pos: ErrorPosition {
-                start: $start,
-                end: $end,
-            },
-        }
-    }};
-}
-
-#[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
-pub struct ErrorPosition {
-    pub start: (usize, usize),
-    pub end: (usize, usize),
-}
 
 /// Top-level error type in the wasmin crate.
 #[derive(std::fmt::Debug)]
@@ -121,48 +13,26 @@ pub enum Error {
     Validation(String),
 }
 
-#[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
-pub struct TypeError {
-    pub cause: String,
-    pub pos: ErrorPosition,
-}
-
 /// WasminError enumerates all non-IO errors returned by this library.
 #[derive(std::fmt::Debug, PartialEq, Clone, Hash, Eq)]
 pub enum WasminError {
     /// Wasmin program contains a syntax error.
-    SyntaxError { cause: String, pos: ErrorPosition },
+    SyntaxError { cause: String, pos: Position },
 
     /// Wasmin program contains a type error.
-    TypeError(TypeError),
+    TypeError { cause: String, pos: Position },
 
     /// Wasmin program is using an unsupported feature.
-    UnsupportedFeatureError { cause: String, pos: ErrorPosition },
+    UnsupportedFeatureError { cause: String, pos: Position },
 }
 
 impl WasminError {
-    pub fn pos(&self) -> &ErrorPosition {
-        match self {
-            WasminError::SyntaxError { pos, .. } => pos,
-            WasminError::TypeError(TypeError { pos, .. }) => pos,
-            WasminError::UnsupportedFeatureError { pos, .. } => pos,
-        }
-    }
-
     pub fn cause(&self) -> &str {
         match self {
             WasminError::SyntaxError { cause, .. } => cause,
-            WasminError::TypeError(TypeError { cause, .. }) => cause,
+            WasminError::TypeError { cause, .. } => cause,
             WasminError::UnsupportedFeatureError { cause, .. } => cause,
         }
-    }
-
-    pub fn relevant_text(&self, text: &str) -> String {
-        let pos = self.pos();
-        let line = text.lines().skip(pos.start.0).next().unwrap();
-        let index = format!("[{}, {}]", pos.start.0, pos.start.1);
-        let pointer_line = " ".repeat(pos.start.1 + index.len() + 2);
-        format!("{} {}\n{}^\n", index, line, pointer_line)
     }
 }
 
@@ -209,7 +79,7 @@ impl std::fmt::Display for WasminError {
             WasminError::SyntaxError { cause, .. } => {
                 write!(f, "syntax error: {}", cause)
             }
-            WasminError::TypeError(TypeError { cause, .. }) => {
+            WasminError::TypeError { cause, .. } => {
                 write!(f, "type error: {}", cause)
             }
             WasminError::UnsupportedFeatureError { cause, .. } => {

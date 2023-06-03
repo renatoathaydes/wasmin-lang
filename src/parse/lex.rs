@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use crate::parse::model::Token;
+use crate::parse::model::{Position, Token};
 use crate::parse::number::number;
 
 pub struct Lexer<'s> {
@@ -13,6 +13,10 @@ pub struct Lexer<'s> {
 impl<'s> Lexer<'s> {
     pub fn new(text: &'s str) -> Lexer<'s> {
         Lexer { text, lines: Vec::with_capacity(64), index: 0, len: text.len() }
+    }
+
+    pub fn pos(&self) -> Position {
+        self.index + 1
     }
 
     pub fn next(&mut self) -> Option<Token> {

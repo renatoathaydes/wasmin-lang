@@ -4,6 +4,7 @@ use std::ops::Range;
 
 use crate::errors::WasminError;
 use crate::interner::{*};
+use crate::parse::model::Numeric;
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
@@ -11,6 +12,7 @@ pub enum Type {
     I32,
     F64,
     F32,
+    String,
     Empty,
     Fn(ExprType),
     Custom(InternedStr),
@@ -35,7 +37,7 @@ pub struct Def {
 /// * variable names
 /// * variable expression (if more than one value, will be a [Group] of [Expression]s).
 /// * optional type replacements (for implicit type conversions)
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Assignment {
     vars: Vec<Def>,
     expr: Box<Expression>,
@@ -44,7 +46,7 @@ pub struct Assignment {
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
 /// The variables may be local or global. The [`globals`] field determines which is the case
 /// for each variable.
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ReAssignment {
     assignment: Assignment,
     globals: Vec<bool>,
@@ -64,11 +66,17 @@ pub type Comment = InternedStr;
 /// Warning emitted by the Wasmin compiler.
 pub type Warning = String;
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum Constant {
+    String(InternedStr),
+    Number(Numeric),
+}
+
 /// Expression is the basic unit of Wasmin code.
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Empty(Vec<Warning>),
-    Const(InternedStr, Type, ExprType, Vec<Warning>),
+    Const(Constant, Type, ExprType, Vec<Warning>),
     Local(InternedStr, Type, ExprType, Vec<Warning>),
     Global(InternedStr, Type, ExprType, Vec<Warning>),
     Let(Assignment, Vec<Warning>),
@@ -99,7 +107,7 @@ pub enum Expression {
     ExprError(WasminError, Vec<Warning>),
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Group {
     exprs: Vec<Expression>,
     typ: ExprType,
@@ -111,7 +119,7 @@ pub struct Group {
 /// * arg names
 /// * body
 /// * function type
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Function {
     name: InternedStr,
     arg_names: Vec<InternedStr>,
@@ -127,7 +135,7 @@ pub enum Visibility {
 }
 
 /// TopLevelElement represents elements that may appear at the top-level of a Wasmin program.
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TopLevelElement {
     Let(Assignment, Visibility, Option<Comment>, Vec<Warning>),
     Mut(Assignment, Visibility, Option<Comment>, Vec<Warning>),
@@ -230,7 +238,7 @@ impl Expression {
 
 
 #[derive(Debug, Default)]
-struct AST {
+pub struct AST {
     interner: Interner,
 }
 
@@ -259,9 +267,21 @@ impl AST {
         Expression::Let(a, w)
     }
 
-    pub fn new_const(&mut self, name: &str, typ: Type, w: Vec<Warning>) -> Expression {
+    pub fn new_string(&mut self, value: &str, w: Vec<Warning>) -> Expression {
+        let typ = Type::String;
         let expr_type = ExprType::outs(vec![typ.clone()]);
-        Expression::Const(self.intern(name), typ, expr_type, w)
+        Expression::Const(Constant::String(self.intern(value)), typ, expr_type, w)
+    }
+
+    pub fn new_number(&mut self, value: Numeric, w: Vec<Warning>) -> Expression {
+        let typ = match value {
+            Numeric::I32(_) => Type::I32,
+            Numeric::I64(_) => Type::I64,
+            Numeric::F32(_) => Type::F32,
+            Numeric::F64(_) => Type::F64,
+        };
+        let expr_type = ExprType::outs(vec![typ.clone()]);
+        Expression::Const(Constant::Number(value), typ, expr_type, w)
     }
 
     pub fn new_local(&mut self, name: &str, typ: Type, w: Vec<Warning>) -> Expression {
@@ -298,9 +318,19 @@ impl AST {
             .collect()
     }
 
-    pub fn new_assignment(&mut self, name: &str, expr: Expression) -> Assignment {
+    pub fn new_assignment(&mut self, name: &str, typ: Option<Type>, expr: Expression) -> Assignment {
         Assignment {
-            vars: vec![Def { name: self.intern(name), target_type: None }],
+            vars: vec![Def { name: self.intern(name), target_type: typ }],
+            expr: Box::new(expr),
+        }
+    }
+
+    pub fn new_assignments(&mut self, mut vars: Vec<(String, Option<Type>)>, expr: Expression) -> Assignment {
+        let defs: Vec<_> = vars.into_iter()
+            .map(|(n, t)| Def { name: self.intern(&n), target_type: t })
+            .collect();
+        Assignment {
+            vars: defs,
             expr: Box::new(expr),
         }
     }
@@ -328,6 +358,8 @@ impl AST {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::Constant::Number;
+
     use super::*;
     use super::Type::*;
 
@@ -394,7 +426,7 @@ mod tests {
 
         assert_eq!(AST::empty().get_type(), EMPTY_EXPR_TYPE);
 
-        assert_eq!(ast.new_const("i32", I32, vec![]).get_type(),
+        assert_eq!(ast.new_number(Numeric::I32(0), vec![]).get_type(),
                    &ExprType::outs(vec![I32]));
 
         assert_eq!(ast.new_local("foo", I64, vec![]).get_type(),
@@ -403,23 +435,23 @@ mod tests {
         assert_eq!(ast.new_global("foo", F64, vec![]).get_type(),
                    &ExprType::outs(vec![F64]));
 
-        let e1 = ast.new_const("", F32, vec![]);
-        assert_eq!(AST::new_let(ast.new_assignment("", e1.clone()), vec![])
+        let e1 = ast.new_number(Numeric::F32(0.0), vec![]);
+        assert_eq!(AST::new_let(ast.new_assignment("", None, e1.clone()), vec![])
                        .get_type(), EMPTY_EXPR_TYPE);
 
-        assert_eq!(AST::new_mut(ast.new_assignment("", e1.clone()), vec![])
+        assert_eq!(AST::new_mut(ast.new_assignment("", None, e1.clone()), vec![])
                        .get_type(), EMPTY_EXPR_TYPE);
 
-        assert_eq!(AST::new_set(ast.new_assignment("", e1.clone()), vec![false], vec![])
+        assert_eq!(AST::new_set(ast.new_assignment("", None, e1.clone()), vec![false], vec![])
                        .get_type(), EMPTY_EXPR_TYPE);
 
-        let const_a = ast.new_const("a", I32, vec![]);
-        let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
+        let const_a = ast.new_string("a", vec![]);
+        let const_b = ast.new_number(Numeric::I64(0), vec![]); // allows coercion to I64
         assert_eq!(AST::new_group(vec![const_a, const_b], vec![]).get_type(),
-                   &ExprType::outs(vec![I32, I64]));
+                   &ExprType::outs(vec![String, I64]));
 
-        let const_a = ast.new_const("a", I32, vec![]);
-        let const_b = ast.new_const("b", I64, vec![]); // allows coercion to I64
+        let const_a = ast.new_number(Numeric::I32(0), vec![]);
+        let const_b = ast.new_number(Numeric::I64(0), vec![]); // allows coercion to I64
         assert_eq!(AST::new_group(
             vec![const_a.clone(),
                  AST::new_group(vec![const_b, const_a], vec![])], vec![]).get_type(),
