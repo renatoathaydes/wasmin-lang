@@ -5,12 +5,14 @@ pub(crate) fn number(text: &str, position: Position) -> Token {
         number_i32(&text[0..text.len() - 3], position)
     } else if text.ends_with("i64") {
         number_i64(&text[0..text.len() - 3], position)
-    } else if text.ends_with("i32") {
+    } else if text.ends_with("f32") {
         todo!() // number_i32()
-    } else if text.ends_with("i32") {
+    } else if text.ends_with("f64") {
         todo!() // &text[0..text.len() - 3]
-    } else {
+    } else if text.contains('.') {
         todo!()
+    } else {
+        number_i32(&text, position)
     }
 }
 
@@ -86,6 +88,16 @@ mod tests {
         assert_eq!(token_i32(100), number("100i32", 0));
         assert_eq!(token_i32(1_234_567_890_i32), number("1_234_567_890_i32", 0));
         assert_eq!(token_i32(i32::MAX), number(&format!("{}i32", i32::MAX), 0));
+    }
+
+    #[test]
+    fn test_i32_inferred() {
+        assert_eq!(token_i32(0), number("0", 0));
+        assert_eq!(token_i32(1), number("1", 0));
+        assert_eq!(token_i32(2), number("2", 0));
+        assert_eq!(token_i32(100), number("100", 0));
+        assert_eq!(token_i32(1_234_567_890_i32), number("1_234_567_890", 0));
+        assert_eq!(token_i32(i32::MAX), number(&format!("{}", i32::MAX), 0));
     }
 
     #[test]
