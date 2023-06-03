@@ -121,12 +121,12 @@ impl<'s> Lexer<'s> {
 
     fn text_token(&self, start: usize) -> Option<Token> {
         let slice = &self.text[start..self.index];
+        let start = start + 1; // position is 1-indexed
         if let Some(c) = slice.chars().next() {
             if c.is_digit(10) {
                 return Some(number(slice, start));
             }
         }
-        let start = start + 1; // position is 1-indexed
         let token = match slice {
             "let" => Token::Let(start),
             "set" => Token::Set(start),
@@ -151,6 +151,8 @@ impl<'s> Lexer<'s> {
 
 #[cfg(test)]
 mod tests {
+    use crate::parse::model::Numeric;
+
     use super::*;
 
     #[test]
@@ -372,5 +374,24 @@ mod tests {
         assert_eq!(lexer.next(), Some(Token::Id(12, "ok".into())));
         assert_eq!(lexer.next(), Some(Token::Comment(16, "comment".into())));
         assert_eq!(lexer.next(), None);
+    }
+
+    /// numbers are mostly tested in the number.rs file
+    #[test]
+    fn test_number() {
+        let mut lexer = Lexer::new("let x = 10i32");
+        assert_eq!(lexer.next(), Some(Token::Let(1)));
+        assert_eq!(lexer.next(), Some(Token::Id(5, "x".into())));
+        assert_eq!(lexer.next(), Some(Token::Eq(7)));
+        assert_eq!(lexer.next(), Some(Token::Number(9, Numeric::I32(10))));
+
+        let mut lexer = Lexer::new("set x = ten, mul 42_i64");
+        assert_eq!(lexer.next(), Some(Token::Set(1)));
+        assert_eq!(lexer.next(), Some(Token::Id(5, "x".into())));
+        assert_eq!(lexer.next(), Some(Token::Eq(7)));
+        assert_eq!(lexer.next(), Some(Token::Id(9, "ten".into())));
+        assert_eq!(lexer.next(), Some(Token::Comma(12)));
+        assert_eq!(lexer.next(), Some(Token::Id(14, "mul".into())));
+        assert_eq!(lexer.next(), Some(Token::Number(18, Numeric::I64(42))));
     }
 }
