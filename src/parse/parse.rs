@@ -39,7 +39,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_let(&mut self, pos: Position) -> TopLevelElement {
+    fn parse_defs(&mut self, pos: Position) -> Result<(Vec<(String, Option<Type>)>, Visibility), WasminError> {
         let mut vars: Vec<(String, Option<Type>)> = Vec::with_capacity(4);
         let mut may_end = false;
         let mut visibility = Visibility::Private;
@@ -49,15 +49,11 @@ impl<'s> Parser<'s> {
                     // TODO parse types
                     Token::Comma(_) => may_end = false,
                     Token::Eq(_) => {
-                        let expr = self.parse_expr();
-                        let assignment = self.ast.new_assignments(vars, expr);
-                        let comment = None;
-                        let w = vec![];
-                        return TopLevelElement::Let(assignment, visibility, comment, w);
+                        return Ok((vars, visibility));
                     }
                     _ => {
                         // TODO skip to the next closing block
-                        return TopLevelElement::Error(WasminError::SyntaxError {
+                        return Err(WasminError::SyntaxError {
                             pos: self.lexer.pos(),
                             cause: "expected only '=' or ',' at this position".into(),
                         });
@@ -72,7 +68,7 @@ impl<'s> Parser<'s> {
                     Token::Pub(pos) if vars.is_empty() => {
                         if visibility == Visibility::Public {
                             // TODO skip to the next closing block
-                            return TopLevelElement::Error(WasminError::SyntaxError {
+                            return Err(WasminError::SyntaxError {
                                 pos,
                                 cause: "'pub' can only appear once per definition".into(),
                             });
@@ -81,7 +77,7 @@ impl<'s> Parser<'s> {
                         }
                     }
                     _ => {
-                        return TopLevelElement::Error(WasminError::SyntaxError {
+                        return Err(WasminError::SyntaxError {
                             pos: self.lexer.pos(),
                             cause: "expected only 'pub' or identifier at this position".into(),
                         });
@@ -91,11 +87,26 @@ impl<'s> Parser<'s> {
             // return TopLevelElement::Error(WasminError::SyntaxError { pos, cause: "".into() });
         }
         // else {
-        TopLevelElement::Error(WasminError::SyntaxError {
+        Err(WasminError::SyntaxError {
             pos,
             cause: "incomplete let expression: missing name".into(),
         })
         // }
+    }
+
+    fn parse_let(&mut self, pos: Position) -> TopLevelElement {
+        match self.parse_defs(pos) {
+            Ok((vars, visibility)) => {
+                let expr = self.parse_expr();
+                let assignment = self.ast.new_assignments(vars, expr);
+                let comment = None;
+                let w = vec![];
+                return TopLevelElement::Let(assignment, visibility, comment, w);
+            }
+            Err(err) => {
+                TopLevelElement::Error(err)
+            }
+        }
     }
 
     fn parse_expr(&mut self) -> Expression {
@@ -133,7 +144,19 @@ mod tests {
         let mut ast = AST::new();
         let expr = ast.new_number(Numeric::I32(1), vec![]);
         let assignment = ast.new_assignment("x", None, expr);
-        let mut parser = Parser::new_with_ast("let x = 1i32", ast);
+        let mut parser = Parser::new_with_ast("let x = 1", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
+            assignment,
+            Visibility::Private, None, vec![])))
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_let_typed() {
+        let mut ast = AST::new();
+        let expr = ast.new_number(Numeric::I64(1), vec![]);
+        let assignment = ast.new_assignment("x", None, expr);
+        let mut parser = Parser::new_with_ast("let x: i64 = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
             Visibility::Private, None, vec![])))
