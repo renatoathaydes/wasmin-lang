@@ -339,6 +339,16 @@ impl AST {
                     expr: Expression) -> Assignment {
         Assignment { vars, expr: Box::new(expr) }
     }
+
+    pub fn new_type(&mut self, name: &str) -> Type {
+        match name {
+            "i32" => Type::I32,
+            "i64" => Type::I64,
+            "f32" => Type::F32,
+            "f64" => Type::F64,
+            _ => Type::Custom(self.intern(name))
+        }
+    }
 }
 
 // pub(crate) fn type_to_string(types: &[Type]) -> String {

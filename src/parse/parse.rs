@@ -3,10 +3,11 @@ use crate::errors::WasminError;
 use crate::interner::{InternedStr, Interner};
 use crate::parse::lex::Lexer;
 use crate::parse::model::{Position, Token};
+use crate::parse::types::parse_type;
 
 pub struct Parser<'s> {
-    lexer: Lexer<'s>,
-    ast: AST,
+    pub(crate) lexer: Lexer<'s>,
+    pub(crate) ast: AST,
     comments: Vec<Comment>,
     stack: Vec<Type>,
 }
@@ -41,20 +42,31 @@ impl<'s> Parser<'s> {
 
     fn parse_defs(&mut self, pos: Position) -> Result<(Vec<(String, Option<Type>)>, Visibility), WasminError> {
         let mut vars: Vec<(String, Option<Type>)> = Vec::with_capacity(4);
-        let mut may_end = false;
+        let mut after_id = false;
         let mut visibility = Visibility::Private;
         while let Some(token) = self.lexer.next() {
-            if may_end {
+            if after_id {
                 match token {
-                    // TODO parse types
-                    Token::Comma(_) => may_end = false,
+                    Token::Comma(_) => { todo!() }
+                    Token::Colon(pos) => {
+                        if vars.is_empty() {
+                            return Err(WasminError::SyntaxError {
+                                pos: token.pos(),
+                                cause: "type declaration starting without any \
+                                    variable names being defined".into(),
+                            });
+                        }
+                        let typ = parse_type(self, pos)?;
+                        let (name, _) = vars.remove(vars.len() - 1);
+                        vars.push((name, Some(typ)));
+                    }
                     Token::Eq(_) => {
                         return Ok((vars, visibility));
                     }
                     _ => {
                         // TODO skip to the next closing block
                         return Err(WasminError::SyntaxError {
-                            pos: self.lexer.pos(),
+                            pos: token.pos(),
                             cause: "expected only '=' or ',' at this position".into(),
                         });
                     }
@@ -62,7 +74,7 @@ impl<'s> Parser<'s> {
             } else {
                 match token {
                     Token::Id(_, name) => {
-                        may_end = true;
+                        after_id = true;
                         vars.push((name, None));
                     }
                     Token::Pub(pos) if vars.is_empty() => {
@@ -78,7 +90,7 @@ impl<'s> Parser<'s> {
                     }
                     _ => {
                         return Err(WasminError::SyntaxError {
-                            pos: self.lexer.pos(),
+                            pos: token.pos(),
                             cause: "expected only 'pub' or identifier at this position".into(),
                         });
                     }
@@ -122,7 +134,7 @@ impl<'s> Parser<'s> {
                 }, vec![]),
                 _ => AST::new_error(WasminError::UnsupportedFeatureError {
                     cause: "expression not supported yet".into(),
-                    pos: self.lexer.pos(),
+                    pos: token.pos(),
                 }, vec![]),
             }
         } else {
@@ -151,11 +163,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_parse_let_typed() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I64(1), vec![]);
-        let assignment = ast.new_assignment("x", None, expr);
+        let expr = ast.new_number(Numeric::I32(1), vec![]);
+        let assignment = ast.new_assignment("x", Some(I64), expr);
         let mut parser = Parser::new_with_ast("let x: i64 = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,

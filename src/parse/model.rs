@@ -59,6 +59,23 @@ impl Token {
             Token::Error(pos, ..) => *pos,
         }
     }
+
+    /// Whether this token represents one of the special characters and is equal to the given c.
+    pub fn is_char(&self, c: char) -> bool {
+        match self {
+            Token::Colon(_) => c == ':',
+            Token::SemiColon(_) => c == ';',
+            Token::Comma(_) => c == ',',
+            Token::OpenParens(_) => c == '(',
+            Token::CloseParens(_) => c == ')',
+            Token::OpenBracket(_) => c == '[',
+            Token::CloseBracket(_) => c == ']',
+            Token::OpenCurly(_) => c == '{',
+            Token::CloseCurly(_) => c == '}',
+            Token::Eq(_) => c == '=',
+            _ => false,
+        }
+    }
 }
 
 impl Display for Token {
