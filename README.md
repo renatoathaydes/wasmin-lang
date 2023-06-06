@@ -1,5 +1,13 @@
-A minimal, concatenative, statically typed programming language that builds on the primitives provided by
-[WebAssembly (WASM)](https://developer.mozilla.org/en-US/docs/WebAssembly).
+# Wasmin Programming Language
+
+The Wasmin programming language was designed to have semantics very close to those of
+[WebAssembly (WASM)](https://developer.mozilla.org/en-US/docs/WebAssembly), making it a perfect language for
+compiling to WASM.
+
+Wasmin is statically typed, non-garbage-collected
+(but requires no memory management thanks to [linear types](http://home.pipeline.com/~hbaker1/ForthStack.html), which do
+not generate garbage) and supports concatenative programming, s-expressions and procedural programming through a simple,
+yet very flexible syntax.
 
 ## Wasmin Goals
 
@@ -9,38 +17,6 @@ A minimal, concatenative, statically typed programming language that builds on t
 - simplest possible syntax that preserves readability.
 
 ## This is work in progress
-
-Feature Checklist:
-
-- [x] primitive values.
-- [x] parenthesis-grouped expressions.
-- [x] ungrouped expressions.
-- [x] multi-value expressions.
-- [x] type declarations.
-- [ ] generic type declarations.
-- [x] comments.
-- [x] let assignments.
-- [x] mut assignments.
-- [x] set assignments.
-- [ ] math operators.
-- [x] function calls.
-- [x] function implementations.
-- [ ] generic functions.
-- [ ] function pointers.
-- [x] if/else blocks.
-- [x] loops.
-- [ ] lambdas.
-- [x] global constants.
-- [ ] import from other Wasmin files with `use`.
-- [x] import external declarations with `ext`.
-- [x] export functions and constants.
-- [ ] string values.
-- [ ] function pointers.
-- [ ] arrays.
-- [ ] records.
-- [ ] generic records.
-- [ ] `typeof` special function.
-- [ ] traits.
 
 Not yet designed features (may never be added):
 
@@ -53,58 +29,187 @@ Not yet designed features (may never be added):
 
 ## The language
 
-Wasmin is designed to be simple, built from very few generic syntactic forms,
-and therefore fast to parse and compile, like WASM itself!
+Wasmin was designed to stay as close as possible to WASM bytecode while offering the readability
+of a modern programming language.
 
-It attempts to minimize punctuation to be as syntactically light as possible without losing readability.
-
-Because it only contains primitives that can be mapped easily to WASM, it should run as fast 
-as hand-written WASM programs on any platform.
-
-Wasmin is statically typed, non-garbage-collected
-(but requires no memory management thanks to [linear types](http://home.pipeline.com/~hbaker1/ForthStack.html), which do
-not generate garbage) and supports the procedural and concatenative programming paradigms.
-
-## Tour of Wasmin
-
-### Expressions
-
-The basic constructs of a Wasmin program are **expressions**.
-
-Expressions are arrangements of symbols, constants and other expressions which evaluate to zero or more values.
-
-Expressions have the following forms:
-
-- `()` empty expression.
-- `1`, `0.1`, `1i64`, `0.1f64` (constants).
-- `let name = expr;` (single let expression, used for immutable assignments).
-- `let name1, name2 = expr1, expr2` (multi-value let expression).
-- `mut name = expr;` (`mut` is like let, but for mutable assignments).
-- `set name = expr;` (`set` is used to re-assign a `mut` variable).
-- `function arg1 arg2;` (function call).
-- `(function arg1 arg2)` (function call - does not require `;` is within parens).
-- `function(arg1, arg2);` (same as previous examples, multi-value arguments style).
-- `arg1, arg2, function;` (same as previous examples, concatenative style).
-- `(expr1; expr2; expr3)` (group of expressions, each one is evaluated in order).
-- `if cond_expr; expr1; expr2;` (if `cond_expr` evaluates to non-zero, evaluate `expr1`, else evaluate `expr2`).
-- `if (cond_exp) (expr1) (expr2)` (same as previous but using parenthesis instead of `;` to separate expressions).
-- `if cond_exp; then expr1; else expr2;` (same as previous but using `then` and `else` optional keywords for
-  readability).
-- `(if cond_expr; expr1)` (the `else` expression is optional if `expr1` evaluates to `()`).
-
-For example, these are all expressions:
-
-- `0` (the constant `0`, of type `i64`, or 64-bit integer).
-- `(0)` (same as previous).
-- `add 1 2` (calls the native WASM `i32.add` function with arguments `1` and `2`, which have type `i32`).
-- `(let n = 1; add n 3)` (assigns `1` to the variable `n`, then calls `add` with `n` and `3` as arguments).
-- `1, add 2` (same as `add 1 2`, using concatenative style - read as `take 1, add 2 to it`).
-- `1, 2, add` (same as previous example).
-
-The last examples show that the concatenative style allows certain expressions to be written in a more natural way. For
-example, it allows using a familiar "infix operator" syntax.
+The syntax is extremely simple, allowing the parser to be blazing fast - which is important for use cases where WASM
+is used, like on the web and for short-lived processes running in the cloud.
 
 > Wasmin source code must always be encoded using UTF-8.
+
+### Immutable variable binding
+
+An immutable value can be declared with `let`:
+
+```rust
+let x = 1;
+```
+
+An explicit type may be provided, but it's not needed as long as it can be inferred:
+
+```rust
+let x: i32 = 1;
+```
+
+The value of a `let` can be any expression.
+
+### Mutable bindings
+
+Mutable bindings can be introduced with `mut`.
+
+```rust
+mut x = 10;
+```
+
+To modify a `mut` binding, use `set`:
+
+```rust
+set x = 42;
+```
+
+### Functions
+
+A function is declared similarly, but using `fun`, and can take arguments:
+
+```rust
+fun square a = mul a a;
+```
+
+As you can see above, function application has the form `function arg1 arg2...`, but it's also possible to use
+concatenative style, as we'll see.
+
+Function types can be explicitly declared and have the form
+`fun name arg...: [argType...](returnType...)`.
+
+For example:
+
+```rust
+fun square a: [i32](i32) = mul a a;
+```
+
+As seen above, expressions end with a semicolon `;`.
+
+### Multiple values and the WASM stack
+
+As WASM, Wasmin is a stack-based language, and hence allows values to be pushed onto an implicit stack.
+
+To explicitly push values onto the stack, use commas `,` to separate the values or expressions:
+
+```rust
+# assign 1 to a, 2 to b and 3 to c
+let a, b, c = 1, 2, 3;
+```
+
+> Notice that a variable can only hold a single value. It would be a mistake to do something like
+> `let a = 1, 2;` as `a` would take the value `1`, but the `2` would be a _stray_ value which is not allowed.
+
+Anything between the commas can be any expression. If it's a function call, it can use elements previously pushed
+onto the stack, which means that it's possible to use the concatenative style of programming:
+
+```rust
+fun square a = a, a, mul;
+```
+
+The body of the function above is identical, semantically, to the previous implementation, `mul a a`.
+
+> Concatenative expressions may not take values from the stack unless they're pushed within the same expression. This
+> allows Wasmin to remain type-safe.
+
+Function calls may take explicit arguments AND use values from the stack if it expects more arguments than provided.
+Hence, the above function can also be written as:
+
+```rust
+fun square a = a, mul a;
+```
+
+The above notation looks like infix notation, so is typically used where infix notation is desired, like in mathematical operations.
+
+Instead of using `,` to separate values, Wasmin also allows using parenthesis, which means that yet another way to write
+the above expression is this:
+
+```rust
+fun square a = a (mul a);
+```
+
+Notice that by using parenthesis, Wasmin code can be written as s-expressions:
+
+```rust
+# s-expressions
+fun square a = (mul a a);
+
+fun cube a = (square (square a));
+
+# concatenative style:
+fun cube2 a = a, square, square;
+```
+
+> The semicolon at the end is necessary in all cases because without it, Wasmin would expect more values until it found a terminating ';'.
+
+### Types
+
+Wasmin types are the same as WASM types (as of the MVP first WASM release):
+
+* `i32` - 32-bit integer
+* `i64` - 64-bit integer
+* `f32` - 32-bit float
+* `f64` - 64-bit float
+
+> WASM has a few more types now, but Wasmin does not support them yet.
+
+Function types are combinations of these types... for example, the type of a function taking two `i32` arguments and
+returning one `i64` value is `[i32 i32](i64)`.
+
+Functions can return multiple values. A function that just returns 2 `f32` values has type `[](f32 f32)`, for example.
+
+> Notice that WASM does not have signed/unsigned numbers: weather a number is interpreted as being signed or not depends
+> on the operations they're used with.
+
+### If expressions
+
+Wasmin if expressions have one of these forms:
+
+* `if condition then positive else negative;` (both branches must have the same type). 
+* `if condition then positive;` (the positive branch must have type `()`, i.e. no value).
+
+Notice that `then` terminates the condition expression, `else`, if used, terminates the positive expression, and
+`;` terminates the whole `if` expression.
+
+Booleans, as with WASM, are of type `i32` and only `0` is considered `false`.
+
+Examples:
+
+```rust
+fun greater_than_10 n: [i32](i32) = if n, gt_s 10 then 1 else 0;
+
+fun print_if_gt_10 n: [i32]() = if n, greater_than_10 then print n;
+```
+
+### Loops
+
+The loop expression has the following form:
+
+```rust
+loop {
+  <expressions>
+}
+```
+
+For a loop to terminate, it must have a `break` expression within. A `break` expression may terminate with one or more values.
+Every `break` within a `loop` must break with the same type, which is the type the `loop` expression itself inherits.
+
+The following example loops `n` times, adding `n` to itself at each iteration and accumulating the result in `sq`,
+then returning the values `n` and `sq`.
+
+```rust
+fun n_and_sq n: [i32](i32 i32) =
+    mut sq = n,
+    mut count = 0,
+    loop {
+        if count, gte n then break n, sq;
+        set count = (count, add 1)
+        set sq = (sq, add sq)
+    };
+```
 
 ### Comments
 
@@ -122,137 +227,81 @@ Comment
 #{ comment } let this_is_code = #{ another comment } 1;
 ```
 
-### Demarking expressions
+The number of braces used to start the comment block must be matched to end it, allowing nested comments:
 
-Top-level expressions without parenthesis end with `;`, and within parenthesis end when the closing parens is reached,
-so no `;` is required.
-
-```rust
-# ok
-let x = (add 2 3)
-
-# ok
-let x = add 2 3;
-
-# wrong! expr ends with ')'
-let x = (add 2) 3;
+```bash
+#{{
+  A comment.
+  #{ A nested comment. }
+  This is all one big comment which ends in the next line.
+}}
 ```
 
-The last example above would try to assign the result of `add 2` to `x` (which won't work because `add` takes two
-arguments), then the expression `3` appears outside of the previous `let` expression, in an illegal location
-(only `let`, `mut`, `set`, and as we'll see below, `def`, `fun` and `ext` can appear as top-level elements).
+### External imports
 
-Basically, if an expression does not start with `(`, it ends when a `;` is found.
+WASM allows importing definitions from the environment.
 
-### Multi-value expressions
-
-Multi-value expressions are separated by `,`.
-
-The expression `add (2, 3)` is valid because the second term evaluates to two values, `2` and `3`, which then are passed
-as arguments to the first term, the `add`
-function, and hence is equivalent to just `(add 2 3)` (but _coincidentally_ looks like a C-like function call).
-
-> `let` expressions can be multi-valued as in `let x, y = 2, 3;`.
-> A `let` will consume one value per identifier.
-> Wasmin does not allow a single identifier to have more than one value, hence the number of elements must be the
-> same on both sides.
-
-### Types
-
-The type of a variable or function can be declared explicitly with a `def` statement. To implement a function, the `fun`
-keyword is used.
-
-`def`s are optional for `let` and `mut` bindings (it is always possible to infer their types), but mandatory for `fun`
-unless the function has type `[]()` (no args, no return value).
-
-To make a `fun` or `let` visible outside the module (i.e. add them to the WASM module's exports), declare them
-with `pub`. For example, `pub let PI = 3.1415;`.
-
-> Notice that `mut` bindings cannot be exported. This is a WASM restriction.
-
-Types have a simple syntax:
-
-- `i32`, `i64`, `f32`, `f64` - native WASM types.
-- `[i32]i32` - function from one `i32` to another `i32` value.
-- `[i32 i32] f32 f32` - function from two `i32` values, to two `f32` values.
-- `[ [i32]f32 ]( [i32](f32) )` - function that takes a function from `i32` to `f32` and returns
-  another function from `i32` to `f32` (notice how the return type can appear between parens). 
-
-### Functions
-
-In this example, we define and implement a simple identity function:
-
-```rust
-def identity [i32] i32;
-fun identity n = n;
-```
-
-To be able to use functions provided by the host environment (so you can actually print something, for example)
-, you can use `ext` (external module):
+In Wasmin, you can declare such imports using `ext` (extension blocks):
 
 ```rust
 ext console {
-    log [i32];
-    log [f32];
-    warn [i32];
-    warn [f32];
+    log [i32]()
+    warn [i32]()
 }
 ```
 
-> Notice that, for obvious reasons, you cannot implement values or functions in `ext`, only define their types,
-> hence the only allowed elements inside an `ext` block are `def`s, and as the `def` keyword would be redundant, it is
-> omitted entirely.
+> Notice that, for obvious reasons, you cannot implement values or functions in `ext`, only define their types.
 
-To call functions defined in an `ext` module, employ the familiar `module_name.fun_name` syntax:
+To call functions defined in an `ext` module, such as `console` defined above, use the syntax `<module>.<function>`.
 
 ```rust
-# given the above definition for console
-fun _start = console.log 10;
+fun _start = console.log 10, console.warn 20;
 ```
 
-### Organizing code
+### Importing other files
 
-You can split up Wasmin programs in several files. To do that, just import other files as shown below.
+To import `pub` definitions from another file, use the `use` keyword.
 
 > TODO implement `use`.
 
 `factorial.wasmin`:
 
 ```rust
-def factorial [i32]i64;
-pub fun factorial n = if n, le_s 2;
-then n;
-else n, mul factorial (n, sub 1);
+pub fun factorial n: [i32](i64) =
+    if n, le_s 2 then n else n, mul factorial (n, sub 1);
 ```
 
 `main.wasmin`:
 
 ```rust
 # the file extension is always implied to be .wasmin,
-# so this will import all ` pub ` definitions from "./factorial.wasmin".
+# so this will import all `pub` definitions from "./factorial.wasmin".
 use "./factorial";
 
 def _start []i64;
 fun _start = factorial 5;
 ```
 
-`use` statements may also list which definitions to import:
+`use` statements may also limit which definitions to import with `show`:
 
 ```rust
-use "./factorial" { factorial };
+# only factorial is imported
+use "./factorial" show factorial;
+```
 
-def _start []i64;
-fun _start = factorial 5;
+Or exclude definitions to import with `hide`:
+
+```rust
+# everything except factorial is imported
+use "./factorial" hide factorial;
 ```
 
 If another file defines an `ext` module, then the `ext` module can be used as any other definition in that file:
 
 ```rust
 # assume that "ext console" was defined inside "./factorial.wasmin"
-use "./factorial" {
-factorial
-console
-};
+use "./factorial"
+    show factorial console;
 
 fun _start = console.log (factorial 5);
 ```
@@ -260,6 +309,8 @@ fun _start = console.log (factorial 5);
 This completes the description of the Wasmin syntax (a minimalistic syntax for WASM, hence the name ;))!
 
 ## Memory
+
+> TODO: this section is not well thought out yet, it's all speculation, currently.
 
 To write most interesting programs, you'll need to allocate memory to represent structures more complex than just
 numbers!
@@ -317,11 +368,15 @@ fun _start = (
 ### Counter
 
 ```rust
-mut count = 0;
+mod Counter {
+  mut count = 0;
 
-def increment [] i32;
-pub fun increment = (set count = count, add 1; count)
+  pub fun increment: [](i32) =
+    set count = (count, add 1)
+    count;
 
-def decrement [] i32;
-pub fun decrement = (set count = count, sub 1; count)
+  pub fun decrement: [](i32) = 
+    set count = (count, sub 1)
+    count;  
+}
 ```
