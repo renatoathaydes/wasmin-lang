@@ -3,67 +3,75 @@ use crate::errors::WasminError;
 use crate::parse::model::{Position, Token, Token::*};
 use crate::parse::parse::Parser;
 
-pub(crate) fn parse_type(parser: &mut Parser<'_>, pos: Position) -> Result<Type, WasminError> {
-    if let Some(token) = parser.lexer.next() {
-        match token {
-            Id(_, id) => Ok(parser.ast.new_type(&id)),
-            OpenBracket(pos) => {
-                let (ins, pos) = parse_types_until(']', parser, pos)?;
-                parse_return_types(parser, ins, pos)
-            }
-            _ => Err(WasminError::SyntaxError {
-                pos,
-                cause: format!("expected a type definition, found {}", token),
-            }),
-        }
-    } else {
-        Err(WasminError::SyntaxError {
-            pos,
-            cause: "expected a type definition but found nothing".into(),
-        })
-    }
-}
-
-fn parse_return_types(parser: &mut Parser, ins: Vec<Type>, pos: Position)
-                      -> Result<Type, WasminError> {
-    if let Some(token) = parser.lexer.next() {
-        match token {
-            OpenParens(pos) => {
-                let (outs, pos) = parse_types_until(')', parser, pos)?;
-                Ok(Type::Fn(ExprType::new(ins, outs)))
-            }
-            _ => Err(WasminError::SyntaxError {
-                pos,
-                cause: format!("expected function return types declaration \
-                    starting with '(', found {}", token),
-            }),
-        }
-    } else {
-        Err(WasminError::SyntaxError {
-            pos,
-            cause: "expected return types of function type but found nothing".into(),
-        })
-    }
-}
-
-fn parse_types_until(end: char, parser: &mut Parser, pos: Position)
-                     -> Result<(Vec<Type>, Position), WasminError> {
-    let mut types = Vec::with_capacity(2);
-    loop {
-        if let Some(token) = parser.lexer.next() {
-            if token.is_char(end) {
-                return Ok((types, token.pos()));
-            }
+impl<'s> Parser<'s> {
+    pub(crate) fn parse_type(&mut self, pos: Position) -> Result<Type, WasminError> {
+        if let Some(token) = self.lexer.next() {
             match token {
-                Id(_, id) => types.push(parser.ast.new_type(&id)),
-                _ => return Err(WasminError::SyntaxError {
+                Id(_, id) => Ok(self.ast.new_type(&id)),
+                OpenBracket(pos) => {
+                    let (ins, pos) = self.parse_types_until(']', pos)?;
+                    self.parse_return_types(ins, pos)
+                }
+                _ => Err(WasminError::SyntaxError {
                     pos,
                     cause: format!("expected a type definition, found {}", token),
                 }),
             }
+        } else {
+            Err(WasminError::SyntaxError {
+                pos,
+                cause: "expected a type definition but found nothing".into(),
+            })
         }
     }
-    todo!()
+
+    fn parse_return_types(&mut self, ins: Vec<Type>, pos: Position)
+                          -> Result<Type, WasminError> {
+        if let Some(token) = self.lexer.next() {
+            match token {
+                OpenParens(pos) => {
+                    let (outs, pos) = self.parse_types_until(')', pos)?;
+                    Ok(Type::Fn(ExprType::new(ins, outs)))
+                }
+                _ => Err(WasminError::SyntaxError {
+                    pos,
+                    cause: format!("expected function return types declaration \
+                    starting with '(', found {}", token),
+                }),
+            }
+        } else {
+            Err(WasminError::SyntaxError {
+                pos,
+                cause: "expected return types of function type but found nothing".into(),
+            })
+        }
+    }
+
+    fn parse_types_until(&mut self, end: char, pos: Position)
+                         -> Result<(Vec<Type>, Position), WasminError> {
+        let mut types = Vec::with_capacity(2);
+        loop {
+            if let Some(token) = self.lexer.next() {
+                if token.is_char(end) {
+                    return Ok((types, token.pos()));
+                }
+                match token {
+                    Id(_, id) => types.push(self.ast.new_type(&id)),
+                    _ => return Err(WasminError::SyntaxError {
+                        pos,
+                        cause: format!("expected a type definition, found {}", token),
+                    }),
+                }
+            } else {
+                break;
+            }
+        }
+        Err(WasminError::SyntaxError {
+            pos,
+            cause: format!("incomplete type definition \
+            (reached end of file before finding closing '{}')", end),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -80,7 +88,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("i32", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?, I32);
+        assert_eq!(parser.parse_type(0)?, I32);
         Ok(())
     }
 
@@ -99,7 +107,7 @@ mod tests {
         let hello_str = new_interned_type(&mut ast, "Hello");
         let mut parser = Parser::new_with_ast("Hello", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?, Custom(hello_str));
+        assert_eq!(parser.parse_type(0)?, Custom(hello_str));
         Ok(())
     }
 
@@ -108,7 +116,16 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[i32]()", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?, Fn(ExprType::new(vec![I32], vec![])));
+        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![I32], vec![])));
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_fn_0_0() -> Result<(), WasminError> {
+        let mut ast = AST::new();
+        let mut parser = Parser::new_with_ast("[ ] ( )", ast);
+
+        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![], vec![])));
         Ok(())
     }
 
@@ -117,7 +134,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[i64](f32)", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?, Fn(ExprType::new(vec![I64], vec![F32])));
+        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![I64], vec![F32])));
         Ok(())
     }
 
@@ -126,7 +143,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[](f64)", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?, Fn(ExprType::outs(vec![F64])));
+        assert_eq!(parser.parse_type(0)?, Fn(ExprType::outs(vec![F64])));
         Ok(())
     }
 
@@ -135,7 +152,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[i32 i64](f32 f64 f32)", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?,
+        assert_eq!(parser.parse_type(0)?,
                    Fn(ExprType::new(vec![I32, I64], vec![F32, F64, F32])));
         Ok(())
     }
@@ -149,7 +166,7 @@ mod tests {
 
         let mut parser = Parser::new_with_ast("  [ Int Float ] \n( Double ) ", ast);
 
-        assert_eq!(parse_type(&mut parser, 0)?,
+        assert_eq!(parser.parse_type(0)?,
                    Fn(ExprType::new(vec![Custom(int_str), Custom(float_str)], vec![Custom(double_str)])));
         Ok(())
     }
