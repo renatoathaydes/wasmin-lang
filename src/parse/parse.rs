@@ -24,9 +24,10 @@ impl<'s> Parser<'s> {
         if let Some(token) = self.lexer.next() {
             let expr = match token {
                 Token::Let(pos) => self.parse_let(pos),
+                Token::Fun(pos) => self.parse_fun(pos),
                 _ => {
                     TopLevelElement::Error(WasminError::UnsupportedFeatureError {
-                        cause: "Only let is supported for now".into(),
+                        cause: "Only let and fun are supported for now".into(),
                         pos: self.lexer.pos(),
                     })
                 }

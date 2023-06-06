@@ -1,6 +1,7 @@
 use std::cmp::min;
 use std::collections::VecDeque;
 use std::ops::Range;
+use std::path::Display;
 
 use crate::errors::WasminError;
 use crate::interner::{*};
@@ -158,34 +159,6 @@ impl ExprType {
     }
 }
 
-// impl fmt::Display for ExprType {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.write_str("[")?;
-//         f.write_str(&type_to_string(&self.ins))?;
-//         f.write_str("](")?;
-//         f.write_str(&type_to_string(&self.outs))?;
-//         f.write_str(")")
-//     }
-// }
-//
-// impl fmt::Display for Type {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Type::Custom(s) => write!(f, ":{}", s)?,
-//             Type::I64 => write!(f, "i64")?,
-//             Type::I32 => write!(f, "i32")?,
-//             Type::F64 => write!(f, "f64")?,
-//             Type::F32 => write!(f, "f32")?,
-//             Type::Empty => write!(f, "()")?,
-//             Type::Fn(typ) => {
-//                 write!(f, "({})", typ)?;
-//             }
-//             Type::Error(err) => write!(f, "ERROR({:?})", err.source())?,
-//         };
-//         Ok(())
-//     }
-// }
-
 const EMPTY_EXPR_TYPE: &'static ExprType = &ExprType { ins: vec![], outs: vec![] };
 
 fn end_range_of_len(range_len: usize, vec_len: usize) -> Range<usize> {
@@ -243,11 +216,49 @@ pub struct AST {
 }
 
 impl AST {
-    fn intern(&mut self, s: &str) -> InternedStr {
+    pub(crate) fn intern(&mut self, s: &str) -> InternedStr {
         self.interner.intern(s)
     }
 
     pub fn new() -> Self { Default::default() }
+
+    fn build_type_string(&self, types: &Vec<Type>, result: &mut String) {
+        let len = types.len();
+        for arg in types.iter().take(len - 1) {
+            result.push_str(&self.type_to_string(arg));
+            result.push(' ');
+        }
+        if len > 0 {
+            result.push_str(&self.type_to_string(types.last().unwrap()));
+        }
+    }
+
+    pub fn type_to_string(&self, typ: &Type) -> String {
+        match typ {
+            Type::I64 => "i64".to_owned(),
+            Type::I32 => "i32".to_owned(),
+            Type::F64 => "f64".to_owned(),
+            Type::F32 => "f32".to_owned(),
+            Type::String => "string".to_owned(),
+            Type::Empty => "()".to_owned(),
+            Type::Fn(e) => {
+                let mut result = String::with_capacity(32);
+                result.push('[');
+                self.build_type_string(&e.ins, &mut result);
+                result.push(']');
+                result.push('(');
+                self.build_type_string(&e.outs, &mut result);
+                result.push(')');
+                result
+            },
+            Type::Custom(name) => self.interned_str(name).to_owned(),
+            Type::Error(err) => err.cause().to_owned(),
+        }
+    }
+
+    pub fn interned_str(&self, interned: &InternedStr) -> &str {
+        self.interner.get(interned)
+    }
 
     pub fn empty() -> Expression { Expression::Empty(vec![]) }
 
@@ -347,6 +358,20 @@ impl AST {
             "f32" => Type::F32,
             "f64" => Type::F64,
             _ => Type::Custom(self.intern(name))
+        }
+    }
+
+    pub fn new_fun(&mut self, name: &str, mut args: Vec<String>,
+                   body: Expression, target_type: ExprType) -> Function {
+        let arg_names: Vec<InternedStr> = args.drain(..)
+            .map(|a| self.intern(&a))
+            .collect();
+
+        Function {
+            name: self.intern(name),
+            arg_names,
+            body,
+            target_type,
         }
     }
 }

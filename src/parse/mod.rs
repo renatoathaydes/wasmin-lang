@@ -5,3 +5,4 @@ pub(crate) mod number;
 mod types;
 mod expression;
 mod lets;
+mod fun;

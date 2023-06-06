@@ -137,6 +137,7 @@ impl<'s> Lexer<'s> {
             "mut" => Token::Mut(start),
             "pub" => Token::Pub(start),
             "ext" => Token::Ext(start),
+            "fun" => Token::Fun(start),
             ":" => Token::Colon(start),
             ";" => Token::SemiColon(start),
             "," => Token::Comma(start),
@@ -218,6 +219,13 @@ mod tests {
     fn test_pub() {
         let mut lexer = Lexer::new("pub");
         assert_eq!(lexer.next(), Some(Token::Pub(1)));
+        assert_eq!(lexer.next(), None);
+    }
+
+    #[test]
+    fn test_fun() {
+        let mut lexer = Lexer::new("fun");
+        assert_eq!(lexer.next(), Some(Token::Fun(1)));
         assert_eq!(lexer.next(), None);
     }
 

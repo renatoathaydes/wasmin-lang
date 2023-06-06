@@ -76,14 +76,11 @@ impl<'s> Parser<'s> {
                     }
                 }
             }
-            // return TopLevelElement::Error(WasminError::SyntaxError { pos, cause: "".into() });
         }
-        // else {
         Err(WasminError::SyntaxError {
             pos,
             cause: "incomplete let expression: missing name".into(),
         })
-        // }
     }
 }
 

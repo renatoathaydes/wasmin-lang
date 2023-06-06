@@ -12,6 +12,7 @@ pub enum Numeric {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Token {
+    Fun(Position),
     Let(Position),
     Set(Position),
     Mut(Position),
@@ -37,6 +38,7 @@ pub enum Token {
 impl Token {
     pub fn pos(&self) -> Position {
         match self {
+            Token::Fun(pos, ..) |
             Token::Let(pos, ..) |
             Token::Set(pos, ..) |
             Token::Mut(pos, ..) |
@@ -81,6 +83,7 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Token::Fun(_, ..) => write!(f, "fun"),
             Token::Let(_, ..) => write!(f, "let"),
             Token::Set(_, ..) => write!(f, "set"),
             Token::Mut(_, ..) => write!(f, "mut"),
