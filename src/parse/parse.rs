@@ -22,9 +22,22 @@ impl<'s> Parser<'s> {
 
     pub fn parse_next(&mut self) -> Option<TopLevelElement> {
         if let Some(token) = self.lexer.next() {
+            let (token, visibility) = if let Token::Pub(..) = token {
+                let token = if let Some(token) = self.lexer.next() {
+                    token
+                } else {
+                    return Some(TopLevelElement::Error(WasminError::SyntaxError {
+                        pos: token.pos(),
+                        cause: "expected declaration after 'pub' but got nothing".into(),
+                    }))
+                };
+                (token, Visibility::Public)
+            } else {
+                (token, Visibility::Private)
+            };
             let expr = match token {
-                Token::Let(pos) => self.parse_let(pos),
-                Token::Fun(pos) => self.parse_fun(pos),
+                Token::Let(pos) => self.parse_let(pos, visibility),
+                Token::Fun(pos) => self.parse_fun(pos, visibility),
                 _ => {
                     TopLevelElement::Error(WasminError::UnsupportedFeatureError {
                         cause: "Only let and fun are supported for now".into(),

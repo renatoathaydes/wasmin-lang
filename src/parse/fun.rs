@@ -7,10 +7,8 @@ use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
 
 impl<'s> Parser<'s> {
-    pub(crate) fn parse_fun(&mut self, pos: Position) -> TopLevelElement {
+    pub(crate) fn parse_fun(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
         let mut name_and_args: Vec<String> = Vec::with_capacity(4);
-        let mut visibility = Visibility::Private;
-        // TODO parse visibility
         while let Some(token) = self.lexer.next() {
             match token {
                 Token::Id(_, id) => name_and_args.push(id),
@@ -126,7 +124,7 @@ impl Into<TopLevelElement> for Result<TopLevelElement, WasminError> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{Constant, ExprType};
-    use crate::ast::Visibility::Private;
+    use crate::ast::Visibility::{Private, Public};
     use crate::parse::model::Numeric;
 
     use super::*;
@@ -135,11 +133,19 @@ mod tests {
     #[test]
     fn test_parse_fun() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
         let fun = ast.new_fun("x", vec![], body, ExprType::outs(vec![I32]));
         let mut parser = Parser::new_with_ast("fun x = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+    }
+
+    #[test]
+    fn test_parse_pub_fun() {
+        let mut ast = AST::new();
+        let body = Expression::Const(Constant::Number(Numeric::I32(42)), I32, ExprType::outs(vec![I32]), vec![]);
+        let fun = ast.new_fun("abc", vec![], body, ExprType::outs(vec![I32]));
+        let mut parser = Parser::new_with_ast("  pub fun abc = 42", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Public, None, vec![])));
     }
 
     #[test]

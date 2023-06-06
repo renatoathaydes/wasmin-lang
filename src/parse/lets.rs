@@ -4,11 +4,12 @@ use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
 
 impl<'s> Parser<'s> {
-    pub(crate) fn parse_let(&mut self, pos: Position) -> TopLevelElement {
+    pub(crate) fn parse_let(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
         match self.parse_defs(pos) {
-            Ok((vars, visibility)) => {
+            Ok(vars) => {
                 let expr = self.parse_expr();
                 let assignment = self.ast.new_assignments(vars, expr);
+                // TODO parse comments
                 let comment = None;
                 let w = vec![];
                 return TopLevelElement::Let(assignment, visibility, comment, w);
@@ -20,10 +21,9 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_defs(&mut self, pos: Position)
-                  -> Result<(Vec<(String, Option<Type>)>, Visibility), WasminError> {
+                  -> Result<Vec<(String, Option<Type>)>, WasminError> {
         let mut vars: Vec<(String, Option<Type>)> = Vec::with_capacity(4);
         let mut after_id = false;
-        let mut visibility = Visibility::Private;
         while let Some(token) = self.lexer.next() {
             if after_id {
                 match token {
@@ -41,7 +41,7 @@ impl<'s> Parser<'s> {
                         vars.push((name, Some(typ)));
                     }
                     Token::Eq(_) => {
-                        return Ok((vars, visibility));
+                        return Ok(vars);
                     }
                     _ => {
                         // TODO skip to the next closing block
@@ -57,21 +57,10 @@ impl<'s> Parser<'s> {
                         after_id = true;
                         vars.push((name, None));
                     }
-                    Token::Pub(pos) if vars.is_empty() => {
-                        if visibility == Visibility::Public {
-                            // TODO skip to the next closing block
-                            return Err(WasminError::SyntaxError {
-                                pos,
-                                cause: "'pub' can only appear once per definition".into(),
-                            });
-                        } else {
-                            visibility = Visibility::Public;
-                        }
-                    }
                     _ => {
                         return Err(WasminError::SyntaxError {
                             pos: token.pos(),
-                            cause: "expected only 'pub' or identifier at this position".into(),
+                            cause: "expected an identifier at this position".into(),
                         });
                     }
                 }
@@ -112,5 +101,16 @@ mod tests {
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
             Visibility::Private, None, vec![])))
+    }
+
+    #[test]
+    fn test_parse_let_typed_pub() {
+        let mut ast = AST::new();
+        let expr = ast.new_number(Numeric::I32(2), vec![]);
+        let assignment = ast.new_assignment("abc", Some(I32), expr);
+        let mut parser = Parser::new_with_ast("  pub let abc : i32 = 2", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
+            assignment,
+            Visibility::Public, None, vec![])))
     }
 }
