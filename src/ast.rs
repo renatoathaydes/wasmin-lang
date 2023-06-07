@@ -110,7 +110,7 @@ pub enum Expression {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Group {
-    exprs: Vec<Expression>,
+    pub exprs: Vec<Expression>,
     typ: ExprType,
     warnings: Vec<Warning>,
 }
