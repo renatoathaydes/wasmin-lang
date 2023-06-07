@@ -32,6 +32,10 @@ pub enum Token {
     Str(Position, String),
     Id(Position, String),
     Number(Position, Numeric),
+    If(Position),
+    Then(Position),
+    Else(Position),
+    Loop(Position),
     Error(Position, String),
 }
 
@@ -58,6 +62,10 @@ impl Token {
             Token::Str(pos, ..) |
             Token::Id(pos, ..) |
             Token::Number(pos, ..) |
+            Token::If(pos, ..) |
+            Token::Then(pos, ..) |
+            Token::Else(pos, ..) |
+            Token::Loop(pos, ..) |
             Token::Error(pos, ..) => *pos,
         }
     }
@@ -103,6 +111,10 @@ impl Display for Token {
             Token::Str(_, s) => write!(f, "\"{}\"", s),
             Token::Id(_, id) => write!(f, "{}", id),
             Token::Number(_, n) => write!(f, "{}", n),
+            Token::If(_) => write!(f, "if"),
+            Token::Then(_) => write!(f, "then"),
+            Token::Else(_) => write!(f, "else"),
+            Token::Loop(_) => write!(f, "loop"),
             Token::Error(_, err) => write!(f, "ERROR:{}", err),
         }
     }
