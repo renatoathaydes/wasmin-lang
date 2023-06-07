@@ -1,4 +1,6 @@
-use crate::ast::{Assignment, AST, Comment, Constant, Expression, TopLevelElement, Type, Visibility};
+use std::collections::HashMap;
+
+use crate::ast::{Assignment, AST, Comment, Constant, Expression, ExprType, TopLevelElement, Type, Visibility};
 use crate::errors::WasminError;
 use crate::interner::{InternedStr, Interner};
 use crate::parse::lex::Lexer;
@@ -7,17 +9,24 @@ use crate::parse::model::{Position, Token};
 pub struct Parser<'s> {
     pub(crate) lexer: Lexer<'s>,
     pub(crate) ast: AST,
-    comments: Vec<Comment>,
-    stack: Vec<Type>,
+    pub(crate) comments: Vec<Comment>,
+    pub(crate) stack: Vec<Type>,
+    pub(crate) scope: Vec<HashMap<InternedStr, Type>>,
 }
 
 impl<'s> Parser<'s> {
     pub fn new(text: &str) -> Parser {
-        Parser { lexer: Lexer::new(text), ast: AST::new(), comments: vec![], stack: vec![] }
+        Parser::new_with_ast(text, AST::new())
     }
 
     pub fn new_with_ast(text: &str, ast: AST) -> Parser {
-        Parser { lexer: Lexer::new(text), ast, comments: vec![], stack: vec![] }
+        Parser {
+            lexer: Lexer::new(text),
+            ast,
+            comments: vec![],
+            stack: vec![],
+            scope: vec![HashMap::with_capacity(4)],
+        }
     }
 
     pub fn parse_next(&mut self) -> Option<TopLevelElement> {
@@ -29,7 +38,7 @@ impl<'s> Parser<'s> {
                     return Some(TopLevelElement::Error(WasminError::SyntaxError {
                         pos: token.pos(),
                         cause: "expected declaration after 'pub' but got nothing".into(),
-                    }))
+                    }));
                 };
                 (token, Visibility::Public)
             } else {

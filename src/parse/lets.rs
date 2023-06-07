@@ -9,6 +9,11 @@ impl<'s> Parser<'s> {
             Ok(vars) => {
                 let expr = self.parse_expr();
                 let assignment = self.ast.new_assignments(vars, expr);
+                let scope = self.scope.last_mut().expect("there must be a root scope");
+                let mut var_types = assignment.get_types();
+                for (var, typ) in var_types.drain(..) {
+                    scope.insert(var.name, typ);
+                }
                 // TODO parse comments
                 let comment = None;
                 let w = vec![];
@@ -20,8 +25,8 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_defs(&mut self, pos: Position)
-                  -> Result<Vec<(String, Option<Type>)>, WasminError> {
+    pub(crate) fn parse_defs(&mut self, pos: Position)
+                             -> Result<Vec<(String, Option<Type>)>, WasminError> {
         let mut vars: Vec<(String, Option<Type>)> = Vec::with_capacity(4);
         let mut after_id = false;
         while let Some(token) = self.lexer.next() {

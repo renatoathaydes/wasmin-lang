@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::ops::Range;
 use std::path::Display;
 
+use crate::ast::Expression::Const;
 use crate::errors::WasminError;
 use crate::interner::{*};
 use crate::parse::model::Numeric;
@@ -28,8 +29,8 @@ pub struct ExprType {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Def {
-    name: InternedStr,
-    target_type: Option<Type>,
+    pub name: InternedStr,
+    pub target_type: Option<Type>,
 }
 
 /// Assignment defines one or more Wasmin assignments.
@@ -40,8 +41,23 @@ pub struct Def {
 /// * optional type replacements (for implicit type conversions)
 #[derive(Debug, PartialEq, Clone)]
 pub struct Assignment {
-    vars: Vec<Def>,
-    expr: Box<Expression>,
+    pub vars: Vec<Def>,
+    pub expr: Box<Expression>,
+}
+
+impl Assignment {
+    pub fn get_types(&self) -> Vec<(Def, Type)> {
+        let mut result = Vec::with_capacity(self.vars.len());
+        let expr_types = &self.expr.get_type().outs;
+        for (var, expr_t) in self.vars.iter().zip(expr_types) {
+            if let Some(t) = &var.target_type {
+                result.push((var.clone(), t.clone()));
+            } else {
+                result.push((var.clone(), expr_t.clone()));
+            }
+        }
+        result
+    }
 }
 
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
@@ -49,8 +65,8 @@ pub struct Assignment {
 /// for each variable.
 #[derive(Debug, PartialEq, Clone)]
 pub struct ReAssignment {
-    assignment: Assignment,
-    globals: Vec<bool>,
+    pub assignment: Assignment,
+    pub globals: Vec<bool>,
 }
 
 /// Break instruction that exits a loop with a certain set of types on the stack.
@@ -337,6 +353,7 @@ impl AST {
     }
 
     pub fn new_assignments(&mut self, mut vars: Vec<(String, Option<Type>)>, expr: Expression) -> Assignment {
+        // TODO typecheck the assignments
         let defs: Vec<_> = vars.into_iter()
             .map(|(n, t)| Def { name: self.intern(&n), target_type: t })
             .collect();
