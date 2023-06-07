@@ -1,13 +1,24 @@
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 
 use crate::ast::{AST, Expression, Group, Type};
 use crate::errors::WasminError;
-use crate::parse::model::Token;
+use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
 
+#[derive(Copy, Clone, PartialEq)]
 enum Nesting {
     Parens,
     Curly,
+}
+
+impl Nesting {
+    fn close_symbol(&self) -> &'static str {
+        match self {
+            Nesting::Parens => ")",
+            Nesting::Curly => "}",
+        }
+    }
 }
 
 impl<'s> Parser<'s> {
@@ -32,24 +43,16 @@ impl<'s> Parser<'s> {
                     self.parse_expr_nesting(nesting)
                 }
                 Token::CloseParens(pos) => {
-                    let opener = nesting.pop();
-                    match opener {
-                        Some(Nesting::Parens) => break,
-                        Some(Nesting::Curly) => {
-                            expressions.push(Expression::ExprError(WasminError::SyntaxError {
-                                pos,
-                                cause: "unexpected ')', did you mean to close a block with '}'?".into(),
-                            }, vec![]));
-                            break;
-                        }
-                        None => {
-                            expressions.push(Expression::ExprError(WasminError::SyntaxError {
-                                pos,
-                                cause: "unexpected ')', no scope to be closed.".into(),
-                            }, vec![]));
-                            break;
-                        }
-                    }
+                    close_expr_with(Nesting::Parens, nesting.pop(), pos, &mut expressions);
+                    break;
+                }
+                Token::OpenCurly(_) => {
+                    nesting.push(Nesting::Curly);
+                    self.parse_expr_nesting(nesting)
+                }
+                Token::CloseCurly(pos) => {
+                    close_expr_with(Nesting::Curly, nesting.pop(), pos, &mut expressions);
+                    break;
                 }
                 Token::Comma(..) => continue,
                 Token::SemiColon(..) => break,
@@ -67,6 +70,28 @@ impl<'s> Parser<'s> {
         } else {
             AST::new_group(expressions, vec![])
         }
+    }
+}
+
+fn close_expr_with(
+    closer: Nesting,
+    opener: Option<Nesting>,
+    pos: Position,
+    expressions: &mut Vec<Expression>,
+) {
+    if let Some(op) = opener {
+        if op != closer {
+            expressions.push(Expression::ExprError(WasminError::SyntaxError {
+                pos,
+                cause: format!("unexpected '{}', did you mean to close a block with '{}'?",
+                               closer.close_symbol(), op.close_symbol()),
+            }, vec![]));
+        }
+    } else {
+        expressions.push(Expression::ExprError(WasminError::SyntaxError {
+            pos,
+            cause: format!("unexpected '{}', no scope to be closed.", closer.close_symbol()),
+        }, vec![]));
     }
 }
 
@@ -120,6 +145,18 @@ mod tests {
             ast.new_number(Numeric::I32(3), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("(1)( 2, 3 )  ;", ast);
+        assert_eq!(parser.parse_expr(), group);
+    }
+
+    #[test]
+    fn test_parse_number_groups_in_nested_blocks() {
+        let mut ast = AST::new();
+        let group = AST::new_group(vec![
+            ast.new_number(Numeric::I32(1), vec![]),
+            ast.new_number(Numeric::I32(2), vec![]),
+            ast.new_number(Numeric::I32(3), vec![]),
+        ], vec![]);
+        let mut parser = Parser::new_with_ast("{ (1 (2, (3))) }", ast);
         assert_eq!(parser.parse_expr(), group);
     }
 }
