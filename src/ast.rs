@@ -46,7 +46,6 @@ pub struct Assignment {
 }
 
 impl Assignment {
-
     pub fn get_types(&self) -> Vec<(Def, Type)> {
         let mut result = Vec::with_capacity(self.vars.len());
         let expr_types = &self.expr.get_type().outs;
@@ -59,7 +58,6 @@ impl Assignment {
         }
         result
     }
-
 }
 
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
@@ -224,6 +222,11 @@ impl Expression {
     }
 }
 
+impl From<WasminError> for Expression {
+    fn from(value: WasminError) -> Self {
+        Expression::ExprError(value, vec![])
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct AST {
@@ -265,7 +268,7 @@ impl AST {
                 self.build_type_string(&e.outs, &mut result);
                 result.push(')');
                 result
-            },
+            }
             Type::Custom(name) => self.interned_str(name).to_owned(),
             Type::Error(err) => err.cause().to_owned(),
         }
@@ -291,6 +294,14 @@ impl AST {
 
     pub fn new_let(a: Assignment, w: Vec<Warning>) -> Expression {
         Expression::Let(a, w)
+    }
+
+    pub fn new_if(cond: Expression, yes: Expression, no: Expression, warnings: Vec<Warning>) -> Expression {
+        let cond = Box::new(cond);
+        let yes = Box::new(yes);
+        let no = Box::new(no);
+        let typ = yes.get_type().clone();
+        Expression::If { cond, yes, no, typ, warnings }
     }
 
     pub fn new_string(&mut self, value: &str, w: Vec<Warning>) -> Expression {

@@ -7,9 +7,11 @@ use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
 
 #[derive(Copy, Clone, PartialEq)]
-enum Nesting {
+pub(crate) enum Nesting {
     Parens,
     Curly,
+    If,
+    Then,
 }
 
 impl Nesting {
@@ -17,14 +19,26 @@ impl Nesting {
         match self {
             Nesting::Parens => ")",
             Nesting::Curly => "}",
+            Nesting::If => "then",
+            Nesting::Then => "else",
         }
     }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub(crate) enum State {
+    /// no special case.
+    Any,
+    /// parsing a single-group expression
+    Single,
+    /// full expression terminated
+    Terminated,
 }
 
 impl<'s> Parser<'s> {
     pub(crate) fn parse_expr(&mut self) -> Expression {
         let mut nesting = Vec::new();
-        self.parse_expr_nesting(&mut nesting, true)
+        self.parse_expr_nesting(&mut nesting, State::Any)
     }
 
     fn enter_scope(&mut self) {
@@ -35,11 +49,10 @@ impl<'s> Parser<'s> {
         self.scope.pop();
     }
 
-    fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, multiple: bool) -> Expression {
+    pub(crate) fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, mut state: State) -> Expression {
         let mut expressions = Vec::new();
-        let mut done = false;
         while let Some(token) = self.lexer.next() {
-            if done { break; }
+            if state == State::Terminated { break; }
             let expr = match token {
                 Token::Str(.., string) => self.ast.new_string(&string, vec![]),
                 Token::Id(.., name) => self.ast.new_local(&name, Type::I32, vec![]),
@@ -52,7 +65,7 @@ impl<'s> Parser<'s> {
                 Token::OpenParens(_) => {
                     nesting.push(Nesting::Parens);
                     self.enter_scope();
-                    self.parse_expr_nesting(nesting, true)
+                    self.parse_expr_nesting(nesting, State::Any)
                 }
                 Token::CloseParens(pos) => {
                     self.exit_scope();
@@ -62,14 +75,21 @@ impl<'s> Parser<'s> {
                 Token::OpenCurly(_) => {
                     nesting.push(Nesting::Curly);
                     // curly braces end an expression eagerly
-                    done = true;
+                    state = State::Terminated;
                     self.enter_scope();
-                    self.parse_expr_nesting(nesting, true)
+                    self.parse_expr_nesting(nesting, State::Any)
                 }
                 Token::CloseCurly(pos) => {
                     self.exit_scope();
                     close_expr_with(Nesting::Curly, nesting.pop(), pos, &mut expressions);
                     break;
+                }
+                Token::If(..) => self.parse_if(),
+                Token::Then(pos) | Token::Else(pos) => {
+                    AST::new_error(WasminError::UnsupportedFeatureError {
+                        cause: format!("'{}' unexpected at this position", token),
+                        pos,
+                    }, vec![])
                 }
                 Token::Comma(..) => continue,
                 Token::SemiColon(..) => break,
@@ -79,7 +99,7 @@ impl<'s> Parser<'s> {
                 }, vec![]),
             };
             push_flattened_into(&mut expressions, expr);
-            if !multiple { break; }
+            if state == State::Single { break; }
         }
         collapse_expressions(expressions)
     }
@@ -89,7 +109,7 @@ impl<'s> Parser<'s> {
             Ok(vars) => {
                 let mut nesting = Vec::new();
                 let expressions: Vec<_> = (0..vars.len()).map(|_| {
-                    self.parse_expr_nesting(&mut nesting, false)
+                    self.parse_expr_nesting(&mut nesting, State::Single)
                 }).collect();
                 let assignment = self.ast.new_assignments(vars, collapse_expressions(expressions));
                 let scope = self.scope.last_mut().expect("there must be a scope");
@@ -102,6 +122,47 @@ impl<'s> Parser<'s> {
             Err(err) => {
                 Expression::ExprError(err, vec![])
             }
+        }
+    }
+
+    fn parse_if(&mut self) -> Expression {
+        match self.parse_if_expr() {
+            Ok(if_expr) => if_expr,
+            Err(err) => err.into(),
+        }
+    }
+
+    fn parse_if_expr(&mut self) -> Result<Expression, WasminError> {
+        // TODO typecheck
+        let mut nesting = Vec::new();
+        let cond = self.parse_expr_nesting(&mut nesting, State::Single);
+        self.next_token_must_be(is_then, "then")?;
+        self.enter_scope();
+        let yes = self.parse_expr_nesting(&mut nesting, State::Single);
+        self.exit_scope();
+        self.next_token_must_be(is_else, "else")?;
+        self.enter_scope();
+        let no = self.parse_expr_nesting(&mut nesting, State::Single);
+        self.enter_scope();
+        Ok(AST::new_if(cond, yes, no, vec![]))
+    }
+
+    fn next_token_must_be<F>(&mut self, expected: F, expected_name: &str) -> Result<(), WasminError>
+        where F: FnOnce(&Token) -> bool {
+        if let Some(token) = self.lexer.next() {
+            let ok = expected(&token);
+            if ok {
+                return Ok(());
+            }
+            Err(WasminError::UnsupportedFeatureError {
+                cause: format!("expected '{}' at this position but got {}", expected_name, token),
+                pos: token.pos(),
+            })
+        } else {
+            Err(WasminError::UnsupportedFeatureError {
+                cause: format!("expected '{}' at this position but got nothing", expected_name),
+                pos: self.lexer.pos(),
+            })
         }
     }
 }
@@ -145,6 +206,20 @@ fn push_flattened_into(expressions: &mut Vec<Expression>, expr: Expression) {
         }
         _ => expressions.push(expr),
     };
+}
+
+fn is_then(token: &Token) -> bool {
+    match token {
+        Token::Then(..) => true,
+        _ => false,
+    }
+}
+
+fn is_else(token: &Token) -> bool {
+    match token {
+        Token::Else(..) => true,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -252,5 +327,16 @@ mod tests {
         assert_eq!(scope.get(&parser.ast.intern("x")), Some(&I32));
         assert_eq!(scope.get(&parser.ast.intern("y")), Some(&I32));
         assert_eq!(scope.get(&parser.ast.intern("z")), None);
+    }
+
+    #[test]
+    fn test_parse_basic_if_expr() {
+        let mut ast = AST::new();
+        let if_expr = AST::new_if(ast.new_number(Numeric::I32(1), vec![]),
+                                  ast.new_number(Numeric::I32(2), vec![]),
+                                  ast.new_number(Numeric::I32(3), vec![]),
+                                  vec![]);
+        let mut parser = Parser::new_with_ast("if 1 then 2 else 3;", ast);
+        assert_eq!(parser.parse_expr(), if_expr);
     }
 }

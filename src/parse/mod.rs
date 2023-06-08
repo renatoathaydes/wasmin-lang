@@ -6,4 +6,3 @@ mod types;
 mod expression;
 mod lets;
 mod fun;
-mod ifs;

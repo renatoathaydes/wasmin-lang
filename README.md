@@ -178,22 +178,22 @@ Functions can return multiple values. A function that just returns 2 `f32` value
 
 ### If expressions
 
-Wasmin if expressions have one of these forms:
+Wasmin if expressions have the form:
 
-* `if condition then positive else negative;` (both branches must have the same type). 
-* `if condition then positive;` (the positive branch must have type `()`, i.e. no value).
-
-Notice that `then` terminates the condition expression, `else`, if used, terminates the positive expression, and
-`;` terminates the whole `if` expression.
+* `if condition then positive else negative` (both branches must have the same type).
 
 Booleans, as with WASM, are of type `i32` and only `0` is considered `false`.
+
+The `condition` expression must be of type `i32` (but used as boolean).
+
+The `else` branch is mandatory, but can be an empty expression like `{}` or `()`.
 
 Examples:
 
 ```rust
 fun greater_than_10 n: [i32](i32) = if n, gt_s 10 then 1 else 0;
 
-fun print_if_gt_10 n: [i32]() = if n, greater_than_10 then print n;
+fun print_if_gt_10 n: [i32]() = if n, greater_than_10 then print n else {}
 ```
 
 ### Loops
