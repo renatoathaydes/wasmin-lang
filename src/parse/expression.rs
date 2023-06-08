@@ -37,7 +37,9 @@ impl<'s> Parser<'s> {
 
     fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, multiple: bool) -> Expression {
         let mut expressions = Vec::new();
+        let mut done = false;
         while let Some(token) = self.lexer.next() {
+            if done { break; }
             let expr = match token {
                 Token::Str(.., string) => self.ast.new_string(&string, vec![]),
                 Token::Id(.., name) => self.ast.new_local(&name, Type::I32, vec![]),
@@ -59,6 +61,8 @@ impl<'s> Parser<'s> {
                 }
                 Token::OpenCurly(_) => {
                     nesting.push(Nesting::Curly);
+                    // curly braces end an expression eagerly
+                    done = true;
                     self.enter_scope();
                     self.parse_expr_nesting(nesting, true)
                 }
@@ -210,6 +214,20 @@ mod tests {
             ast.new_local("x", I32, vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("let x = 23, x", ast);
+        assert_eq!(parser.parse_expr(), group);
+    }
+
+    #[test]
+    fn test_parse_let_expr_curly_delimited() {
+        let mut ast = AST::new();
+        let one = ast.new_number(Numeric::I32(23), vec![]);
+        let let_expr = AST::new_let(
+            ast.new_assignment("x", None, one), vec![]);
+        let group = AST::new_group(vec![
+            let_expr,
+            ast.new_local("x", I32, vec![]),
+        ], vec![]);
+        let mut parser = Parser::new_with_ast(" { let x =  23, x } ", ast);
         assert_eq!(parser.parse_expr(), group);
     }
 

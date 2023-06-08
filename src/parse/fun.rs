@@ -155,7 +155,6 @@ mod tests {
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         // FIXME the function takes the type of its implementation expression regardless of arguments
         let fun = ast.new_fun("example", vec!["a".into()], body, ExprType::new(vec![], vec![I64]));
-        let assignment = ast.new_assignment("a", None, expr);
         let mut parser = Parser::new_with_ast("fun example a\n   =  10i64", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
     }
@@ -166,7 +165,6 @@ mod tests {
         let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
         let fun = ast.new_fun("x", vec![], body, ExprType::outs(vec![I32]));
-        let assignment = ast.new_assignment("x", None, expr);
         let mut parser = Parser::new_with_ast("fun x: [](i32) = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
     }
@@ -177,7 +175,6 @@ mod tests {
         let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         let fun = ast.new_fun("factorial", vec!["n".into()], body, ExprType::new(vec![I32], vec![I64]));
-        let assignment = ast.new_assignment("x", None, expr);
         let mut parser = Parser::new_with_ast("fun factorial n: [i32](i64) = 10i64", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
     }
@@ -189,9 +186,22 @@ mod tests {
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         let fun = ast.new_fun("foo", vec!["abc".into(), "def".into()], body,
                               ExprType::new(vec![I32, I64], vec![F32, F64, F32]));
-        let assignment = ast.new_assignment("x", None, expr);
         // FIXME no type checking is done yet
         let mut parser = Parser::new_with_ast("fun foo abc def: [ i32 i64 ] (f32 f64 f32) = 10i64", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+    }
+
+    #[test]
+    fn test_parse_fun_typed_2_2_curly_delimited() {
+        let mut ast = AST::new();
+        let body = AST::new_group(vec![
+            ast.new_number(Numeric::F32(1.0), vec![]),
+            ast.new_number(Numeric::F64(2.0), vec![]),
+        ], vec![]);
+        let fun = ast.new_fun("foo", vec!["abc".into(), "def".into()], body,
+                              ExprType::new(vec![I32, I64], vec![F32, F64]));
+        let mut parser = Parser::new_with_ast(
+            "fun foo abc def: [ i32 i64 ] (f32 f64) = {1.0, 2.0f64} , ignored", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
     }
 }
