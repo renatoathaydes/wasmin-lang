@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 
-use crate::ast::{AST, Expression, Group, Type};
+use crate::ast::{AST, Expression, Type};
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
@@ -77,21 +77,17 @@ impl<'s> Parser<'s> {
             push_flattened_into(&mut expressions, expr);
             if !multiple { break; }
         }
-        if expressions.is_empty() {
-            AST::empty()
-        } else if expressions.len() == 1 {
-            expressions.remove(0)
-        } else {
-            AST::new_group(expressions, vec![])
-        }
+        collapse_expressions(expressions)
     }
 
     fn parse_let_expr(&mut self, pos: Position) -> Expression {
         match self.parse_defs(pos) {
             Ok(vars) => {
                 let mut nesting = Vec::new();
-                let expr = self.parse_expr_nesting(&mut nesting, false);
-                let assignment = self.ast.new_assignments(vars, expr);
+                let expressions: Vec<_> = (0..vars.len()).map(|_| {
+                    self.parse_expr_nesting(&mut nesting, false)
+                }).collect();
+                let assignment = self.ast.new_assignments(vars, collapse_expressions(expressions));
                 let scope = self.scope.last_mut().expect("there must be a scope");
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
@@ -103,6 +99,16 @@ impl<'s> Parser<'s> {
                 Expression::ExprError(err, vec![])
             }
         }
+    }
+}
+
+fn collapse_expressions(mut expressions: Vec<Expression>) -> Expression {
+    if expressions.is_empty() {
+        AST::empty()
+    } else if expressions.len() == 1 {
+        expressions.remove(0)
+    } else {
+        AST::new_group(expressions, vec![])
     }
 }
 
@@ -130,7 +136,7 @@ fn close_expr_with(
 
 fn push_flattened_into(expressions: &mut Vec<Expression>, expr: Expression) {
     match expr {
-        Expression::Group(Group { mut exprs, .. }) => {
+        Expression::Group { mut exprs, .. } => {
             expressions.append(&mut exprs);
         }
         _ => expressions.push(expr),
@@ -205,5 +211,28 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast("let x = 23, x", ast);
         assert_eq!(parser.parse_expr(), group);
+    }
+
+    #[test]
+    fn test_parse_let_expr_multi_values() {
+        let mut ast = AST::new();
+        let expr = AST::new_group(vec![
+            ast.new_number(Numeric::I32(2), vec![]),
+            ast.new_number(Numeric::I32(3), vec![]),
+        ], vec![]);
+        let let_expr = AST::new_let(
+            ast.new_assignments(vec![
+                ("x".to_owned(), None),
+                ("y".to_owned(), None),
+            ], expr), vec![]);
+        let mut parser = Parser::new_with_ast("let x, y = 2, 3;", ast);
+        assert_eq!(parser.parse_expr(), let_expr);
+
+        let scope = parser.scope.pop();
+        assert!(scope.is_some());
+        let scope = scope.unwrap();
+        assert_eq!(scope.get(&parser.ast.intern("x")), Some(&I32));
+        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&I32));
+        assert_eq!(scope.get(&parser.ast.intern("z")), None);
     }
 }

@@ -32,7 +32,7 @@ impl<'s> Parser<'s> {
         while let Some(token) = self.lexer.next() {
             if after_id {
                 match token {
-                    Token::Comma(_) => { todo!() }
+                    Token::Comma(_) => after_id = false,
                     Token::Colon(pos) => {
                         if vars.is_empty() {
                             return Err(WasminError::SyntaxError {
@@ -117,5 +117,24 @@ mod tests {
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
             Visibility::Public, None, vec![])))
+    }
+
+    #[test]
+    fn test_parse_let_multiple() {
+        let mut ast = AST::new();
+        let expr = AST::new_group(vec![
+            ast.new_number(Numeric::I32(1), vec![]),
+            ast.new_number(Numeric::I32(2), vec![]),
+            ast.new_number(Numeric::I32(3), vec![]),
+        ], vec![]);
+        let assignment = ast.new_assignments(vec![
+            ("x".to_owned(), None),
+            ("y".to_owned(), None),
+            ("z".to_owned(), None),
+        ], expr);
+        let mut parser = Parser::new_with_ast("let x, y, z = 1, 2 , 3", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
+            assignment,
+            Visibility::Private, None, vec![])))
     }
 }

@@ -46,6 +46,7 @@ pub struct Assignment {
 }
 
 impl Assignment {
+
     pub fn get_types(&self) -> Vec<(Def, Type)> {
         let mut result = Vec::with_capacity(self.vars.len());
         let expr_types = &self.expr.get_type().outs;
@@ -58,6 +59,7 @@ impl Assignment {
         }
         result
     }
+
 }
 
 /// Reassignment is an [`Assignment`] of one or more mutable variables.
@@ -113,7 +115,11 @@ pub enum Expression {
         warnings: Vec<Warning>,
     },
     Br(Break, ExprType, Vec<Warning>),
-    Group(Group),
+    Group {
+        exprs: Vec<Expression>,
+        typ: ExprType,
+        warnings: Vec<Warning>,
+    },
     FunCall {
         name: InternedStr,
         typ: ExprType,
@@ -122,13 +128,6 @@ pub enum Expression {
         warnings: Vec<Warning>,
     },
     ExprError(WasminError, Vec<Warning>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Group {
-    pub exprs: Vec<Expression>,
-    typ: ExprType,
-    warnings: Vec<Warning>,
 }
 
 /// Function defines a function implementation as a tuple with the following contents:
@@ -219,7 +218,7 @@ impl Expression {
             Expression::Loop { typ, .. } |
             Expression::Br(_, typ, _) |
             Expression::FunCall { typ, .. } |
-            Expression::Group(Group { typ, .. }) => typ,
+            Expression::Group { typ, .. } => typ,
             Expression::If { yes, .. } => yes.get_type(),
         }
     }
@@ -332,7 +331,7 @@ impl AST {
             merge_types(types)
         };
         err.drain(..).for_each(|e| warnings.push(e));
-        Expression::Group(Group { exprs, typ, warnings })
+        Expression::Group { exprs, typ, warnings }
     }
 
     fn new_def(&mut self, name: &str, target_type: Option<Type>) -> Def {
