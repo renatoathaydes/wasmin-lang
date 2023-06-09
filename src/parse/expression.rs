@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, format, Formatter};
 
 use crate::ast::{AST, Expression, Type};
 use crate::errors::WasminError;
@@ -94,7 +94,7 @@ impl<'s> Parser<'s> {
                 Token::Comma(..) => continue,
                 Token::SemiColon(..) => break,
                 _ => AST::new_error(WasminError::UnsupportedFeatureError {
-                    cause: "expression not supported yet".into(),
+                    cause: format!("token not supported in expressions yet: {}", token),
                     pos: token.pos(),
                 }, vec![]),
             };
