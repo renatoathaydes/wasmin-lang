@@ -55,7 +55,11 @@ impl<'s> Parser<'s> {
             if state == State::Terminated { break; }
             let expr = match token {
                 Token::Str(.., string) => self.ast.new_string(&string, vec![]),
-                Token::Id(.., name) => self.ast.new_local(&name, Type::I32, vec![]),
+                Token::Id(pos, name) => {
+                    let interned_name = self.ast.intern(&name);
+                    let typ = self.lookup_type(&interned_name, pos);
+                    self.ast.new_local(&name, typ, vec![])
+                }
                 Token::Number(.., value) => self.ast.new_number(value, vec![]),
                 Token::Let(pos) => self.parse_let_expr(pos),
                 Token::Error(pos, err) => AST::new_error(WasminError::SyntaxError {
@@ -311,21 +315,21 @@ mod tests {
         let mut ast = AST::new();
         let expr = AST::new_group(vec![
             ast.new_number(Numeric::I32(2), vec![]),
-            ast.new_number(Numeric::I32(3), vec![]),
+            ast.new_number(Numeric::F32(3.14), vec![]),
         ], vec![]);
         let let_expr = AST::new_let(
             ast.new_assignments(vec![
                 ("x".to_owned(), None),
                 ("y".to_owned(), None),
             ], expr), vec![]);
-        let mut parser = Parser::new_with_ast("let x, y = 2, 3;", ast);
+        let mut parser = Parser::new_with_ast("let x, y = 2, 3.14;", ast);
         assert_eq!(parser.parse_expr(), let_expr);
 
         let scope = parser.scope.pop();
         assert!(scope.is_some());
         let scope = scope.unwrap();
         assert_eq!(scope.get(&parser.ast.intern("x")), Some(&I32));
-        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&I32));
+        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&F32));
         assert_eq!(scope.get(&parser.ast.intern("z")), None);
     }
 

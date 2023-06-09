@@ -59,5 +59,17 @@ impl<'s> Parser<'s> {
             None
         }
     }
+
+    pub(crate) fn lookup_type(&self, name: &InternedStr, pos: Position) -> Type {
+        let typ = self.scope.last().expect("scope stack must not be empty").get(name);
+        let name_string = self.ast.interned_str(name);
+        match typ {
+            None => Type::Error(WasminError::TypeError {
+                cause: format!("no identifier '{}' could be find in this scope", name_string),
+                pos,
+            }),
+            Some(t) => t.clone()
+        }
+    }
 }
 
