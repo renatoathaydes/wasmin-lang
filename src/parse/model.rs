@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter};
 
+use crate::ast::Type;
+
 pub type Position = usize;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -8,6 +10,17 @@ pub enum Numeric {
     I64(i64),
     F32(f32),
     F64(f64),
+}
+
+impl Numeric {
+    pub fn get_type(&self) -> Type {
+        match self {
+            Numeric::I32(_) => Type::I32,
+            Numeric::I64(_) => Type::I64,
+            Numeric::F32(_) => Type::F32,
+            Numeric::F64(_) => Type::F64,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

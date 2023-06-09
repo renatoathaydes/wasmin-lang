@@ -58,9 +58,13 @@ impl<'s> Parser<'s> {
                 Token::Id(pos, name) => {
                     let interned_name = self.ast.intern(&name);
                     let typ = self.lookup_type(&interned_name, pos);
+                    self.stack.push(typ.clone());
                     self.ast.new_local(&name, typ, vec![])
                 }
-                Token::Number(.., value) => self.ast.new_number(value, vec![]),
+                Token::Number(.., value) => {
+                    self.stack.push(value.get_type());
+                    self.ast.new_number(value, vec![])
+                }
                 Token::Let(pos) => self.parse_let_expr(pos),
                 Token::Error(pos, err) => AST::new_error(WasminError::SyntaxError {
                     cause: err,
@@ -119,6 +123,7 @@ impl<'s> Parser<'s> {
                 let scope = self.scope.last_mut().expect("there must be a scope");
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
+                    let _ = self.stack.pop();
                     scope.insert(var.name, typ);
                 }
                 Expression::Let(assignment, vec![])
@@ -140,6 +145,7 @@ impl<'s> Parser<'s> {
         // TODO typecheck
         let mut nesting = Vec::new();
         let cond = self.parse_expr_nesting(&mut nesting, State::Single);
+        let _ = self.stack.pop();
         self.next_token_must_be(is_then, "then")?;
         self.enter_scope();
         let yes = self.parse_expr_nesting(&mut nesting, State::Single);
@@ -147,6 +153,7 @@ impl<'s> Parser<'s> {
         self.next_token_must_be(is_else, "else")?;
         self.enter_scope();
         let no = self.parse_expr_nesting(&mut nesting, State::Single);
+        let _ = self.stack.pop();
         self.enter_scope();
         Ok(AST::new_if(cond, yes, no, vec![]))
     }
@@ -245,6 +252,7 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast("1, 2i64;", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32, I64]);
     }
 
     #[test]
@@ -256,6 +264,7 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast("(1) (2i64);", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32, I64]);
     }
 
     #[test]
@@ -268,6 +277,7 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast("(1)( 2, 3 )  ;", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32, I32, I32]);
     }
 
     #[test]
@@ -280,20 +290,22 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast("{ (1 (2, (3))) }", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32, I32, I32]);
     }
 
     #[test]
     fn test_parse_let_expr_single() {
         let mut ast = AST::new();
-        let one = ast.new_number(Numeric::I32(23), vec![]);
+        let num = ast.new_number(Numeric::I32(23), vec![]);
         let let_expr = AST::new_let(
-            ast.new_assignment("x", None, one), vec![]);
+            ast.new_assignment("x", None, num), vec![]);
         let group = AST::new_group(vec![
             let_expr,
             ast.new_local("x", I32, vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("let x = 23, x", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32]);
     }
 
     #[test]
@@ -308,6 +320,7 @@ mod tests {
         ], vec![]);
         let mut parser = Parser::new_with_ast(" { let x =  23, x } ", ast);
         assert_eq!(parser.parse_expr(), group);
+        assert_eq!(parser.stack, vec![I32]);
     }
 
     #[test]
@@ -324,6 +337,7 @@ mod tests {
             ], expr), vec![]);
         let mut parser = Parser::new_with_ast("let x, y = 2, 3.14;", ast);
         assert_eq!(parser.parse_expr(), let_expr);
+        assert_eq!(parser.stack, vec![]);
 
         let scope = parser.scope.pop();
         assert!(scope.is_some());
@@ -342,5 +356,6 @@ mod tests {
                                   vec![]);
         let mut parser = Parser::new_with_ast("if 1 then 2 else 3;", ast);
         assert_eq!(parser.parse_expr(), if_expr);
+        assert_eq!(parser.stack, vec![I32]);
     }
 }
