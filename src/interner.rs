@@ -6,7 +6,7 @@ pub struct Interner {
     buckets: [Vec<String>; 1024],
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash, Eq)]
 pub struct InternedStr {
     bucket_index: usize,
     str_index: usize,

@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, format, Formatter};
 
-use crate::ast::{AST, Expression, Type};
+use crate::ast::{AST, Expression, ExprType, FunKind, IdKind, Type};
+use crate::ast::Expression::ExprError;
 use crate::errors::WasminError;
+use crate::interner::InternedStr;
 use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
 
@@ -31,8 +33,8 @@ pub(crate) enum State {
     Any,
     /// parsing a single-group expression
     Single,
-    /// full expression terminated
-    Terminated,
+    /// parsing a function call
+    FunCall(Position, InternedStr),
 }
 
 impl<'s> Parser<'s> {
@@ -51,15 +53,22 @@ impl<'s> Parser<'s> {
 
     pub(crate) fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, mut state: State) -> Expression {
         let mut expressions = Vec::new();
+        let mut terminate = false;
         while let Some(token) = self.lexer.next() {
-            if state == State::Terminated { break; }
+            if terminate { break; }
             let expr = match token {
                 Token::Str(.., string) => self.ast.new_string(&string, vec![]),
                 Token::Id(pos, name) => {
                     let interned_name = self.ast.intern(&name);
-                    let typ = self.lookup_type(&interned_name, pos);
-                    self.stack.push(typ.clone());
-                    self.ast.new_local(&name, typ, vec![])
+                    let kind = self.lookup_id_kind(&name, &interned_name, pos);
+                    match kind {
+                        Ok(IdKind::Fun) => self.parse_expr_nesting(nesting, State::FunCall(pos, interned_name)),
+                        Ok(IdKind::Var(typ)) => {
+                            self.stack.push(typ.clone());
+                            self.ast.new_local(&name, typ, vec![])
+                        }
+                        Err(err) => err.into(),
+                    }
                 }
                 Token::Number(.., value) => {
                     self.stack.push(value.get_type());
@@ -83,7 +92,7 @@ impl<'s> Parser<'s> {
                 Token::OpenCurly(_) => {
                     nesting.push(Nesting::Curly);
                     // curly braces end an expression eagerly
-                    state = State::Terminated;
+                    terminate = true;
                     self.enter_scope();
                     self.parse_expr_nesting(nesting, State::Any)
                 }
@@ -99,7 +108,7 @@ impl<'s> Parser<'s> {
                         pos,
                     }, vec![])
                 }
-                Token::Comma(..) => continue,
+                Token::Comma(..) => if let State::FunCall(..) = state { break; } else { continue; },
                 Token::SemiColon(..) => break,
                 _ => AST::new_error(WasminError::UnsupportedFeatureError {
                     cause: format!("token not supported in expressions yet: {}", token),
@@ -109,7 +118,12 @@ impl<'s> Parser<'s> {
             push_flattened_into(&mut expressions, expr);
             if state == State::Single { break; }
         }
-        collapse_expressions(expressions)
+        let result = collapse_expressions(expressions);
+        if let State::FunCall(pos, name) = state {
+            self.create_fun_call(name, pos, result)
+        } else {
+            result
+        }
     }
 
     fn parse_let_expr(&mut self, pos: Position) -> Expression {
@@ -176,6 +190,32 @@ impl<'s> Parser<'s> {
             })
         }
     }
+
+    fn create_fun_call(&mut self, interned_name: InternedStr, pos: Position, args: Expression) -> Expression {
+        // FIXME type check... without typechecking we just need to push the fn call on the stack
+        // let required_args = typ.ins.len();
+        // let provided_type = args.get_type();
+        // let given_args = provided_type.outs.len() - provided_type.ins.len();
+        // if required_args > given_args { // need to take args from the stack
+        //
+        // }
+        let name = self.ast.interned_str(&interned_name);
+        if let Some(mut types) = self.lookup_fun_types(name, &interned_name) {
+            // the type with the longest list of arguments should win
+            types.sort_by(|(a, _), (b, _)| b.ins.len().cmp(&a.ins.len()));
+            if let Some((best_type, kind)) = self.find_closest_type_match(&types, args) {
+                self.ast.new_fun_call(interned_name, best_type, kind, vec![])
+            } else {
+                ExprError(WasminError::TypeError {
+                    cause: format!("function {} cannot be called with the arguments provided",
+                                   name),
+                    pos,
+                }, vec![])
+            }
+        } else {
+            ExprError(WasminError::TypeError { cause: format!("function {} does not exist", name), pos }, vec![])
+        }
+    }
 }
 
 fn collapse_expressions(mut expressions: Vec<Expression>) -> Expression {
@@ -238,6 +278,7 @@ mod tests {
     use crate::ast::{Constant, ExprType};
     use crate::ast::Expression::Const;
     use crate::ast::Visibility::{Private, Public};
+    use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
 
     use super::*;
@@ -358,4 +399,18 @@ mod tests {
         assert_eq!(parser.parse_expr(), if_expr);
         assert_eq!(parser.stack, vec![I32]);
     }
+
+    // #[test]
+    // fn test_parse_basic_fun_call() {
+    //     let mut ast = AST::new();
+    //     let fun_call = AST::new_fun_call("my-fun",
+    //                                      vec![ast.new_number(Numeric::I32(1), vec![])],
+    //                                      vec![]);
+    //     let mut scope = HashMap::<InternedStr, Type>::new();
+    //     scope.insert(ast.intern("my-fun"), Fn(ExprType::new(vec![I32], vec![I32])));
+    //     let mut parser = Parser::new_with_ast("my-fun 1", ast);
+    //     parser.scope.push(scope);
+    //     assert_eq!(parser.parse_expr(), fun_call);
+    //     assert_eq!(parser.stack, vec![I32]);
+    // }
 }

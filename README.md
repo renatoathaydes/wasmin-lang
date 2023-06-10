@@ -75,8 +75,8 @@ A function is declared similarly, but using `fun`, and can take arguments:
 fun square a = mul a a;
 ```
 
-As you can see above, function application has the form `function arg1 arg2...`, but it's also possible to use
-concatenative style, as we'll see.
+As shown above, a function call has the form `function arg1 arg2...`, but it's also possible to use
+concatenative style, as we'll see later.
 
 Function types can be explicitly declared and have the form
 `fun name arg...: [argType...](returnType...)`.
@@ -115,14 +115,18 @@ The body of the function above is identical, semantically, to the previous imple
 > Concatenative expressions may not take values from the stack unless they're pushed within the same expression. This
 > allows Wasmin to remain type-safe.
 
-Function calls may take explicit arguments AND use values from the stack if it expects more arguments than provided.
-Hence, the above function can also be written as:
+A function call may take explicit arguments, but it can also take values from the stack if it expects more arguments
+than provided. In the latter case, the necessary stack values are used as the first arguments to the function, and
+any explicit arguments are used as the last arguments.
+
+The `square` function seen previously can also be written as:
 
 ```rust
 fun square a = a, mul a;
 ```
 
-The above notation looks like infix notation, so is typically used where infix notation is desired, like in mathematical operations.
+> The above notation looks like infix notation, so is typically used where infix notation is desired, like in
+> mathematical operations.
 
 Instead of using `,` to separate values, Wasmin also allows using parenthesis, which means that yet another way to write
 the above expression is this:

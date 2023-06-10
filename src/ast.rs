@@ -23,8 +23,13 @@ pub enum Type {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct ExprType {
-    ins: Vec<Type>,
-    outs: Vec<Type>,
+    pub ins: Vec<Type>,
+    pub outs: Vec<Type>,
+}
+
+pub enum IdKind {
+    Var(Type),
+    Fun,
 }
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
@@ -89,6 +94,12 @@ pub enum Constant {
     Number(Numeric),
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum FunKind {
+    Wasm,
+    Local { args_count: usize },
+}
+
 /// Expression is the basic unit of Wasmin code.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -121,8 +132,7 @@ pub enum Expression {
     FunCall {
         name: InternedStr,
         typ: ExprType,
-        fun_index: usize,
-        is_wasm_fun: bool,
+        kind: FunKind,
         warnings: Vec<Warning>,
     },
     ExprError(WasminError, Vec<Warning>),
@@ -302,6 +312,10 @@ impl AST {
         let no = Box::new(no);
         let typ = yes.get_type().clone();
         Expression::If { cond, yes, no, typ, warnings }
+    }
+
+    pub fn new_fun_call(&mut self, name: InternedStr, typ: ExprType, kind: FunKind, warnings: Vec<Warning>) -> Expression {
+        Expression::FunCall { name, typ, kind, warnings }
     }
 
     pub fn new_string(&mut self, value: &str, w: Vec<Warning>) -> Expression {

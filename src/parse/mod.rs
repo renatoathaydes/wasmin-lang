@@ -6,3 +6,4 @@ mod types;
 mod expression;
 mod lets;
 mod fun;
+mod type_check;
