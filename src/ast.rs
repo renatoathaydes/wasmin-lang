@@ -16,7 +16,7 @@ pub enum Type {
     F32,
     String,
     Empty,
-    Fn(ExprType),
+    FunType(ExprType),
     Custom(InternedStr),
     Error(WasminError),
 }
@@ -97,7 +97,7 @@ pub enum Constant {
 #[derive(Debug, PartialEq, Clone)]
 pub enum FunKind {
     Wasm,
-    Local { args_count: usize },
+    Custom,
 }
 
 /// Expression is the basic unit of Wasmin code.
@@ -145,10 +145,10 @@ pub enum Expression {
 /// * function type
 #[derive(Debug, PartialEq, Clone)]
 pub struct Function {
-    name: InternedStr,
-    arg_names: Vec<InternedStr>,
-    body: Expression,
-    target_type: ExprType,
+    pub name: InternedStr,
+    pub arg_names: Vec<InternedStr>,
+    pub body: Expression,
+    pub typ: ExprType,
 }
 
 /// Visibility determines the level of visibility of a Wasmin program element.
@@ -269,7 +269,7 @@ impl AST {
             Type::F32 => "f32".to_owned(),
             Type::String => "string".to_owned(),
             Type::Empty => "()".to_owned(),
-            Type::Fn(e) => {
+            Type::FunType(e) => {
                 let mut result = String::with_capacity(32);
                 result.push('[');
                 self.build_type_string(&e.ins, &mut result);
@@ -403,7 +403,7 @@ impl AST {
     }
 
     pub fn new_fun(&mut self, name: &str, mut args: Vec<String>,
-                   body: Expression, target_type: ExprType) -> Function {
+                   body: Expression, typ: ExprType) -> Function {
         let arg_names: Vec<InternedStr> = args.drain(..)
             .map(|a| self.intern(&a))
             .collect();
@@ -412,7 +412,7 @@ impl AST {
             name: self.intern(name),
             arg_names,
             body,
-            target_type,
+            typ,
         }
     }
 }

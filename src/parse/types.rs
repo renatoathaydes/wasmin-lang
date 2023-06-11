@@ -30,8 +30,8 @@ impl<'s> Parser<'s> {
         if let Some(token) = self.lexer.next() {
             match token {
                 OpenParens(pos) => {
-                    let (outs, pos) = self.parse_types_until(')', pos)?;
-                    Ok(Type::Fn(ExprType::new(ins, outs)))
+                    let (outs, _) = self.parse_types_until(')', pos)?;
+                    Ok(Type::FunType(ExprType::new(ins, outs)))
                 }
                 _ => Err(WasminError::SyntaxError {
                     pos,
@@ -116,7 +116,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[i32]()", ast);
 
-        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![I32], vec![])));
+        assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![I32], vec![])));
         Ok(())
     }
 
@@ -125,7 +125,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[ ] ( )", ast);
 
-        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![], vec![])));
+        assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![], vec![])));
         Ok(())
     }
 
@@ -134,7 +134,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[i64](f32)", ast);
 
-        assert_eq!(parser.parse_type(0)?, Fn(ExprType::new(vec![I64], vec![F32])));
+        assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![I64], vec![F32])));
         Ok(())
     }
 
@@ -143,7 +143,7 @@ mod tests {
         let mut ast = AST::new();
         let mut parser = Parser::new_with_ast("[](f64)", ast);
 
-        assert_eq!(parser.parse_type(0)?, Fn(ExprType::outs(vec![F64])));
+        assert_eq!(parser.parse_type(0)?, FunType(ExprType::outs(vec![F64])));
         Ok(())
     }
 
@@ -153,7 +153,7 @@ mod tests {
         let mut parser = Parser::new_with_ast("[i32 i64](f32 f64 f32)", ast);
 
         assert_eq!(parser.parse_type(0)?,
-                   Fn(ExprType::new(vec![I32, I64], vec![F32, F64, F32])));
+                   FunType(ExprType::new(vec![I32, I64], vec![F32, F64, F32])));
         Ok(())
     }
 
@@ -167,7 +167,7 @@ mod tests {
         let mut parser = Parser::new_with_ast("  [ Int Float ] \n( Double ) ", ast);
 
         assert_eq!(parser.parse_type(0)?,
-                   Fn(ExprType::new(vec![Custom(int_str), Custom(float_str)], vec![Custom(double_str)])));
+                   FunType(ExprType::new(vec![Custom(int_str), Custom(float_str)], vec![Custom(double_str)])));
         Ok(())
     }
 }

@@ -3,5 +3,6 @@ pub mod errors;
 
 mod parse;
 mod interner;
-pub mod ast;
 mod wasm;
+pub mod ast;
+pub mod compilation;

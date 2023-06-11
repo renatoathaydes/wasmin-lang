@@ -2,6 +2,7 @@ use std::fmt::format;
 use std::ops::Index;
 
 use crate::ast::{AST, Expression, Function, TopLevelElement, Type, Visibility, Warning};
+use crate::ast::Type::FunType;
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
@@ -80,7 +81,7 @@ impl<'s> Parser<'s> {
         let mut warnings: Vec<Warning> = Vec::new();
         let target_type = if let Some(target) = typ {
             match target {
-                Type::Fn(e) => Some(e),
+                FunType(e) => Some(e),
                 Type::Error(err) => {
                     warnings.push(format!("error in function type declaration: {}", err.cause()));
                     None
@@ -93,8 +94,9 @@ impl<'s> Parser<'s> {
                 }
             }
         } else { None };
-        let target_type = target_type.unwrap_or_else(|| body.get_type().clone());
-        let fun = self.ast.new_fun(&name, args, body, target_type);
+        let typ = target_type.unwrap_or_else(|| body.get_type().clone());
+        let fun = self.ast.new_fun(&name, args, body, typ.clone());
+        self.insert_type_in_scope(&fun.name, FunType(typ));
         TopLevelElement::Fun(fun, visibility, None, warnings)
     }
 }

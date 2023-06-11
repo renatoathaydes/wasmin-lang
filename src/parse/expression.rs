@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, format, Formatter};
 
 use crate::ast::{AST, Expression, ExprType, FunKind, IdKind, Type};
-use crate::ast::Expression::ExprError;
 use crate::errors::WasminError;
 use crate::interner::InternedStr;
 use crate::parse::model::{Position, Token};
@@ -43,14 +42,6 @@ impl<'s> Parser<'s> {
         self.parse_expr_nesting(&mut nesting, State::Any)
     }
 
-    fn enter_scope(&mut self) {
-        self.scope.push(HashMap::with_capacity(4));
-    }
-
-    fn exit_scope(&mut self) {
-        self.scope.pop();
-    }
-
     pub(crate) fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, mut state: State) -> Expression {
         let mut expressions = Vec::new();
         let mut terminate = false;
@@ -60,8 +51,7 @@ impl<'s> Parser<'s> {
                 Token::Str(.., string) => self.ast.new_string(&string, vec![]),
                 Token::Id(pos, name) => {
                     let interned_name = self.ast.intern(&name);
-                    let kind = self.lookup_id_kind(&name, &interned_name, pos);
-                    match kind {
+                    match self.lookup_id_kind(&name, &interned_name, pos) {
                         Ok(IdKind::Fun) => self.parse_expr_nesting(nesting, State::FunCall(pos, interned_name)),
                         Ok(IdKind::Var(typ)) => {
                             self.stack.push(typ.clone());
@@ -134,11 +124,10 @@ impl<'s> Parser<'s> {
                     self.parse_expr_nesting(&mut nesting, State::Single)
                 }).collect();
                 let assignment = self.ast.new_assignments(vars, collapse_expressions(expressions));
-                let scope = self.scope.last_mut().expect("there must be a scope");
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
                     let _ = self.stack.pop();
-                    scope.insert(var.name, typ);
+                    self.insert_type_in_scope(&var.name, typ);
                 }
                 Expression::Let(assignment, vec![])
             }
@@ -192,28 +181,25 @@ impl<'s> Parser<'s> {
     }
 
     fn create_fun_call(&mut self, interned_name: InternedStr, pos: Position, args: Expression) -> Expression {
-        // FIXME type check... without typechecking we just need to push the fn call on the stack
-        // let required_args = typ.ins.len();
-        // let provided_type = args.get_type();
-        // let given_args = provided_type.outs.len() - provided_type.ins.len();
-        // if required_args > given_args { // need to take args from the stack
-        //
-        // }
         let name = self.ast.interned_str(&interned_name);
         if let Some(mut types) = self.lookup_fun_types(name, &interned_name) {
             // the type with the longest list of arguments should win
             types.sort_by(|(a, _), (b, _)| b.ins.len().cmp(&a.ins.len()));
-            if let Some((best_type, kind)) = self.find_closest_type_match(&types, args) {
-                self.ast.new_fun_call(interned_name, best_type, kind, vec![])
+            if let Some((best_type, kind)) = self.find_closest_type_match(&types, &args) {
+                let call = self.ast.new_fun_call(interned_name, best_type, kind, vec![]);
+                AST::new_group(vec![args, call], vec![])
             } else {
-                ExprError(WasminError::TypeError {
+                Expression::ExprError(WasminError::TypeError {
                     cause: format!("function {} cannot be called with the arguments provided",
                                    name),
                     pos,
                 }, vec![])
             }
         } else {
-            ExprError(WasminError::TypeError { cause: format!("function {} does not exist", name), pos }, vec![])
+            Expression::ExprError(WasminError::TypeError {
+                cause: format!("function {} does not exist", name),
+                pos,
+            }, vec![])
         }
     }
 }
@@ -275,6 +261,8 @@ fn is_else(token: &Token) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::hash::Hash;
+
     use crate::ast::{Constant, ExprType};
     use crate::ast::Expression::Const;
     use crate::ast::Visibility::{Private, Public};
@@ -380,11 +368,9 @@ mod tests {
         assert_eq!(parser.parse_expr(), let_expr);
         assert_eq!(parser.stack, vec![]);
 
-        let scope = parser.scope.pop();
-        assert!(scope.is_some());
-        let scope = scope.unwrap();
-        assert_eq!(scope.get(&parser.ast.intern("x")), Some(&I32));
-        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&F32));
+        let scope = parser.current_scope().clone();
+        assert_eq!(scope.get(&parser.ast.intern("x")), Some(&HashSet::from([I32])));
+        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&HashSet::from([F32])));
         assert_eq!(scope.get(&parser.ast.intern("z")), None);
     }
 
@@ -400,17 +386,25 @@ mod tests {
         assert_eq!(parser.stack, vec![I32]);
     }
 
-    // #[test]
-    // fn test_parse_basic_fun_call() {
-    //     let mut ast = AST::new();
-    //     let fun_call = AST::new_fun_call("my-fun",
-    //                                      vec![ast.new_number(Numeric::I32(1), vec![])],
-    //                                      vec![]);
-    //     let mut scope = HashMap::<InternedStr, Type>::new();
-    //     scope.insert(ast.intern("my-fun"), Fn(ExprType::new(vec![I32], vec![I32])));
-    //     let mut parser = Parser::new_with_ast("my-fun 1", ast);
-    //     parser.scope.push(scope);
-    //     assert_eq!(parser.parse_expr(), fun_call);
-    //     assert_eq!(parser.stack, vec![I32]);
-    // }
+    #[test]
+    fn test_parse_basic_fun_call() {
+        let mut ast = AST::new();
+        let my_fun = ast.intern("my-fun");
+        let fun_call = ast.new_fun_call(my_fun,
+                                        ExprType::new(vec![I32], vec![I32]),
+                                        FunKind::Custom,
+                                        vec![]);
+        let fun_call_group = AST::new_group(vec![
+            ast.new_number(Numeric::I32(1), vec![]),
+            fun_call,
+        ], vec![]);
+        let mut parser = Parser::new_with_ast("my-fun 1;", ast);
+        parser.insert_type_in_scope(&my_fun,
+                                    FunType(ExprType::new(vec![I32], vec![I32])));
+        assert_eq!(parser.parse_expr(), fun_call_group);
+        assert_eq!(parser.stack, vec![I32]);
+        // nothing is left
+        assert_eq!(parser.parse_expr(), AST::empty());
+        assert_eq!(parser.parse_expr(), AST::empty());
+    }
 }

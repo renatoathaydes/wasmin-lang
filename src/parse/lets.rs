@@ -9,10 +9,9 @@ impl<'s> Parser<'s> {
             Ok(vars) => {
                 let expr = self.parse_expr();
                 let assignment = self.ast.new_assignments(vars, expr);
-                let scope = self.scope.last_mut().expect("there must be a root scope");
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
-                    scope.insert(var.name, typ);
+                    self.insert_type_in_scope(&var.name, typ);
                 }
                 // TODO parse comments
                 let comment = None;
