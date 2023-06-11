@@ -1,14 +1,11 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt::format;
-use std::iter::{empty, once};
+use std::collections::HashMap;
 
-use crate::ast::{Assignment, AST, Comment, Constant, Expression, ExprType, FunKind, IdKind, TopLevelElement, Type, Visibility};
+use crate::ast::{AST, Comment, ExprType, FunKind, IdKind, TopLevelElement, Type, Visibility};
 use crate::errors::WasminError;
-use crate::interner::{InternedStr, Interner};
+use crate::interner::InternedStr;
 use crate::parse::lex::Lexer;
 use crate::parse::model::{Position, Token};
-use crate::parse::model::Token::Id;
-use crate::parse::scope::{Scope, ScopeFun, ScopeItem};
+use crate::parse::scope::{Scope, ScopeItem};
 use crate::wasm::WASM;
 
 pub struct Parser<'s> {

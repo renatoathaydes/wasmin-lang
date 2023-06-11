@@ -1,6 +1,6 @@
 use crate::ast::{ExprType, Type};
 use crate::errors::WasminError;
-use crate::parse::model::{Position, Token, Token::*};
+use crate::parse::model::{Position, Token::*};
 use crate::parse::parse::Parser;
 
 impl<'s> Parser<'s> {

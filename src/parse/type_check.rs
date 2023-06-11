@@ -1,12 +1,6 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, format, Formatter};
 use std::ops::Deref;
 
-use crate::ast::{AST, Expression, ExprType, FunKind, IdKind, Type};
-use crate::ast::Expression::ExprError;
-use crate::errors::WasminError;
-use crate::interner::InternedStr;
-use crate::parse::model::{Position, Token};
+use crate::ast::{Expression, ExprType, FunKind};
 use crate::parse::parse::Parser;
 
 impl<'s> Parser<'s> {
@@ -44,14 +38,14 @@ impl<'s> Parser<'s> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Constant, ExprType};
+    use crate::ast::{AST, Constant, ExprType};
     use crate::ast::Expression::Const;
+    use crate::ast::Type::*;
     use crate::ast::Visibility::{Private, Public};
     use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
 
     use super::*;
-    use super::Type::*;
 
     #[test]
     fn test_fun_no_args() {

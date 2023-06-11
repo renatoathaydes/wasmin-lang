@@ -1,7 +1,4 @@
-use std::fmt::format;
-use std::ops::Index;
-
-use crate::ast::{AST, Expression, Function, TopLevelElement, Type, Visibility, Warning};
+use crate::ast::{Expression, TopLevelElement, Type, Visibility, Warning};
 use crate::ast::Type::FunType;
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
@@ -127,7 +124,7 @@ impl Into<TopLevelElement> for Result<TopLevelElement, WasminError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Constant, ExprType};
+    use crate::ast::{AST, Constant, ExprType, Function};
     use crate::ast::Visibility::{Private, Public};
     use crate::parse::model::Numeric;
     use crate::parse::model::Token::Pub;

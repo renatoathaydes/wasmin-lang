@@ -1,7 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, format, Formatter};
-
-use crate::ast::{AST, Expression, ExprType, FunKind, IdKind, Type};
+use crate::ast::{AST, Expression, IdKind};
 use crate::errors::WasminError;
 use crate::interner::InternedStr;
 use crate::parse::model::{Position, Token};
@@ -42,7 +39,7 @@ impl<'s> Parser<'s> {
         self.parse_expr_nesting(&mut nesting, State::Any)
     }
 
-    pub(crate) fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, mut state: State) -> Expression {
+    pub(crate) fn parse_expr_nesting(&mut self, nesting: &mut Vec<Nesting>, state: State) -> Expression {
         let mut expressions = Vec::new();
         let mut terminate = false;
         while let Some(token) = self.lexer.next() {
@@ -263,15 +260,15 @@ fn is_else(token: &Token) -> bool {
 mod tests {
     use std::hash::Hash;
 
-    use crate::ast::{Constant, ExprType};
+    use crate::ast::{Constant, ExprType, FunKind};
     use crate::ast::Expression::Const;
+    use crate::ast::Type::*;
     use crate::ast::Visibility::{Private, Public};
     use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
     use crate::parse::scope::ScopeItem;
 
     use super::*;
-    use super::Type::*;
 
     #[test]
     fn test_parse_numbers() {

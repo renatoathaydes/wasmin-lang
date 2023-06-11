@@ -19,7 +19,7 @@ pub(crate) fn number(text: &str, position: Position) -> Token {
 macro_rules! parse_number {
     ($text:expr, $pos:expr, $zero:expr, $one:expr, $adder:ident, $overflow_err:expr, $new:expr) => {{
         let mut result = $zero;
-        let mut iter = $text.chars().rev();
+        let iter = $text.chars().rev();
         let mut multiplier = $one;
         let mut overflow = false;
         let mut overflow_seen = false;

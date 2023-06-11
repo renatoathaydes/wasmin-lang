@@ -1,4 +1,4 @@
-use crate::ast::{ExprType, Type};
+use crate::ast::ExprType;
 use crate::ast::Type::*;
 
 pub struct WASM {

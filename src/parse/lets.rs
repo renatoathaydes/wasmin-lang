@@ -1,4 +1,4 @@
-use crate::ast::{AST, Expression, TopLevelElement, Type, Visibility};
+use crate::ast::{TopLevelElement, Type, Visibility};
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
@@ -80,6 +80,7 @@ impl<'s> Parser<'s> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::AST;
     use crate::parse::model::Numeric;
 
     use super::*;

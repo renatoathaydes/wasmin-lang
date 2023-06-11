@@ -1,9 +1,6 @@
 use std::cmp::min;
-use std::collections::VecDeque;
 use std::ops::Range;
-use std::path::Display;
 
-use crate::ast::Expression::Const;
 use crate::errors::WasminError;
 use crate::interner::{*};
 use crate::parse::model::{Numeric, Position};
@@ -190,7 +187,7 @@ fn merge_types(mut types: Vec<ExprType>) -> (ExprType, Vec<Warning>) {
     let mut outs: Vec<Type> = Vec::with_capacity(types.len());
     let mut errs: Vec<Warning> = Vec::new();
     for typ in types.iter_mut() {
-        let mut annihilate_len = min(typ.ins.len(), outs.len());
+        let annihilate_len = min(typ.ins.len(), outs.len());
         let pre_outs = outs.drain(end_range_of_len(annihilate_len, outs.len()));
         let cur_ins = typ.ins.drain(0..annihilate_len);
 
@@ -374,7 +371,7 @@ impl AST {
         }
     }
 
-    pub fn new_assignments(&mut self, mut vars: Vec<(String, Option<Type>)>, expr: Expression) -> Assignment {
+    pub fn new_assignments(&mut self, vars: Vec<(String, Option<Type>)>, expr: Expression) -> Assignment {
         // TODO typecheck the assignments
         let defs: Vec<_> = vars.into_iter()
             .map(|(n, t)| Def { name: self.intern(&n), target_type: t })
@@ -400,7 +397,7 @@ impl AST {
         }
     }
 
-    pub fn new_fun(&mut self, name: &str, mut args: Vec<String>,
+    pub fn new_fun(&mut self, name: &str, args: Vec<String>,
                    body: Expression, typ: ExprType) -> Function {
         let interned_name = self.intern(name);
         self.new_fun_interned(interned_name, args, body, typ)

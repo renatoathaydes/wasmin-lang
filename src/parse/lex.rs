@@ -1,5 +1,3 @@
-use std::str::Chars;
-
 use crate::parse::model::{Position, Token};
 use crate::parse::number::number;
 
@@ -20,7 +18,7 @@ impl<'s> Lexer<'s> {
     }
 
     pub fn next(&mut self) -> Option<Token> {
-        let mut iter = self.text[self.index..].chars();
+        let iter = self.text[self.index..].chars();
         let mut text_start = self.index;
         let mut whitespace = true;
         for c in iter {
@@ -67,8 +65,8 @@ impl<'s> Lexer<'s> {
     }
 
     fn string(&mut self) -> Option<Token> {
-        let mut iter = self.text[self.index..].chars();
-        let mut text_start = self.index;
+        let iter = self.text[self.index..].chars();
+        let text_start = self.index;
         let mut escape = false;
         let mut escape_indexes: Vec<usize> = vec![];
         for c in iter {
@@ -93,7 +91,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn take_to_end_of_line(&mut self) -> Option<Token> {
-        let mut iter = self.text[self.index..].chars();
+        let iter = self.text[self.index..].chars();
         let start = self.index;
         let mut is_eof = true;
         for c in iter {
