@@ -11,7 +11,7 @@ impl<'s> Parser<'s> {
                 let assignment = self.ast.new_assignments(vars, expr);
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
-                    self.insert_type_in_scope(&var.name, typ);
+                    self.insert_type_in_scope(var.name.clone(), typ);
                 }
                 // TODO parse comments
                 let comment = None;

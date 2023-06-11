@@ -7,9 +7,9 @@ use crate::errors::WasminError;
 use crate::interner::{InternedStr, Interner};
 use crate::parse::lex::Lexer;
 use crate::parse::model::{Position, Token};
+use crate::parse::model::Token::Id;
+use crate::parse::scope::{Scope, ScopeFun, ScopeItem};
 use crate::wasm::WASM;
-
-pub type Scope = HashMap<InternedStr, HashSet<Type>>;
 
 pub struct Parser<'s> {
     pub(crate) wasm: WASM,
@@ -17,7 +17,7 @@ pub struct Parser<'s> {
     pub(crate) ast: AST,
     pub(crate) comments: Vec<Comment>,
     pub(crate) stack: Vec<Type>,
-    scope: Vec<Scope>,
+    pub(crate) scope: Vec<Scope>,
 }
 
 impl<'s> Parser<'s> {
@@ -34,35 +34,6 @@ impl<'s> Parser<'s> {
             stack: vec![],
             scope: vec![HashMap::with_capacity(4)],
         }
-    }
-
-    pub(crate) fn current_scope(&self) -> &Scope {
-        self.scope.last().expect("there must be a root scope")
-    }
-
-    pub(crate) fn current_scope_mut(&mut self) -> &mut Scope {
-        self.scope.last_mut().expect("there must be a root scope")
-    }
-
-    pub(crate) fn insert_type_in_scope(&mut self, name: &InternedStr, typ: Type) {
-        if let Some(mut types) = self.current_scope_mut().get_mut(name) {
-            types.insert(typ);
-        } else {
-            let mut types = HashSet::with_capacity(2);
-            types.insert(typ);
-            self.current_scope_mut().insert(name.clone(), types);
-        }
-    }
-
-    pub(crate) fn enter_scope(&mut self) {
-        self.scope.push(HashMap::with_capacity(4));
-    }
-
-    pub(crate) fn exit_scope(&mut self) -> Scope {
-        if self.scope.len() < 2 {
-            panic!("Attempt to exit root scope")
-        }
-        self.scope.pop().unwrap()
     }
 
     pub fn parse_next(&mut self) -> Option<TopLevelElement> {
@@ -100,19 +71,15 @@ impl<'s> Parser<'s> {
         match self.wasm.lookup_wasm_fun_type(name) {
             Some(types) => Some(types.iter().map(|t| (t, FunKind::Wasm)).collect()),
             None => {
-                let types = self.current_scope().get(interned_name);
-                match types {
+                let items = self.lookup_in_scope(interned_name);
+                match items {
                     None => None,
-                    Some(typ) => {
-                        let fun_types: Vec<_> = typ.iter().filter(|t| match t {
-                            Type::FunType(_) => true,
-                            _ => false,
-                        }).map(|t| match t {
-                            Type::FunType(expr) => (expr, FunKind::Custom),
-                            _ => panic!("")
-                        }).collect();
-                        Some(fun_types)
+                    Some(ScopeItem::Fun(items)) => {
+                        Some(items.iter().map(|s|
+                            (&s.typ, FunKind::Custom { fun_index: s.fun_index })
+                        ).collect())
                     }
+                    Some(_) => None,
                 }
             }
         }
@@ -123,19 +90,14 @@ impl<'s> Parser<'s> {
         match self.wasm.lookup_wasm_fun_type(name) {
             Some(_) => Ok(IdKind::Fun),
             None => {
-                let typ = self.current_scope().get(interned_name);
+                let typ = self.lookup_in_scope(interned_name);
                 match typ {
                     None => Err(WasminError::TypeError {
                         cause: format!("no identifier '{}' could be find in this scope", name),
                         pos,
                     }),
-                    Some(types) => {
-                        let t = types.iter().next().expect("type Set must not be empty");
-                        match t {
-                            Type::FunType(_) => Ok(IdKind::Fun),
-                            _ => Ok(IdKind::Var(t.clone()))
-                        }
-                    }
+                    Some(ScopeItem::Variable(t)) => Ok(IdKind::Var(t.clone())),
+                    Some(ScopeItem::Fun(..)) => Ok(IdKind::Fun),
                 }
             }
         }

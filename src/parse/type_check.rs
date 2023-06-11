@@ -58,12 +58,12 @@ mod tests {
         let mut ast = AST::new();
         let typ = ExprType::ins(vec![]);
         let fun_types = vec![
-            (&typ, FunKind::Custom)
+            (&typ, FunKind::Custom { fun_index: 0 })
         ];
         let args = Expression::Empty(vec![]);
         let mut parser = Parser::new_with_ast("", ast);
         assert_eq!(parser.find_closest_type_match(&fun_types, &args),
-                   Some((typ.clone(), FunKind::Custom)));
+                   Some((typ.clone(), FunKind::Custom { fun_index: 0 })));
     }
 
     #[test]
@@ -100,13 +100,13 @@ mod tests {
         let mut ast = AST::new();
         let typ = ExprType::ins(vec![I32, F64]);
         let fun_types = vec![
-            (&typ, FunKind::Custom),
+            (&typ, FunKind::Custom { fun_index: 1 }),
         ];
         let args = ast.new_number(Numeric::F64(1.0), vec![]);
         let mut parser = Parser::new_with_ast("", ast);
         parser.stack.push(I32);
         assert_eq!(parser.find_closest_type_match(&fun_types, &args),
-                   Some((typ.clone(), FunKind::Custom)));
+                   Some((typ.clone(), FunKind::Custom { fun_index: 1 })));
     }
 
     #[test]
@@ -114,12 +114,12 @@ mod tests {
         let mut ast = AST::new();
         let typ = ExprType::ins(vec![I32, F64]);
         let fun_types = vec![
-            (&typ, FunKind::Custom),
+            (&typ, FunKind::Custom { fun_index: 2 }),
         ];
         let mut parser = Parser::new_with_ast("", ast);
         parser.stack.push(I32);
         parser.stack.push(F64);
         assert_eq!(parser.find_closest_type_match(&fun_types, &AST::empty()),
-                   Some((typ.clone(), FunKind::Custom)));
+                   Some((typ.clone(), FunKind::Custom { fun_index: 2 })));
     }
 }

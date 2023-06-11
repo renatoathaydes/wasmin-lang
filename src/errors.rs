@@ -22,6 +22,8 @@ pub enum WasminError {
     /// Wasmin program contains a type error.
     TypeError { cause: String, pos: Position },
 
+    DuplicateDeclaration { cause: String, pos: Position, other: Position },
+
     /// Wasmin program is using an unsupported feature.
     UnsupportedFeatureError { cause: String, pos: Position },
 }
@@ -31,6 +33,7 @@ impl WasminError {
         match self {
             WasminError::SyntaxError { cause, .. } => cause,
             WasminError::TypeError { cause, .. } => cause,
+            WasminError::DuplicateDeclaration { cause, .. } => cause,
             WasminError::UnsupportedFeatureError { cause, .. } => cause,
         }
     }
@@ -81,6 +84,9 @@ impl std::fmt::Display for WasminError {
             }
             WasminError::TypeError { cause, .. } => {
                 write!(f, "type error: {}", cause)
+            }
+            WasminError::DuplicateDeclaration { cause, .. } => {
+                write!(f, "duplicate declaration: {}", cause)
             }
             WasminError::UnsupportedFeatureError { cause, .. } => {
                 write!(f, "unsupported feature error: {}", cause)

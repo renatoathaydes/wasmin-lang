@@ -6,7 +6,7 @@ use std::path::Display;
 use crate::ast::Expression::Const;
 use crate::errors::WasminError;
 use crate::interner::{*};
-use crate::parse::model::Numeric;
+use crate::parse::model::{Numeric, Position};
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Type {
@@ -97,7 +97,7 @@ pub enum Constant {
 #[derive(Debug, PartialEq, Clone)]
 pub enum FunKind {
     Wasm,
-    Custom,
+    Custom { fun_index: usize },
 }
 
 /// Expression is the basic unit of Wasmin code.
@@ -138,17 +138,14 @@ pub enum Expression {
     ExprError(WasminError, Vec<Warning>),
 }
 
-/// Function defines a function implementation as a tuple with the following contents:
-/// * function name
-/// * arg names
-/// * body
-/// * function type
+/// Function defines a function implementation.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Function {
     pub name: InternedStr,
     pub arg_names: Vec<InternedStr>,
     pub body: Expression,
     pub typ: ExprType,
+    pub fun_index: usize,
 }
 
 /// Visibility determines the level of visibility of a Wasmin program element.
@@ -164,7 +161,7 @@ pub enum TopLevelElement {
     Let(Assignment, Visibility, Option<Comment>, Vec<Warning>),
     Mut(Assignment, Visibility, Option<Comment>, Vec<Warning>),
     Ext(InternedStr, Vec<Def>, Visibility, Option<Comment>, Vec<Warning>),
-    Fun(Function, Visibility, Option<Comment>, Vec<Warning>),
+    Fun(Function, Position, Visibility, Option<Comment>, Vec<Warning>),
     Error(WasminError),
 }
 
@@ -238,9 +235,10 @@ impl From<WasminError> for Expression {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AST {
     interner: Interner,
+    fun_index: usize,
 }
 
 impl AST {
@@ -248,7 +246,7 @@ impl AST {
         self.interner.intern(s)
     }
 
-    pub fn new() -> Self { Default::default() }
+    pub fn new() -> Self { AST { interner: Interner::new(), fun_index: 0 } }
 
     fn build_type_string(&self, types: &Vec<Type>, result: &mut String) {
         let len = types.len();
@@ -269,7 +267,7 @@ impl AST {
             Type::F32 => "f32".to_owned(),
             Type::String => "string".to_owned(),
             Type::Empty => "()".to_owned(),
-            Type::FunType(e) => {
+            Type::FunType(e, ..) => {
                 let mut result = String::with_capacity(32);
                 result.push('[');
                 self.build_type_string(&e.ins, &mut result);
@@ -404,15 +402,23 @@ impl AST {
 
     pub fn new_fun(&mut self, name: &str, mut args: Vec<String>,
                    body: Expression, typ: ExprType) -> Function {
+        let interned_name = self.intern(name);
+        self.new_fun_interned(interned_name, args, body, typ)
+    }
+
+    pub fn new_fun_interned(&mut self, name: InternedStr, mut args: Vec<String>,
+                            body: Expression, typ: ExprType) -> Function {
         let arg_names: Vec<InternedStr> = args.drain(..)
             .map(|a| self.intern(&a))
             .collect();
-
+        let index = self.fun_index;
+        self.fun_index = index + 1;
         Function {
-            name: self.intern(name),
+            name,
             arg_names,
             body,
             typ,
+            fun_index: index,
         }
     }
 }
@@ -498,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_get_type() {
-        let mut ast = AST::default();
+        let mut ast = AST::new();
 
         assert_eq!(AST::empty().get_type(), EMPTY_EXPR_TYPE);
 

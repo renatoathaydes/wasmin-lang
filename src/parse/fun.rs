@@ -13,15 +13,15 @@ impl<'s> Parser<'s> {
         while let Some(token) = self.lexer.next() {
             match token {
                 Token::Id(_, id) => name_and_args.push(id),
-                Token::Colon(pos) => {
+                Token::Colon(_) => {
                     return name_with_args(name_and_args, pos)
                         .map(|(name, args)| self.fun_with_type(pos, name, args, visibility))
                         .into();
                 }
-                Token::Eq(pos) => {
+                Token::Eq(_) => {
                     return name_with_args(name_and_args, pos).map(|(name, args)| {
                         let expr = self.parse_expr();
-                        self.new_fun(name, args, visibility, None, expr)
+                        self.new_fun(name, args, pos, visibility, None, expr)
                     }).into();
                 }
                 Token::Error(pos, err) => {
@@ -56,7 +56,7 @@ impl<'s> Parser<'s> {
             match token {
                 Token::Eq(_) => {
                     let expr = self.parse_expr();
-                    self.new_fun(name, args, visibility, typ, expr)
+                    self.new_fun(name, args, pos, visibility, typ, expr)
                 }
                 _ => {
                     TopLevelElement::Error(WasminError::SyntaxError {
@@ -75,7 +75,7 @@ impl<'s> Parser<'s> {
     }
 
     fn new_fun(&mut self, name: String, args: Vec<String>,
-               visibility: Visibility,
+               pos: Position, visibility: Visibility,
                typ: Option<Type>, body: Expression)
                -> TopLevelElement {
         let mut warnings: Vec<Warning> = Vec::new();
@@ -95,9 +95,11 @@ impl<'s> Parser<'s> {
             }
         } else { None };
         let typ = target_type.unwrap_or_else(|| body.get_type().clone());
-        let fun = self.ast.new_fun(&name, args, body, typ.clone());
-        self.insert_type_in_scope(&fun.name, FunType(typ));
-        TopLevelElement::Fun(fun, visibility, None, warnings)
+        let interned_name = self.ast.intern(&name);
+        match self.add_fun_type_to_scope(&interned_name, args, body, pos, typ) {
+            Ok(fun) => TopLevelElement::Fun(fun, pos, visibility, None, warnings),
+            Err(err) => TopLevelElement::Error(err)
+        }
     }
 }
 
@@ -128,69 +130,68 @@ mod tests {
     use crate::ast::{Constant, ExprType};
     use crate::ast::Visibility::{Private, Public};
     use crate::parse::model::Numeric;
+    use crate::parse::model::Token::Pub;
+    use crate::parse::scope::ScopeItem;
 
     use super::*;
-    use super::Type::*;
+    use super::Type::{F32, F64, I32, I64};
 
     #[test]
     fn test_parse_fun() {
         let mut ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
-        let fun = ast.new_fun("x", vec![], body, ExprType::outs(vec![I32]));
         let mut parser = Parser::new_with_ast("fun x = 1", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "x", vec![], ExprType::outs(vec![I32]), body, 1, Private, result);
     }
 
     #[test]
     fn test_parse_pub_fun() {
         let mut ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I32(42)), I32, ExprType::outs(vec![I32]), vec![]);
-        let fun = ast.new_fun("abc", vec![], body, ExprType::outs(vec![I32]));
         let mut parser = Parser::new_with_ast("  pub fun abc = 42", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Public, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "abc", vec![], ExprType::outs(vec![I32]), body, 7, Public, result);
     }
 
     #[test]
     fn test_parse_fun_1_1() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         // FIXME the function takes the type of its implementation expression regardless of arguments
-        let fun = ast.new_fun("example", vec!["a".into()], body, ExprType::new(vec![], vec![I64]));
         let mut parser = Parser::new_with_ast("fun example a\n   =  10i64", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "example", vec!["a".to_owned()], ExprType::outs(vec![I64]), body, 1, Private, result);
     }
 
     #[test]
     fn test_parse_fun_typed_0_1() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
-        let fun = ast.new_fun("x", vec![], body, ExprType::outs(vec![I32]));
         let mut parser = Parser::new_with_ast("fun x: [](i32) = 1", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "x", vec![], ExprType::outs(vec![I32]), body, 1, Private, result);
     }
 
     #[test]
     fn test_parse_fun_typed_1_1() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
-        let fun = ast.new_fun("factorial", vec!["n".into()], body, ExprType::new(vec![I32], vec![I64]));
         let mut parser = Parser::new_with_ast("fun factorial n: [i32](i64) = 10i64", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "factorial", vec!["n".to_owned()],
+                        ExprType::new(vec![I32], vec![I64]), body, 1, Private, result);
     }
 
     #[test]
     fn test_parse_fun_typed_2_3() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
-        let fun = ast.new_fun("foo", vec!["abc".into(), "def".into()], body,
-                              ExprType::new(vec![I32, I64], vec![F32, F64, F32]));
         // FIXME no type checking is done yet
-        let mut parser = Parser::new_with_ast("fun foo abc def: [ i32 i64 ] (f32 f64 f32) = 10i64", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let mut parser = Parser::new_with_ast("pub fun foo abc def: [ i32 i64 ] (f32 f64 f32) = 10i64", ast);
+        let result = parser.parse_next();
+        assert_function(parser, "foo", vec!["abc".to_owned(), "def".to_owned()],
+                        ExprType::new(vec![I32, I64], vec![F32, F64, F32]), body, 5, Public, result);
     }
 
     #[test]
@@ -200,10 +201,39 @@ mod tests {
             ast.new_number(Numeric::F32(1.0), vec![]),
             ast.new_number(Numeric::F64(2.0), vec![]),
         ], vec![]);
-        let fun = ast.new_fun("foo", vec!["abc".into(), "def".into()], body,
-                              ExprType::new(vec![I32, I64], vec![F32, F64]));
         let mut parser = Parser::new_with_ast(
             "fun foo abc def: [ i32 i64 ] (f32 f64) = {1.0, 2.0f64} , ignored", ast);
-        assert_eq!(parser.parse_next(), Some(TopLevelElement::Fun(fun, Private, None, vec![])));
+        let result = parser.parse_next();
+        assert_function(parser, "foo", vec!["abc".to_owned(), "def".to_owned()],
+                        ExprType::new(vec![I32, I64], vec![F32, F64]), body, 1, Private, result);
+    }
+
+    fn assert_function(mut parser: Parser<'_>, name: &str, arg_names: Vec<String>,
+                       typ: ExprType, body: Expression, pos: Position, visibility: Visibility,
+                       result: Option<TopLevelElement>) {
+        let interned_name = parser.ast.intern(name);
+        let scope_item = match parser.lookup_in_scope(&interned_name) {
+            None => panic!("did not find function in scope"),
+            Some(ScopeItem::Fun(items)) => {
+                if items.len() == 1 {
+                    items.first().unwrap()
+                } else {
+                    panic!("expected one function but found: {:?}", items);
+                }
+            }
+            Some(ScopeItem::Variable(t)) => panic!("expected a fun, got a var of type {:?}", t)
+        };
+        assert_eq!(scope_item.pos, pos);
+        assert_eq!(&scope_item.typ, &typ);
+        let fun_index = scope_item.fun_index;
+        assert_eq!(result, Some(TopLevelElement::Fun(
+            Function {
+                name: interned_name.clone(),
+                arg_names: arg_names.iter().map(|a| parser.ast.intern(a)).collect(),
+                body,
+                typ,
+                fun_index,
+            },
+            pos, visibility, None, vec![])));
     }
 }

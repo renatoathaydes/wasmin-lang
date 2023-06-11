@@ -127,7 +127,7 @@ impl<'s> Parser<'s> {
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {
                     let _ = self.stack.pop();
-                    self.insert_type_in_scope(&var.name, typ);
+                    self.insert_type_in_scope(var.name.clone(), typ);
                 }
                 Expression::Let(assignment, vec![])
             }
@@ -268,6 +268,7 @@ mod tests {
     use crate::ast::Visibility::{Private, Public};
     use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
+    use crate::parse::scope::ScopeItem;
 
     use super::*;
     use super::Type::*;
@@ -369,8 +370,8 @@ mod tests {
         assert_eq!(parser.stack, vec![]);
 
         let scope = parser.current_scope().clone();
-        assert_eq!(scope.get(&parser.ast.intern("x")), Some(&HashSet::from([I32])));
-        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&HashSet::from([F32])));
+        assert_eq!(scope.get(&parser.ast.intern("x")), Some(&ScopeItem::Variable(I32)));
+        assert_eq!(scope.get(&parser.ast.intern("y")), Some(&ScopeItem::Variable(F32)));
         assert_eq!(scope.get(&parser.ast.intern("z")), None);
     }
 
@@ -387,24 +388,25 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_basic_fun_call() {
+    fn test_parse_basic_fun_call() -> Result<(), WasminError> {
         let mut ast = AST::new();
         let my_fun = ast.intern("my-fun");
         let fun_call = ast.new_fun_call(my_fun,
                                         ExprType::new(vec![I32], vec![I32]),
-                                        FunKind::Custom,
+                                        FunKind::Custom { fun_index: 0 },
                                         vec![]);
         let fun_call_group = AST::new_group(vec![
             ast.new_number(Numeric::I32(1), vec![]),
             fun_call,
         ], vec![]);
         let mut parser = Parser::new_with_ast("my-fun 1;", ast);
-        parser.insert_type_in_scope(&my_fun,
-                                    FunType(ExprType::new(vec![I32], vec![I32])));
+        let _ = parser.add_fun_type_to_scope(&my_fun, vec!["a".to_owned()], AST::empty(), 1,
+                                             ExprType::new(vec![I32], vec![I32]))?;
         assert_eq!(parser.parse_expr(), fun_call_group);
         assert_eq!(parser.stack, vec![I32]);
         // nothing is left
         assert_eq!(parser.parse_expr(), AST::empty());
         assert_eq!(parser.parse_expr(), AST::empty());
+        Ok(())
     }
 }

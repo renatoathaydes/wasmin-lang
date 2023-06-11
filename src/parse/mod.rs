@@ -7,3 +7,4 @@ mod expression;
 mod lets;
 mod fun;
 mod type_check;
+pub(crate) mod scope;
