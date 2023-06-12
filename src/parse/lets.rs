@@ -1,7 +1,7 @@
 use crate::ast::{TopLevelElement, Type, Visibility};
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 
 impl<'s> Parser<'s> {
     pub(crate) fn parse_let(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
@@ -24,8 +24,9 @@ impl<'s> Parser<'s> {
         }
     }
 
-    pub(crate) fn parse_defs(&mut self, pos: Position)
-                             -> Result<Vec<(String, Option<Type>)>, WasminError> {
+    pub(crate) fn parse_defs(
+        &mut self, pos: Position,
+    ) -> Result<Vec<(String, Option<Type>)>, WasminError> {
         let mut vars: Vec<(String, Option<Type>)> = Vec::with_capacity(4);
         let mut after_id = false;
         while let Some(token) = self.lexer.next() {

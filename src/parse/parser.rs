@@ -34,7 +34,8 @@ impl<'s> Parser<'s> {
     }
 
     pub fn parse_next(&mut self) -> Option<TopLevelElement> {
-        if let Some(token) = self.lexer.next() {
+        let mut comments = Vec::<String>::new();
+        while let Some(token) = self.lexer.next() {
             let (token, visibility) = if let Token::Pub(..) = token {
                 let token = if let Some(token) = self.lexer.next() {
                     token
@@ -49,8 +50,13 @@ impl<'s> Parser<'s> {
                 (token, Visibility::Private)
             };
             let expr = match token {
+                Token::Comment(_, comment) => {
+                    comments.push(comment);
+                    continue;
+                }
+                // TODO send comments to Let too
                 Token::Let(pos) => self.parse_let(pos, visibility),
-                Token::Fun(pos) => self.parse_fun(pos, visibility),
+                Token::Fun(pos) => self.parse_fun(pos, visibility, join_comments(&mut comments)),
                 _ => {
                     TopLevelElement::Error(WasminError::UnsupportedFeatureError {
                         cause: "Only let and fun are supported for now".into(),
@@ -58,10 +64,9 @@ impl<'s> Parser<'s> {
                     })
                 }
             };
-            Some(expr)
-        } else {
-            None
+            return Some(expr);
         }
+        None
     }
 
     pub(crate) fn lookup_fun_types(&self, name: &str, interned_name: &InternedStr) -> Option<Vec<(&ExprType, FunKind)>> {
@@ -101,3 +106,11 @@ impl<'s> Parser<'s> {
     }
 }
 
+fn join_comments(comments: &mut Vec<String>) -> Option<String> {
+    if comments.is_empty() { return None; }
+    let mut result = String::new();
+    for c in comments.drain(..) {
+        result.push_str(&c);
+    }
+    Some(result)
+}

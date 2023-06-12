@@ -1,7 +1,7 @@
 #[macro_use]
 pub mod errors;
 
-mod parse;
+pub mod parse;
 mod interner;
 mod wasm;
 pub mod ast;

@@ -4,7 +4,7 @@ use crate::ast::{Expression, ExprType, Function, Type};
 use crate::errors::WasminError;
 use crate::interner::InternedStr;
 use crate::parse::model::Position;
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 
 #[derive(Debug, PartialEq, Clone, Eq)]
 pub struct ScopeFun {

@@ -1,5 +1,5 @@
 pub mod model;
-pub mod parse;
+pub mod parser;
 pub(crate) mod lex;
 pub(crate) mod number;
 mod types;

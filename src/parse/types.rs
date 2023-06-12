@@ -1,7 +1,7 @@
 use crate::ast::{ExprType, Type};
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token::*};
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 
 impl<'s> Parser<'s> {
     pub(crate) fn parse_type(&mut self, pos: Position) -> Result<Type, WasminError> {

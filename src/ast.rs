@@ -80,7 +80,7 @@ pub struct Break {
 /// Comment is a source code comment.
 /// Comments may be used for documenting Wasmin code by placing them immediately before
 /// source code top-level elements.
-pub type Comment = InternedStr;
+pub type Comment = String;
 
 /// Warning emitted by the Wasmin compiler.
 pub type Warning = String;
@@ -158,7 +158,7 @@ pub enum TopLevelElement {
     Let(Assignment, Visibility, Option<Comment>, Vec<Warning>),
     Mut(Assignment, Visibility, Option<Comment>, Vec<Warning>),
     Ext(InternedStr, Vec<Def>, Visibility, Option<Comment>, Vec<Warning>),
-    Fun(Function, Position, Visibility, Option<Comment>, Vec<Warning>),
+    Fun(Function, Visibility, Option<Comment>, Vec<Warning>),
     Error(WasminError),
 }
 
@@ -239,7 +239,7 @@ pub struct AST {
 }
 
 impl AST {
-    pub(crate) fn intern(&mut self, s: &str) -> InternedStr {
+    pub fn intern(&mut self, s: &str) -> InternedStr {
         self.interner.intern(s)
     }
 
@@ -403,37 +403,28 @@ impl AST {
         self.new_fun_interned(interned_name, args, body, typ)
     }
 
-    pub fn new_fun_interned(&mut self, name: InternedStr, mut args: Vec<String>,
+    pub fn new_fun_interned(&mut self, name: InternedStr, args: Vec<String>,
                             body: Expression, typ: ExprType) -> Function {
+        let index = self.fun_index;
+        self.fun_index = index + 1;
+        self.new_fun_interned_with_index(name, args, body, typ, index)
+    }
+
+    pub fn new_fun_interned_with_index(
+        &mut self, name: InternedStr, mut args: Vec<String>,
+        body: Expression, typ: ExprType, fun_index: usize) -> Function {
         let arg_names: Vec<InternedStr> = args.drain(..)
             .map(|a| self.intern(&a))
             .collect();
-        let index = self.fun_index;
-        self.fun_index = index + 1;
         Function {
             name,
             arg_names,
             body,
             typ,
-            fun_index: index,
+            fun_index,
         }
     }
 }
-
-// pub(crate) fn type_to_string(types: &[Type]) -> String {
-//     if types.is_empty() {
-//         return "()".to_owned();
-//     }
-//     let mut res = String::new();
-//     let max = types.len() - 1;
-//     for (i, t) in types.iter().enumerate() {
-//         res.push_str(&format!("{}", t));
-//         if i != max {
-//             res.push(' ');
-//         }
-//     }
-//     res
-// }
 
 #[cfg(test)]
 mod tests {

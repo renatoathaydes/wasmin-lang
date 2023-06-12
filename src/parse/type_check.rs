@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use crate::ast::{Expression, ExprType, FunKind};
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 
 impl<'s> Parser<'s> {
     pub(crate) fn find_closest_type_match(

@@ -1,19 +1,19 @@
-use crate::ast::{Expression, TopLevelElement, Type, Visibility, Warning};
+use crate::ast::{Comment, Expression, TopLevelElement, Type, Visibility, Warning};
 use crate::ast::Type::FunType;
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 use crate::parse::scope::ScopeItem;
 
 impl<'s> Parser<'s> {
-    pub(crate) fn parse_fun(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
+    pub(crate) fn parse_fun(&mut self, pos: Position, visibility: Visibility, comment: Option<String>) -> TopLevelElement {
         let mut name_and_args: Vec<String> = Vec::with_capacity(4);
         while let Some(token) = self.lexer.next() {
             match token {
                 Token::Id(_, id) => name_and_args.push(id),
                 Token::Colon(_) => {
                     return name_with_args(name_and_args, pos)
-                        .map(|(name, args)| self.fun_with_type(pos, name, args, visibility))
+                        .map(|(name, args)| self.fun_with_type(pos, name, args, comment, visibility))
                         .into();
                 }
                 Token::Eq(_) => {
@@ -21,7 +21,7 @@ impl<'s> Parser<'s> {
                         self.enter_scope();
                         let expr = self.parse_expr();
                         self.exit_scope();
-                        self.new_fun(name, args, pos, visibility, None, expr)
+                        self.new_fun(name, args, pos, visibility, comment, None, expr)
                     }).into();
                 }
                 Token::Error(pos, err) => {
@@ -47,7 +47,7 @@ impl<'s> Parser<'s> {
     }
 
     fn fun_with_type(&mut self, pos: Position, name: String, args: Vec<String>,
-                     visibility: Visibility) -> TopLevelElement {
+                     comment: Option<String>, visibility: Visibility) -> TopLevelElement {
         let typ = match self.parse_type(pos) {
             Ok(FunType(expr_type)) => expr_type,
             Ok(typ) => return TopLevelElement::Error(WasminError::TypeError {
@@ -66,7 +66,7 @@ impl<'s> Parser<'s> {
                     }
                     let expr = self.parse_expr();
                     self.exit_scope();
-                    self.new_fun(name, args, pos, visibility, Some(FunType(typ)), expr)
+                    self.new_fun(name, args, pos, visibility, comment, Some(FunType(typ)), expr)
                 }
                 _ => {
                     TopLevelElement::Error(WasminError::SyntaxError {
@@ -86,6 +86,7 @@ impl<'s> Parser<'s> {
 
     fn new_fun(&mut self, name: String, args: Vec<String>,
                pos: Position, visibility: Visibility,
+               comment: Option<Comment>,
                typ: Option<Type>, body: Expression)
                -> TopLevelElement {
         let mut warnings: Vec<Warning> = Vec::new();
@@ -107,7 +108,7 @@ impl<'s> Parser<'s> {
         let typ = target_type.unwrap_or_else(|| body.get_type().clone());
         let interned_name = self.ast.intern(&name);
         match self.add_fun_type_to_scope(&interned_name, args, body, pos, typ) {
-            Ok(fun) => TopLevelElement::Fun(fun, pos, visibility, None, warnings),
+            Ok(fun) => TopLevelElement::Fun(fun, visibility, comment, warnings),
             Err(err) => TopLevelElement::Error(err)
         }
     }
@@ -257,6 +258,6 @@ mod tests {
                 typ,
                 fun_index,
             },
-            pos, visibility, None, vec![])));
+            visibility, None, vec![])));
     }
 }

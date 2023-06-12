@@ -2,7 +2,7 @@ use crate::ast::{AST, Expression, IdKind};
 use crate::errors::WasminError;
 use crate::interner::InternedStr;
 use crate::parse::model::{Position, Token};
-use crate::parse::parse::Parser;
+use crate::parse::parser::Parser;
 
 #[derive(Copy, Clone, PartialEq)]
 pub(crate) enum Nesting {
