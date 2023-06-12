@@ -8,8 +8,6 @@ use crate::parse::parse::Parser;
 pub(crate) enum Nesting {
     Parens,
     Curly,
-    If,
-    Then,
 }
 
 impl Nesting {
@@ -17,8 +15,6 @@ impl Nesting {
         match self {
             Nesting::Parens => ")",
             Nesting::Curly => "}",
-            Nesting::If => "then",
-            Nesting::Then => "else",
         }
     }
 }

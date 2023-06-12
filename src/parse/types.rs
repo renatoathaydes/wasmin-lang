@@ -78,14 +78,13 @@ impl<'s> Parser<'s> {
 mod tests {
     use crate::ast::{AST, ExprType};
     use crate::interner::InternedStr;
-    use crate::parse::model::Numeric;
 
     use super::*;
     use super::Type::*;
 
     #[test]
     fn test_parse_i32() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("i32", ast);
 
         assert_eq!(parser.parse_type(0)?, I32);
@@ -113,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_parse_fn_1_0() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("[i32]()", ast);
 
         assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![I32], vec![])));
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_parse_fn_0_0() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("[ ] ( )", ast);
 
         assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![], vec![])));
@@ -131,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_parse_fn_1_1() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("[i64](f32)", ast);
 
         assert_eq!(parser.parse_type(0)?, FunType(ExprType::new(vec![I64], vec![F32])));
@@ -140,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_parse_fn_0_1() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("[](f64)", ast);
 
         assert_eq!(parser.parse_type(0)?, FunType(ExprType::outs(vec![F64])));
@@ -149,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_parse_fn_2_3() -> Result<(), WasminError> {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let mut parser = Parser::new_with_ast("[i32 i64](f32 f64 f32)", ast);
 
         assert_eq!(parser.parse_type(0)?,
