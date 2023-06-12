@@ -112,10 +112,12 @@ impl<'s> Parser<'s> {
     fn parse_let_expr(&mut self, pos: Position) -> Expression {
         match self.parse_defs(pos) {
             Ok(vars) => {
+                self.enter_scope();
                 let mut nesting = Vec::new();
                 let expressions: Vec<_> = (0..vars.len()).map(|_| {
                     self.parse_expr_nesting(&mut nesting, State::Single)
                 }).collect();
+                self.exit_scope();
                 let assignment = self.ast.new_assignments(vars, collapse_expressions(expressions));
                 let mut var_types = assignment.get_types();
                 for (var, typ) in var_types.drain(..) {

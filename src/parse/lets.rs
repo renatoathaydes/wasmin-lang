@@ -82,19 +82,22 @@ impl<'s> Parser<'s> {
 mod tests {
     use crate::ast::AST;
     use crate::parse::model::Numeric;
+    use crate::parse::scope::ScopeItem;
 
     use super::*;
     use super::Type::*;
 
     #[test]
-    fn test_parse_let() {
+    fn test_parse_let_introduced_variable() {
         let mut ast = AST::new();
         let expr = ast.new_number(Numeric::I32(1), vec![]);
+        let x = ast.intern("x");
         let assignment = ast.new_assignment("x", None, expr);
         let mut parser = Parser::new_with_ast("let x = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
-            Visibility::Private, None, vec![])))
+            Visibility::Private, None, vec![])));
+        assert_eq!(parser.current_scope().get(&x), Some(&ScopeItem::Variable(I32)));
     }
 
     #[test]
@@ -136,5 +139,37 @@ mod tests {
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
             Visibility::Private, None, vec![])))
+    }
+
+    #[test]
+    fn test_parse_let_nested_with_scope() {
+        let mut ast = AST::new();
+        let a = ast.intern("a");
+        let b = ast.intern("b");
+        let x = ast.intern("x");
+        let y = ast.intern("y");
+        let four = ast.new_number(Numeric::I32(4), vec![]);
+        let five = ast.new_number(Numeric::F32(5.1), vec![]);
+        let expr = AST::new_group(vec![
+            AST::new_let(ast.new_assignment("a", None, four), vec![]),
+            AST::new_let(ast.new_assignment("b", None, five), vec![]),
+            ast.new_local("a", I32, vec![]),
+            ast.new_local("b", F32, vec![]),
+        ], vec![]);
+        let assignment = ast.new_assignments(vec![
+            ("x".to_owned(), None),
+            ("y".to_owned(), None),
+        ], expr);
+
+        let mut parser = Parser::new_with_ast("let x, y = { let a = 4, let b = 5.1, a, b }", ast);
+
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
+            assignment,
+            Visibility::Private, None, vec![])));
+
+        assert_eq!(parser.current_scope().get(&a), None);
+        assert_eq!(parser.current_scope().get(&b), None);
+        assert_eq!(parser.current_scope().get(&x), Some(&ScopeItem::Variable(I32)));
+        assert_eq!(parser.current_scope().get(&y), Some(&ScopeItem::Variable(F32)));
     }
 }
