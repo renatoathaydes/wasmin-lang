@@ -55,7 +55,7 @@ impl<'s> Parser<'s> {
                 }
                 Token::Number(.., value) => {
                     self.stack.push(value.get_type());
-                    self.ast.new_number(value, vec![])
+                    AST::new_number(value, vec![])
                 }
                 Token::Let(pos) => self.parse_let_expr(pos),
                 Token::Error(pos, err) => AST::new_error(WasminError::SyntaxError {
@@ -267,8 +267,8 @@ mod tests {
     fn test_parse_numbers() {
         let mut ast = AST::new();
         let group = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::I64(2), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I64(2), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("1, 2i64;", ast);
         assert_eq!(parser.parse_expr(), group);
@@ -279,8 +279,8 @@ mod tests {
     fn test_parse_numbers_in_parens() {
         let mut ast = AST::new();
         let group = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::I64(2), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I64(2), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("(1) (2i64);", ast);
         assert_eq!(parser.parse_expr(), group);
@@ -291,9 +291,9 @@ mod tests {
     fn test_parse_number_groups_in_parens() {
         let mut ast = AST::new();
         let group = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::I32(2), vec![]),
-            ast.new_number(Numeric::I32(3), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I32(2), vec![]),
+            AST::new_number(Numeric::I32(3), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("(1)( 2, 3 )  ;", ast);
         assert_eq!(parser.parse_expr(), group);
@@ -304,9 +304,9 @@ mod tests {
     fn test_parse_number_groups_in_nested_blocks() {
         let mut ast = AST::new();
         let group = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::I32(2), vec![]),
-            ast.new_number(Numeric::I32(3), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I32(2), vec![]),
+            AST::new_number(Numeric::I32(3), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast("{ (1 (2, (3))) }", ast);
         assert_eq!(parser.parse_expr(), group);
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn test_parse_let_expr_single() {
         let mut ast = AST::new();
-        let num = ast.new_number(Numeric::I32(23), vec![]);
+        let num = AST::new_number(Numeric::I32(23), vec![]);
         let let_expr = AST::new_let(
             ast.new_assignment("x", None, num), vec![]);
         let group = AST::new_group(vec![
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn test_parse_let_expr_curly_delimited() {
         let mut ast = AST::new();
-        let one = ast.new_number(Numeric::I32(23), vec![]);
+        let one = AST::new_number(Numeric::I32(23), vec![]);
         let let_expr = AST::new_let(
             ast.new_assignment("x", None, one), vec![]);
         let group = AST::new_group(vec![
@@ -347,8 +347,8 @@ mod tests {
     fn test_parse_let_expr_multi_values() {
         let mut ast = AST::new();
         let expr = AST::new_group(vec![
-            ast.new_number(Numeric::I32(2), vec![]),
-            ast.new_number(Numeric::F32(3.14), vec![]),
+            AST::new_number(Numeric::I32(2), vec![]),
+            AST::new_number(Numeric::F32(3.14), vec![]),
         ], vec![]);
         let let_expr = AST::new_let(
             ast.new_assignments(vec![
@@ -368,9 +368,9 @@ mod tests {
     #[test]
     fn test_parse_basic_if_expr() {
         let mut ast = AST::new();
-        let if_expr = AST::new_if(ast.new_number(Numeric::I32(1), vec![]),
-                                  ast.new_number(Numeric::I32(2), vec![]),
-                                  ast.new_number(Numeric::I32(3), vec![]),
+        let if_expr = AST::new_if(AST::new_number(Numeric::I32(1), vec![]),
+                                  AST::new_number(Numeric::I32(2), vec![]),
+                                  AST::new_number(Numeric::I32(3), vec![]),
                                   vec![]);
         let mut parser = Parser::new_with_ast("if 1 then 2 else 3;", ast);
         assert_eq!(parser.parse_expr(), if_expr);
@@ -386,7 +386,7 @@ mod tests {
                                         FunKind::Custom { fun_index: 0 },
                                         vec![]);
         let fun_call_group = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
             fun_call,
         ], vec![]);
         let mut parser = Parser::new_with_ast("my-fun 1;", ast);

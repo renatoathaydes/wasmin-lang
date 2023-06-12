@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn test_parse_let_introduced_variable() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
+        let expr = AST::new_number(Numeric::I32(1), vec![]);
         let x = ast.intern("x");
         let assignment = ast.new_assignment("x", None, expr);
         let mut parser = Parser::new_with_ast("let x = 1", ast);
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_parse_let_typed() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(1), vec![]);
+        let expr = AST::new_number(Numeric::I32(1), vec![]);
         let assignment = ast.new_assignment("x", Some(I64), expr);
         let mut parser = Parser::new_with_ast("let x: i64 = 1", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn test_parse_let_typed_pub() {
         let mut ast = AST::new();
-        let expr = ast.new_number(Numeric::I32(2), vec![]);
+        let expr = AST::new_number(Numeric::I32(2), vec![]);
         let assignment = ast.new_assignment("abc", Some(I32), expr);
         let mut parser = Parser::new_with_ast("  pub let abc : i32 = 2", ast);
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
@@ -126,9 +126,9 @@ mod tests {
     fn test_parse_let_multiple() {
         let mut ast = AST::new();
         let expr = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::I32(2), vec![]),
-            ast.new_number(Numeric::I32(3), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::I32(2), vec![]),
+            AST::new_number(Numeric::I32(3), vec![]),
         ], vec![]);
         let assignment = ast.new_assignments(vec![
             ("x".to_owned(), None),
@@ -148,8 +148,8 @@ mod tests {
         let b = ast.intern("b");
         let x = ast.intern("x");
         let y = ast.intern("y");
-        let four = ast.new_number(Numeric::I32(4), vec![]);
-        let five = ast.new_number(Numeric::F32(5.1), vec![]);
+        let four = AST::new_number(Numeric::I32(4), vec![]);
+        let five = AST::new_number(Numeric::F32(5.1), vec![]);
         let expr = AST::new_group(vec![
             AST::new_let(ast.new_assignment("a", None, four), vec![]),
             AST::new_let(ast.new_assignment("b", None, five), vec![]),

@@ -207,8 +207,8 @@ mod tests {
     fn test_parse_fun_typed_2_2_curly_delimited() {
         let mut ast = AST::new();
         let body = AST::new_group(vec![
-            ast.new_number(Numeric::F32(1.0), vec![]),
-            ast.new_number(Numeric::F64(2.0), vec![]),
+            AST::new_number(Numeric::F32(1.0), vec![]),
+            AST::new_number(Numeric::F64(2.0), vec![]),
         ], vec![]);
         let mut parser = Parser::new_with_ast(
             "fun foo abc def: [ i32 i64 ] (f32 f64) = {1.0, 2.0f64} , ignored", ast);

@@ -38,18 +38,15 @@ impl<'s> Parser<'s> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{AST, Constant, ExprType};
-    use crate::ast::Expression::Const;
+    use crate::ast::{AST, ExprType};
     use crate::ast::Type::*;
-    use crate::ast::Visibility::{Private, Public};
-    use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
 
     use super::*;
 
     #[test]
     fn test_fun_no_args() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let typ = ExprType::ins(vec![]);
         let fun_types = vec![
             (&typ, FunKind::Custom { fun_index: 0 })
@@ -62,41 +59,41 @@ mod tests {
 
     #[test]
     fn test_fun_1_explicit_arg() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let typ = ExprType::ins(vec![I32]);
         let fun_types = vec![
             (&typ, FunKind::Wasm)
         ];
-        let args = ast.new_number(Numeric::I32(1), vec![]);
-        let mut parser = Parser::new_with_ast("", ast);
+        let args = AST::new_number(Numeric::I32(1), vec![]);
+        let parser = Parser::new_with_ast("", ast);
         assert_eq!(parser.find_closest_type_match(&fun_types, &args),
                    Some((typ.clone(), FunKind::Wasm)));
     }
 
     #[test]
     fn test_fun_2_explicit_args() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let typ = ExprType::ins(vec![I32, F64]);
         let fun_types = vec![
             (&typ, FunKind::Wasm),
         ];
         let args = AST::new_group(vec![
-            ast.new_number(Numeric::I32(1), vec![]),
-            ast.new_number(Numeric::F64(1.0), vec![]),
+            AST::new_number(Numeric::I32(1), vec![]),
+            AST::new_number(Numeric::F64(1.0), vec![]),
         ], vec![]);
-        let mut parser = Parser::new_with_ast("", ast);
+        let parser = Parser::new_with_ast("", ast);
         assert_eq!(parser.find_closest_type_match(&fun_types, &args),
                    Some((typ.clone(), FunKind::Wasm)));
     }
 
     #[test]
     fn test_fun_1_explicit_arg_1_from_stack() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let typ = ExprType::ins(vec![I32, F64]);
         let fun_types = vec![
             (&typ, FunKind::Custom { fun_index: 1 }),
         ];
-        let args = ast.new_number(Numeric::F64(1.0), vec![]);
+        let args = AST::new_number(Numeric::F64(1.0), vec![]);
         let mut parser = Parser::new_with_ast("", ast);
         parser.stack.push(I32);
         assert_eq!(parser.find_closest_type_match(&fun_types, &args),
@@ -105,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_fun_2_args_from_stack() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let typ = ExprType::ins(vec![I32, F64]);
         let fun_types = vec![
             (&typ, FunKind::Custom { fun_index: 2 }),

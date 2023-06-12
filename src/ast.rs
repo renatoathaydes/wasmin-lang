@@ -319,7 +319,7 @@ impl AST {
         Expression::Const(Constant::String(self.intern(value)), typ, expr_type, w)
     }
 
-    pub fn new_number(&mut self, value: Numeric, w: Vec<Warning>) -> Expression {
+    pub fn new_number(value: Numeric, w: Vec<Warning>) -> Expression {
         let typ = match value {
             Numeric::I32(_) => Type::I32,
             Numeric::I64(_) => Type::I64,
@@ -505,7 +505,7 @@ mod tests {
 
         assert_eq!(AST::empty().get_type(), EMPTY_EXPR_TYPE);
 
-        assert_eq!(ast.new_number(Numeric::I32(0), vec![]).get_type(),
+        assert_eq!(AST::new_number(Numeric::I32(0), vec![]).get_type(),
                    &ExprType::outs(vec![I32]));
 
         assert_eq!(ast.new_local("foo", I64, vec![]).get_type(),
@@ -514,7 +514,7 @@ mod tests {
         assert_eq!(ast.new_global("foo", F64, vec![]).get_type(),
                    &ExprType::outs(vec![F64]));
 
-        let e1 = ast.new_number(Numeric::F32(0.0), vec![]);
+        let e1 = AST::new_number(Numeric::F32(0.0), vec![]);
         assert_eq!(AST::new_let(ast.new_assignment("", None, e1.clone()), vec![])
                        .get_type(), EMPTY_EXPR_TYPE);
 
@@ -525,12 +525,12 @@ mod tests {
                        .get_type(), EMPTY_EXPR_TYPE);
 
         let const_a = ast.new_string("a", vec![]);
-        let const_b = ast.new_number(Numeric::I64(0), vec![]); // allows coercion to I64
+        let const_b = AST::new_number(Numeric::I64(0), vec![]); // allows coercion to I64
         assert_eq!(AST::new_group(vec![const_a, const_b], vec![]).get_type(),
                    &ExprType::outs(vec![String, I64]));
 
-        let const_a = ast.new_number(Numeric::I32(0), vec![]);
-        let const_b = ast.new_number(Numeric::I64(0), vec![]); // allows coercion to I64
+        let const_a = AST::new_number(Numeric::I32(0), vec![]);
+        let const_b = AST::new_number(Numeric::I64(0), vec![]); // allows coercion to I64
         assert_eq!(AST::new_group(
             vec![const_a.clone(),
                  AST::new_group(vec![const_b, const_a], vec![])], vec![]).get_type(),
