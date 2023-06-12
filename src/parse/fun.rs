@@ -3,6 +3,7 @@ use crate::ast::Type::FunType;
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
 use crate::parse::parse::Parser;
+use crate::parse::scope::ScopeItem;
 
 impl<'s> Parser<'s> {
     pub(crate) fn parse_fun(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
@@ -17,7 +18,9 @@ impl<'s> Parser<'s> {
                 }
                 Token::Eq(_) => {
                     return name_with_args(name_and_args, pos).map(|(name, args)| {
+                        self.enter_scope();
                         let expr = self.parse_expr();
+                        self.exit_scope();
                         self.new_fun(name, args, pos, visibility, None, expr)
                     }).into();
                 }
@@ -46,14 +49,24 @@ impl<'s> Parser<'s> {
     fn fun_with_type(&mut self, pos: Position, name: String, args: Vec<String>,
                      visibility: Visibility) -> TopLevelElement {
         let typ = match self.parse_type(pos) {
-            Ok(fun_type) => Some(fun_type),
+            Ok(FunType(expr_type)) => expr_type,
+            Ok(typ) => return TopLevelElement::Error(WasminError::TypeError {
+                pos,
+                cause: format!("function '{}' declared with non-function type: {:?}", name, typ),
+            }),
             Err(err) => return TopLevelElement::Error(err),
         };
         if let Some(token) = self.lexer.next() {
             match token {
                 Token::Eq(_) => {
+                    self.enter_scope();
+                    for (t, name) in typ.ins.iter().zip(args.iter()) {
+                        let interned_name = self.ast.intern(name);
+                        self.current_scope_mut().insert(interned_name, ScopeItem::Variable(t.clone()));
+                    }
                     let expr = self.parse_expr();
-                    self.new_fun(name, args, pos, visibility, typ, expr)
+                    self.exit_scope();
+                    self.new_fun(name, args, pos, visibility, Some(FunType(typ)), expr)
                 }
                 _ => {
                     TopLevelElement::Error(WasminError::SyntaxError {
@@ -127,7 +140,6 @@ mod tests {
     use crate::ast::{AST, Constant, ExprType, Function};
     use crate::ast::Visibility::{Private, Public};
     use crate::parse::model::Numeric;
-    use crate::parse::model::Token::Pub;
     use crate::parse::scope::ScopeItem;
 
     use super::*;
@@ -135,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_parse_fun() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
         let mut parser = Parser::new_with_ast("fun x = 1", ast);
         let result = parser.parse_next();
@@ -144,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_parse_pub_fun() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I32(42)), I32, ExprType::outs(vec![I32]), vec![]);
         let mut parser = Parser::new_with_ast("  pub fun abc = 42", ast);
         let result = parser.parse_next();
@@ -153,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_parse_fun_1_1() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         // FIXME the function takes the type of its implementation expression regardless of arguments
         let mut parser = Parser::new_with_ast("fun example a\n   =  10i64", ast);
@@ -163,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_parse_fun_typed_0_1() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I32(1)), I32, ExprType::outs(vec![I32]), vec![]);
         let mut parser = Parser::new_with_ast("fun x: [](i32) = 1", ast);
         let result = parser.parse_next();
@@ -172,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_parse_fun_typed_1_1() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         let mut parser = Parser::new_with_ast("fun factorial n: [i32](i64) = 10i64", ast);
         let result = parser.parse_next();
@@ -182,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_parse_fun_typed_2_3() {
-        let mut ast = AST::new();
+        let ast = AST::new();
         let body = Expression::Const(Constant::Number(Numeric::I64(10)), I64, ExprType::outs(vec![I64]), vec![]);
         // FIXME no type checking is done yet
         let mut parser = Parser::new_with_ast("pub fun foo abc def: [ i32 i64 ] (f32 f64 f32) = 10i64", ast);
@@ -203,6 +215,20 @@ mod tests {
         let result = parser.parse_next();
         assert_function(parser, "foo", vec!["abc".to_owned(), "def".to_owned()],
                         ExprType::new(vec![I32, I64], vec![F32, F64]), body, 1, Private, result);
+    }
+
+    #[test]
+    fn test_parse_fun_typed_2_2_using_args() {
+        let mut ast = AST::new();
+        let body = AST::new_group(vec![
+            ast.new_local("b", I64, vec![]),
+            ast.new_local("a", I32, vec![]),
+        ], vec![]);
+        let mut parser = Parser::new_with_ast(
+            "fun swap a b: [ i32 i64 ] (i64 i32) = b, a;", ast);
+        let result = parser.parse_next();
+        assert_function(parser, "swap", vec!["a".to_owned(), "b".to_owned()],
+                        ExprType::new(vec![I32, I64], vec![I64, I32]), body, 1, Private, result);
     }
 
     fn assert_function(mut parser: Parser<'_>, name: &str, arg_names: Vec<String>,

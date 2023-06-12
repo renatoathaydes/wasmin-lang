@@ -90,7 +90,7 @@ impl<'s> Parser<'s> {
                 let typ = self.lookup_in_scope(interned_name);
                 match typ {
                     None => Err(WasminError::TypeError {
-                        cause: format!("no identifier '{}' could be find in this scope", name),
+                        cause: format!("no identifier '{}' could be found in this scope", name),
                         pos,
                     }),
                     Some(ScopeItem::Variable(t)) => Ok(IdKind::Var(t.clone())),

@@ -254,13 +254,8 @@ fn is_else(token: &Token) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::hash::Hash;
-
-    use crate::ast::{Constant, ExprType, FunKind};
-    use crate::ast::Expression::Const;
+    use crate::ast::{ExprType, FunKind};
     use crate::ast::Type::*;
-    use crate::ast::Visibility::{Private, Public};
-    use crate::interner::InternedStr;
     use crate::parse::model::Numeric;
     use crate::parse::scope::ScopeItem;
 
