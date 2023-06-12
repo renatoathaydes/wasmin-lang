@@ -1,10 +1,11 @@
-use crate::ast::{TopLevelElement, Type, Visibility};
+use crate::ast::{Comment, TopLevelElement, Type, Visibility};
 use crate::errors::WasminError;
 use crate::parse::model::{Position, Token};
 use crate::parse::parser::Parser;
 
 impl<'s> Parser<'s> {
-    pub(crate) fn parse_let(&mut self, pos: Position, visibility: Visibility) -> TopLevelElement {
+    pub(crate) fn parse_let(&mut self, pos: Position, visibility: Visibility,
+                            comment: Option<Comment>) -> TopLevelElement {
         match self.parse_defs(pos) {
             Ok(vars) => {
                 let expr = self.parse_expr();
@@ -13,8 +14,6 @@ impl<'s> Parser<'s> {
                 for (var, typ) in var_types.drain(..) {
                     self.insert_type_in_scope(var.name.clone(), typ);
                 }
-                // TODO parse comments
-                let comment = None;
                 let w = vec![];
                 return TopLevelElement::Let(assignment, visibility, comment, w);
             }
@@ -110,6 +109,18 @@ mod tests {
         assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
             assignment,
             Visibility::Private, None, vec![])))
+    }
+
+    #[test]
+    fn test_parse_let_with_comment() {
+        let mut ast = AST::new();
+        let expr = AST::new_number(Numeric::I32(1), vec![]);
+        let assignment = ast.new_assignment("x", Some(I64), expr);
+        let mut parser = Parser::new_with_ast("# x is just one\n let x: i64 = 1", ast);
+        assert_eq!(parser.parse_next(), Some(TopLevelElement::Let(
+            assignment,
+            Visibility::Private,
+            Some(" x is just one".to_owned()), vec![])))
     }
 
     #[test]

@@ -54,8 +54,7 @@ impl<'s> Parser<'s> {
                     comments.push(comment);
                     continue;
                 }
-                // TODO send comments to Let too
-                Token::Let(pos) => self.parse_let(pos, visibility),
+                Token::Let(pos) => self.parse_let(pos, visibility, join_comments(&mut comments)),
                 Token::Fun(pos) => self.parse_fun(pos, visibility, join_comments(&mut comments)),
                 _ => {
                     TopLevelElement::Error(WasminError::UnsupportedFeatureError {
