@@ -141,24 +141,24 @@ Notice that by using parenthesis, Wasmin code can be written as s-expressions:
 # s-expressions
 fun square a = (mul a a);
 
-fun cube a = (square (square a));
+fun cube a = (mul a (square a));
 
 # concatenative style:
-fun cube2 a = a, square, square;
+fun cube2 a = a, a, square, mul;
 ```
 
 > The semicolon at the end is necessary in all cases because without it, Wasmin would expect more values until it found
 > a terminating ';'.
 
-A Wasmin expression must end with a `;` unless it is wrapped into curly braces.
-Hence, the previous examples could be written like this:
+A Wasmin expression ends with a `;` unless it is wrapped into curly braces.
+Hence, the previous examples could also be written like this:
 
 ```rust
 fun square a = { mul a a }
 
-fun cube a = { square { square a } }
+fun cube a = { mul a { square a } }
 
-fun cube2 a = { a, square, square }
+fun cube2 a = { a, a, square, mul }
 ```
 
 ### Types
