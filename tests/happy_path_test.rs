@@ -5,7 +5,7 @@ use wasmin::parse::model::Numeric;
 use wasmin::parse::parser::Parser;
 
 #[test]
-fn test_hello_world() {
+fn test_simple_let_and_fun() {
     let mut ast = AST::new();
     let ten_assign = ast.new_assignment("ten",
                                         None,

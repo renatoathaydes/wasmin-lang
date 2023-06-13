@@ -143,7 +143,7 @@ impl<'s> Parser<'s> {
         // TODO typecheck
         let mut nesting = Vec::new();
         let cond = self.parse_expr_nesting(&mut nesting, State::Single);
-        let _ = self.stack.pop();
+        let _ = self.stack.pop(); // condition is used by 'if'
         self.next_token_must_be(is_then, "then")?;
         self.enter_scope();
         let yes = self.parse_expr_nesting(&mut nesting, State::Single);
@@ -151,7 +151,9 @@ impl<'s> Parser<'s> {
         self.next_token_must_be(is_else, "else")?;
         self.enter_scope();
         let no = self.parse_expr_nesting(&mut nesting, State::Single);
-        let _ = self.stack.pop();
+        // only leave one of the branches' types in the stack
+        let out_vars = no.get_type().outs.len();
+        (0..out_vars).for_each(|_| { let _ = self.stack.pop(); });
         self.enter_scope();
         Ok(AST::new_if(cond, yes, no, vec![]))
     }
@@ -366,6 +368,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_empty_if_expr() {
+        let mut ast = AST::new();
+        let if_expr = AST::new_if(AST::new_number(Numeric::I32(1), vec![]),
+                                  AST::empty(),
+                                  AST::empty(),
+                                  vec![]);
+        let mut parser = Parser::new_with_ast("if 1 then { } else { };", ast);
+        assert_eq!(parser.parse_expr(), if_expr);
+        assert_eq!(parser.stack, vec![]);
+    }
+
+    #[test]
     fn test_parse_basic_if_expr() {
         let mut ast = AST::new();
         let if_expr = AST::new_if(AST::new_number(Numeric::I32(1), vec![]),
@@ -375,6 +389,24 @@ mod tests {
         let mut parser = Parser::new_with_ast("if 1 then 2 else 3;", ast);
         assert_eq!(parser.parse_expr(), if_expr);
         assert_eq!(parser.stack, vec![I32]);
+    }
+
+    #[test]
+    fn test_parse_multi_value_if_expr() {
+        let mut ast = AST::new();
+        let if_expr = AST::new_if(AST::new_number(Numeric::I32(0), vec![]),
+                                  AST::new_group(vec![
+                                      AST::new_number(Numeric::I32(2), vec![]),
+                                      AST::new_number(Numeric::I32(3), vec![]),
+                                  ], vec![]),
+                                  AST::new_group(vec![
+                                      AST::new_number(Numeric::I32(4), vec![]),
+                                      AST::new_number(Numeric::I32(5), vec![]),
+                                  ], vec![]),
+                                  vec![]);
+        let mut parser = Parser::new_with_ast("if 0 then (2, 3) else ( 4, 5 ); ignored", ast);
+        assert_eq!(parser.parse_expr(), if_expr);
+        assert_eq!(parser.stack, vec![I32, I32]);
     }
 
     #[test]
