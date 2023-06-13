@@ -11,6 +11,14 @@ pub enum Error {
     Wasmin(WasminError),
     /// WASM validation error.
     Validation(String),
+    /// Generic error due to any other cause.
+    Generic(String),
+}
+
+impl From<String> for Error {
+    fn from(value: String) -> Self {
+        Error::Generic(value)
+    }
 }
 
 /// WasminError enumerates all non-IO errors returned by this library.
@@ -43,7 +51,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::IO(e) => e.source(),
-            Error::Validation(_) | Error::Wasmin(_) => None,
+            Error::Validation(_) | Error::Wasmin(_) | Error::Generic(_) => None,
         }
     }
 }
@@ -65,6 +73,9 @@ impl std::fmt::Display for Error {
             }
             Error::Wasmin(e) => {
                 write!(f, "{}", e)
+            }
+            Error::Generic(e) => {
+                write!(f, "Generic error: {}", e)
             }
         }
     }
