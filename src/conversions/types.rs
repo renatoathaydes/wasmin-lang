@@ -21,3 +21,7 @@ impl TryInto<ValType> for Type {
         })
     }
 }
+
+pub fn val_types(types: &Vec<Type>) -> Result<Vec<ValType>, String> {
+    types.iter().map(|t| t.clone().try_into()).collect()
+}

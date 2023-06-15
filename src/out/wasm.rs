@@ -1,13 +1,17 @@
 use std::io::Write;
 use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
 
-use wasm_encoder::{CodeSection, ConstExpr, ExportKind, ExportSection, FunctionSection, GlobalSection, GlobalType, ImportSection, Module, TypeSection, ValType};
+use wasm_encoder::{CodeSection, ExportKind, ExportSection, Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, Module, TypeSection};
 
-use crate::ast::{TopLevelElement, Visibility};
+use crate::ast::{Constant, Expression, TopLevelElement};
+use crate::ast::Visibility::Public;
 use crate::conversions::expression::{*};
 use crate::conversions::types::{*};
 use crate::errors::Error;
+use crate::interner::{InternedStr, Interner};
+use crate::parse::model::Numeric;
 
 pub struct WasmContext {
     imports: ImportSection,
@@ -16,11 +20,12 @@ pub struct WasmContext {
     globals: GlobalSection,
     funs: FunctionSection,
     code: CodeSection,
-
+    interned_strings: Arc<Mutex<Interner>>,
+    var_index: u32,
 }
 
 impl WasmContext {
-    pub fn new() -> Self {
+    pub fn new(interned_strings: Arc<Mutex<Interner>>) -> Self {
         WasmContext {
             imports: ImportSection::new(),
             exports: ExportSection::new(),
@@ -28,6 +33,8 @@ impl WasmContext {
             globals: GlobalSection::new(),
             funs: FunctionSection::new(),
             code: CodeSection::new(),
+            interned_strings,
+            var_index: 0,
         }
     }
 
@@ -41,22 +48,36 @@ impl WasmContext {
         self.finish(write)
     }
 
+    fn get_interned(&self, interned: &InternedStr) -> String {
+        self.interned_strings.lock().unwrap().get(interned).to_owned()
+    }
+
     fn add(&mut self, element: TopLevelElement) -> Result<(), Error> {
         match element {
             TopLevelElement::Let(assign, visibility, _, _) => {
                 let typ = assign.expr.get_type();
-                for (_, typ) in assign.vars.iter().zip(&typ.outs) {
+                for (var, typ) in assign.vars.iter().zip(&typ.outs) {
                     self.globals.global(GlobalType { mutable: false, val_type: typ.clone().try_into()? },
                                         &assign.expr.deref().clone().try_into()?);
-                    // if visibility == Visibility::Public {
-                    //     let name = self.interned_str(&var.name);
-                    //     self.exports.export(name, ExportKind::Global, index);
-                    // }
+                    if visibility == Public {
+                        let index = self.var_index;
+                        self.var_index += 1;
+                        let name = self.get_interned(&var.name);
+                        self.exports.export(&name, ExportKind::Global, index);
+                    }
                 }
             }
             TopLevelElement::Mut(_, _, _, _) => {}
             TopLevelElement::Ext(_, _, _, _, _) => {}
-            TopLevelElement::Fun(_, _, _, _) => {}
+            TopLevelElement::Fun(fun, vis, _, _) => {
+                self.types.function(val_types(&fun.typ.ins)?, val_types(&fun.typ.outs)?);
+                self.funs.function(fun.fun_index as u32);
+                self.code.function(&self.new_function(&fun.body)?);
+                if vis == Public {
+                    let name = self.get_interned(&fun.name);
+                    self.exports.export(&name, ExportKind::Func, fun.fun_index as u32);
+                }
+            }
             TopLevelElement::Error(_) => {}
         }
         Ok(())
@@ -81,5 +102,20 @@ impl WasmContext {
         }
         write.write_all(&wasm)?;
         Ok(())
+    }
+
+    fn new_function(&self, body: &Expression) -> Result<Function, String> {
+        let locals = vec![];
+        let mut fun = Function::new(locals);
+        match body {
+            Expression::Const(Constant::Number(Numeric::I32(n)), ..) => {
+                fun.instruction(&Instruction::I32Const(*n))
+            }
+            _ => {
+                return Err(format!("cannot generate instruction for {:?} yet", body));
+            }
+        };
+        fun.instruction(&Instruction::End);
+        Ok(fun)
     }
 }

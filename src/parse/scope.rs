@@ -58,7 +58,7 @@ impl<'s> Parser<'s> {
         if let Some(other) = other_pos {
             Err(WasminError::DuplicateDeclaration {
                 cause: format!("function with type {} has already been declared",
-                               self.ast.interned_str(name)),
+                               self.ast.interned_strings().lock().unwrap().get(name)),
                 pos,
                 other,
             })

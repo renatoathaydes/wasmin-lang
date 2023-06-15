@@ -10,7 +10,7 @@ use ansi_term::Colour::{Red, Yellow};
 use ansi_term::Style;
 use structopt::*;
 
-use wasmin::ast::TopLevelElement;
+use wasmin::ast::{AST, TopLevelElement};
 use wasmin::cli::options::{*};
 use wasmin::cli::runner::run_parser;
 use wasmin::errors::Error as WError;
@@ -59,15 +59,18 @@ fn main() {
                 "the '{}' sub-command is not supported yet!",
                 warn_style().paint("parse")
             );
-        },
+        }
     }
 }
 
 fn build(output_format: &FormatType, input: String, output: Option<String>) {
     let (sender, rcvr) = mpsc::channel();
 
+    let ast = AST::new();
+    let interned_strings = ast.interned_strings();
+
     let parser_handle = thread::spawn(move || {
-        run_parser(input, sender)
+        run_parser(input, ast, sender)
     });
 
     {
@@ -80,7 +83,7 @@ fn build(output_format: &FormatType, input: String, output: Option<String>) {
             Box::new(stdout())
         };
 
-        let mut wasm = WasmContext::new();
+        let mut wasm = WasmContext::new(interned_strings);
         wasm.write(&mut writer, rcvr)
             .unwrap_or_else(|e| exit_with_error!(2, "WASM writer error: {}", e));
 

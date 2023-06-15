@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
 use crate::errors::WasminError;
 use crate::interner::{*};
@@ -234,16 +235,20 @@ impl From<WasminError> for Expression {
 
 #[derive(Debug)]
 pub struct AST {
-    interner: Interner,
+    interner: Arc<Mutex<Interner>>,
     fun_index: usize,
 }
 
 impl AST {
     pub fn intern(&mut self, s: &str) -> InternedStr {
-        self.interner.intern(s)
+        self.interner.lock().unwrap().intern(s)
     }
 
-    pub fn new() -> Self { AST { interner: Interner::new(), fun_index: 0 } }
+    pub fn new() -> Self { AST { interner: Arc::new(Mutex::new(Interner::new())), fun_index: 0 } }
+
+    pub fn interned_strings(&self) -> Arc<Mutex<Interner>> {
+        self.interner.clone()
+    }
 
     fn build_type_string(&self, types: &Vec<Type>, result: &mut String) {
         let len = types.len();
@@ -274,13 +279,13 @@ impl AST {
                 result.push(')');
                 result
             }
-            Type::Custom(name) => self.interned_str(name).to_owned(),
+            Type::Custom(name) => self.interned_str(name),
             Type::Error(err) => err.cause().to_owned(),
         }
     }
 
-    pub fn interned_str(&self, interned: &InternedStr) -> &str {
-        self.interner.get(interned)
+    pub fn interned_str(&self, interned: &InternedStr) -> String {
+        self.interner.lock().unwrap().get(interned).to_owned()
     }
 
     pub fn empty() -> Expression { Expression::Empty(vec![]) }

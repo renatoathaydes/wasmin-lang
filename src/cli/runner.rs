@@ -1,12 +1,12 @@
 use std::sync::mpsc::Sender;
 
-use crate::ast::TopLevelElement;
+use crate::ast::{AST, TopLevelElement};
 use crate::errors::Error;
 use crate::parse::parser::Parser;
 
-pub fn run_parser(file: String, sender: Sender<TopLevelElement>) -> Result<(), Error> {
+pub fn run_parser(file: String, ast: AST, sender: Sender<TopLevelElement>) -> Result<(), Error> {
     let text = read_file(file)?;
-    let mut parser = Parser::new(&text);
+    let mut parser = Parser::new_with_ast(&text, ast);
     while let Some(element) = parser.parse_next() {
         match sender.send(element) {
             Ok(_) => {}

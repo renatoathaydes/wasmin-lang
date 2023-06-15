@@ -179,7 +179,7 @@ impl<'s> Parser<'s> {
 
     fn create_fun_call(&mut self, interned_name: InternedStr, pos: Position, args: Expression) -> Expression {
         let name = self.ast.interned_str(&interned_name);
-        if let Some(mut types) = self.lookup_fun_types(name, &interned_name) {
+        if let Some(mut types) = self.lookup_fun_types(&name, &interned_name) {
             // the type with the longest list of arguments should win
             types.sort_by(|(a, _), (b, _)| b.ins.len().cmp(&a.ins.len()));
             if let Some((best_type, kind)) = self.find_closest_type_match(&types, &args) {
@@ -188,13 +188,13 @@ impl<'s> Parser<'s> {
             } else {
                 Expression::ExprError(WasminError::TypeError {
                     cause: format!("function {} cannot be called with the arguments provided",
-                                   name),
+                                   &name),
                     pos,
                 }, vec![])
             }
         } else {
             Expression::ExprError(WasminError::TypeError {
-                cause: format!("function {} does not exist", name),
+                cause: format!("function {} does not exist", &name),
                 pos,
             }, vec![])
         }
